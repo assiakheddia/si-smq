@@ -1,13 +1,13 @@
 from fastapi import FastAPI
-from app import models
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.database import Base, engine
-Base.metadata.create_all(bind=engine)
+from app.api.v1.router import router as api_router
+import app.models
 
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="SI-SMQ — Préparation Certification ISO 9001",
-    description="Système d'Information support à la mise en conformité ISO 9001",
     version="1.0.0"
 )
 
@@ -19,12 +19,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(api_router, prefix="/api/v1")
+
 @app.get("/")
 def root():
     return {"message": "SI-SMQ API opérationnelle"}
 
 @app.get("/health")
-def health_check():
+def health():
     return {"status": "ok"}
-
-models.Base.metadata.create_all(bind=engine)
