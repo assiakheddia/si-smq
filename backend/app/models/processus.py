@@ -1,5 +1,5 @@
-from sqlalchemy import Column, Integer, String, Text, Float, ForeignKey, Enum
-from sqlalchemy.orm import relationship
+from sqlalchemy import Column, Integer, String, Text, Float
+from sqlalchemy import Enum as SAEnum
 from app.core.database import Base
 import enum
 
@@ -20,11 +20,7 @@ class Processus(Base):
     id = Column(Integer, primary_key=True, index=True)
     nom = Column(String, nullable=False)
     objectif = Column(Text)
-    type = Column(Enum(TypeProcessus))
-    statut = Column(Enum(StatutProcessus), default=StatutProcessus.non_demarre)
-    pilote_id = Column(Integer, ForeignKey("utilisateurs.id"))
-    score_maturite = Column(Float, default=0.0)  # 0 à 100
-    
-    pilote = relationship("Utilisateur")
-    indicateurs = relationship("Indicateur", back_populates="processus")
-    risques = relationship("Risque", back_populates="processus")
+    type = Column(SAEnum(TypeProcessus), nullable=True)
+    statut = Column(SAEnum(StatutProcessus), default=StatutProcessus.non_demarre)
+    pilote_id = Column(Integer, nullable=True)
+    score_maturite = Column(Float, default=0.0)
