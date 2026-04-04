@@ -121,13 +121,49 @@ def seed_processus(db: Session) -> None:
 # POINT D'ENTRÉE UNIQUE
 # =============================================================================
 
+def seed_admin_user(db: Session) -> None:
+    """
+    Crée un compte admin par défaut si aucun admin n'existe.
+    Mot de passe initial à changer obligatoirement à la première connexion.
+
+    Credentials par défaut (dev uniquement) :
+      email    : admin@si-smq.local
+      password : Admin@SMQ2025!   ← à changer immédiatement en prod
+    """
+    from app.models.utilisateur import Utilisateur, RoleEnum
+    from app.core.security import hash_password  # passlib bcrypt
+
+    existe = db.query(Utilisateur).filter(
+        Utilisateur.role == RoleEnum.admin
+    ).first()
+
+    if existe:
+        return
+
+    admin = Utilisateur(
+        nom="Administrateur",
+        prenom="SI-SMQ",
+        email="admin@si-smq.local",
+        hashed_password=hash_password("Admin@SMQ2025!"),
+        role=RoleEnum.admin,
+        poste="Administrateur Système",
+        departement="Direction Qualité",
+        est_actif=True,
+    )
+    db.add(admin)
+    db.commit()
+    print("[Seeder] Compte admin créé → admin@si-smq.local (changer le mot de passe !)")
+
+
 def run_all_seeders(db: Session) -> None:
     """
     Ordre :
       1. Clauses ISO    (aucune dépendance)
       2. Parties        (aucune dépendance)
-      3. Processus      (pilote_id = NULL au seed, assigné via interface admin)
+      3. Admin user     (aucune dépendance)
+      4. Processus      (pilote_id = NULL au seed, assigné via interface admin)
     """
     seed_clauses_iso(db)
     seed_parties_interessees(db)
+    seed_admin_user(db)
     seed_processus(db)
