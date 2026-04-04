@@ -1,159 +1,307 @@
 """
 backend/app/models/diagnostic.py
 
-DiagnosticISO : Évaluation de la conformité ISO 9001:2015 à l'intersection d'un Processus et d'une Clause.
+Deux tables complémentaires :
 
-Logique :
-  - Chaque DiagnosticISO évalue la conformité d'un Processus vis-à-vis d'une Clause ISO (feuille).
-  - Score : 0-100 (0=non conforme, 100=conforme).
-  - Niveau : catégorie de conformité calculée depuis le score.
-  - Peut être lié à un Audit et ses Findings.
-  - Supporte les recommandations et le suivi.
+  ┌─────────────────────────────────────────────────────────────┐
+  │  DiagnosticISO          (1 par processus)                   │
+  │  → score global agrégé, statut, date, auditeur              │
+  │                                                             │
+  │      └── DiagnosticClause  (N par diagnostic)               │
+  │          → 1 ligne = 1 clause feuille évaluée               │
+  │          → score + niveau + écart + recommandation hybride  │
+  └─────────────────────────────────────────────────────────────┘
 
-Hiérarchie :
-  - Du DiagnosticISO d'une clause feuille, on remonte le score aux parents.
-  - L'ISOEngine calcule les scores agrégés au niveau section/clause.
+Logique de calcul (portée par iso_engine.py, pas ici) :
+  - DiagnosticClause.score          → saisi par l'auditeur (0–100)
+  - DiagnosticClause.niveau         → calculé automatiquement depuis score
+  - DiagnosticISO.score_global      → moyenne pondérée des clauses
+  - DiagnosticISO.niveau_global     → calculé depuis score_global
+  - Processus.score_maturite        → mis à jour depuis DiagnosticISO
 """
 
-from sqlalchemy import Column, Integer, String, Text, Float, ForeignKey, Enum as SAEnum, DateTime, Boolean
-from sqlalchemy.orm import relationship
-from app.core.database import Base
-from datetime import datetime
 import enum
+from datetime import datetime
+
+from sqlalchemy import (
+    Column, Integer, String, Text, Float,
+    ForeignKey, Enum as SAEnum, Boolean, DateTime
+)
+from sqlalchemy.orm import relationship
+
+from app.core.database import Base
 
 
 # =============================================================================
 # ENUMS
 # =============================================================================
 
-class NiveauConformite(str, enum.Enum):
+class NiveauMaturite(str, enum.Enum):
     """
-    Niveaux de conformité à la norme ISO 9001:2015.
-    Calculé depuis le score : 0-25% (non_conforme) → conforme (75-100%)
+    Barème ISO 9001 — calculé automatiquement depuis le score :
+      0  – 25  → non_conforme
+      25 – 50  → partiel
+      50 – 75  → avance
+      75 – 100 → conforme
+
+    Logique de mapping dans iso_engine.py → score_to_niveau()
     """
-    non_conforme = "non_conforme"      # 0-25% : aucune mise en œuvre
-    partiel      = "partiel"           # 25-50% : mise en œuvre incomplete
-    avance       = "avance"            # 50-75% : mise en œuvre substantielle
-    conforme     = "conforme"          # 75-100% : mise en œuvre complète et vérifiée
+    non_conforme = "non_conforme"   # 0 – 25 %
+    partiel      = "partiel"        # 25 – 50 %
+    avance       = "avance"         # 50 – 75 %
+    conforme     = "conforme"       # 75 – 100 %
 
 
 class StatutDiagnostic(str, enum.Enum):
+    brouillon   = "brouillon"    # En cours de saisie
+    soumis      = "soumis"       # Soumis pour validation
+    valide      = "valide"       # Validé par le pilote / admin
+    archive     = "archive"      # Historique — remplacé par un diagnostic plus récent
+
+
+class TypeEcart(str, enum.Enum):
     """
-    Cycle de vie d'un diagnostic.
+    Classification des écarts (visible dans le diagramme conceptuel :
+    'Diagnostic des dysfonctionnements → Classification majeur/mineur/observation')
     """
-    brouillon      = "brouillon"       # En cours de rédaction
-    en_audit       = "en_audit"        # Sous audit/vérification
-    valide         = "valide"          # Approuvé et enregistré
-    en_amelioration = "en_amelioration" # Actions correctives en cours
-    clos           = "clos"            # Diagnostic ancien, remplacé par un nouvel audit
+    majeur      = "majeur"       # Blocant pour la certification
+    mineur      = "mineur"       # À corriger mais non bloquant
+    observation = "observation"  # Point de vigilance, pas d'écart formel
+    conforme    = "conforme"     # Aucun écart identifié
 
 
 # =============================================================================
-# DIAGNOSTIC ISO
+# DIAGNOSTIC GLOBAL  (1 par processus × campagne)
 # =============================================================================
 
 class DiagnosticISO(Base):
     """
-    Évaluation de conformité ISO au croisement Processus × Clause ISO (feuille).
-    
-    Exemples :
-      - Processus "Gestion des achats" vs. Clause "6.1" (Généralités ressources)
-      - Processus "Encadrement doctoral" vs. Clause "7.5.1" (Généralités maîtrise opérationnelle)
+    Diagnostic de maturité d'un processus vis-à-vis de l'ISO 9001:2015.
+
+    Un processus peut avoir plusieurs diagnostics dans le temps
+    (historique des campagnes d'évaluation).
+    Le diagnostic le plus récent avec statut='valide' est celui
+    utilisé par l'ISOEngine pour calculer le score_maturite du processus.
     """
 
     __tablename__ = "diagnostics_iso"
 
-    # =========================================================================
+    # -------------------------------------------------------------------------
     # Identité
-    # =========================================================================
-    id = Column(Integer, primary_key=True, index=True)
+    # -------------------------------------------------------------------------
+    id          = Column(Integer, primary_key=True, index=True)
+    reference   = Column(String(50), unique=True, nullable=True, index=True)
+    # ex: "DIAG-2025-PROC-LABO-001" — généré par le service, pas saisi
 
-    # =========================================================================
-    # Relations primaires
-    # =========================================================================
-    processus_id = Column(Integer, ForeignKey("processus.id", ondelete="CASCADE"), nullable=False, index=True)
-    # Processus évalué (peut être une racine ou un sous-processus)
+    # -------------------------------------------------------------------------
+    # Relations principales
+    # -------------------------------------------------------------------------
+    processus_id = Column(
+        Integer,
+        ForeignKey("processus.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
 
-    clause_iso_id = Column(Integer, ForeignKey("clauses_iso.id", ondelete="RESTRICT"), nullable=False, index=True)
-    # Clause ISO (doit être est_feuille=True)
+    auditeur_id = Column(
+        Integer,
+        ForeignKey("utilisateurs.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    # Personne ayant réalisé le diagnostic (rôle auditeur ou admin)
 
-    auditeur_id = Column(Integer, ForeignKey("utilisateurs.id", ondelete="SET NULL"), nullable=True)
-    # Personne ayant conduit l'audit/diagnostic
+    # -------------------------------------------------------------------------
+    # Score global (agrégé depuis les DiagnosticClause)
+    # -------------------------------------------------------------------------
+    score_global  = Column(Float, default=0.0, nullable=False)
+    # Calculé par iso_engine.py — moyenne pondérée des scores de clauses
+    # Mis à jour à chaque modification d'un DiagnosticClause
 
-    # =========================================================================
-    # Données d'évaluation
-    # =========================================================================
-    score = Column(Float, default=0.0, nullable=False)
-    # Score de conformité : 0.0 → 100.0
-    # Calculé/saisi lors de l'audit
+    niveau_global = Column(
+        SAEnum(NiveauMaturite),
+        default=NiveauMaturite.non_conforme,
+        nullable=False,
+    )
+    # Calculé automatiquement depuis score_global par iso_engine.score_to_niveau()
 
-    niveau = Column(SAEnum(NiveauConformite), default=NiveauConformite.non_conforme, nullable=False)
-    # Niveau de conformité déduit du score (recalculé par iso_engine)
+    # -------------------------------------------------------------------------
+    # Contexte et statut
+    # -------------------------------------------------------------------------
+    statut = Column(
+        SAEnum(StatutDiagnostic),
+        default=StatutDiagnostic.brouillon,
+        nullable=False,
+    )
 
-    # =========================================================================
-    # Justification et contexte
-    # =========================================================================
-    description_ecart = Column(Text, nullable=True)
-    # Description des écarts identifiés vs. la norme
-    # Ex : "Pas de document formalisé définissant les risques du processus"
+    date_diagnostic  = Column(DateTime, default=datetime.utcnow, nullable=False)
+    date_validation  = Column(DateTime, nullable=True)
+    # Renseignée quand statut passe à "valide"
 
-    justification = Column(Text, nullable=True)
-    # Justification/preuve du score — éléments observés, documents consultés
-    # Ex : "Consultation dossier RH, entretien responsable processus"
+    periode_couverte = Column(String(50), nullable=True)
+    # ex: "2025-S1", "2024-Annuel" — permet de grouper les diagnostics par campagne
 
-    recommandation = Column(Text, nullable=True)
-    # Actions recommandées pour progresser vers la conformité
+    commentaire_global = Column(Text, nullable=True)
+    # Synthèse libre du diagnostic global
 
-    observation = Column(Text, nullable=True)
-    # Notes additionnelles, contexte particulier de l'organisme
+    est_actif = Column(Boolean, default=True, nullable=False)
+    # False = archivé, remplacé par une version plus récente
 
-    # =========================================================================
-    # Suivi des actions
-    # =========================================================================
-    est_action_requise = Column(Boolean, default=False, nullable=False)
-    # Flag : des actions correctives sont-elles nécessaires ?
-
-    date_action_prevue = Column(DateTime, nullable=True)
-    # Échéance pour les actions correctives
-
-    # =========================================================================
-    # Audit & Contrôle de qualité
-    # =========================================================================
-    statut = Column(SAEnum(StatutDiagnostic), default=StatutDiagnostic.brouillon, nullable=False)
-    # État du diagnostic (brouillon → valide → clos)
-
-    date_creation = Column(DateTime, default=datetime.utcnow, nullable=False)
-    # Quand le diagnostic a-t-il été créé/saisi ?
-
-    date_validation = Column(DateTime, nullable=True)
-    # Quand a-t-il été validé par une autorité (auditeur, pilote) ?
-
-    date_mise_a_jour = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-    # Dernière modification
-
-    version = Column(Integer, default=1, nullable=False)
-    # Numéro de version (pour tracer les révisions)
-
-    # =========================================================================
+    # -------------------------------------------------------------------------
     # Relations
-    # =========================================================================
+    # -------------------------------------------------------------------------
     processus = relationship(
         "Processus",
         back_populates="diagnostics",
-        foreign_keys=[processus_id],
-    )
-
-    clause = relationship(
-        "ClauseISO",
-        back_populates="diagnostics",
-        foreign_keys=[clause_iso_id],
     )
 
     auditeur = relationship(
         "Utilisateur",
         foreign_keys=[auditeur_id],
-        back_populates="diagnostics_audit",
+    )
+
+    clauses_evaluees = relationship(
+        "DiagnosticClause",
+        back_populates="diagnostic",
+        cascade="all, delete-orphan",
+        order_by="DiagnosticClause.id",
     )
 
     def __repr__(self) -> str:
-        return f"<DiagnosticISO {self.clause.code if self.clause else '?'} × {self.processus.code if self.processus else '?'} — {self.niveau.value}>"
+        return (
+            f"<DiagnosticISO [{self.reference}] "
+            f"processus={self.processus_id} "
+            f"score={self.score_global:.1f} "
+            f"statut={self.statut}>"
+        )
+
+
+# =============================================================================
+# DIAGNOSTIC DÉTAIL PAR CLAUSE  (N par DiagnosticISO)
+# =============================================================================
+
+class DiagnosticClause(Base):
+    """
+    Évaluation d'une clause ISO feuille dans le cadre d'un DiagnosticISO.
+
+    1 DiagnosticISO  →  N DiagnosticClause
+    (une par clause feuille applicable du référentiel)
+
+    Recommandation hybride :
+      - recommandation_auto   → générée par iso_engine.py selon le score et la clause
+      - recommandation_manuelle → saisie libre par l'auditeur
+      - recommandation_finale → recommandation_manuelle si renseignée,
+                                sinon recommandation_auto
+        (logique portée par le service, pas calculée ici en DB)
+    """
+
+    __tablename__ = "diagnostics_clauses"
+
+    # -------------------------------------------------------------------------
+    # Identité
+    # -------------------------------------------------------------------------
+    id = Column(Integer, primary_key=True, index=True)
+
+    # -------------------------------------------------------------------------
+    # Relations
+    # -------------------------------------------------------------------------
+    diagnostic_id = Column(
+        Integer,
+        ForeignKey("diagnostics_iso.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    clause_id = Column(
+        Integer,
+        ForeignKey("clauses_iso.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    # RESTRICT : on ne peut pas supprimer une clause qui a des diagnostics
+
+    # -------------------------------------------------------------------------
+    # Score et niveau (cœur du diagnostic)
+    # -------------------------------------------------------------------------
+    score = Column(Float, nullable=False, default=0.0)
+    # Saisi par l'auditeur : 0.0 → 100.0
+    # Représente le pourcentage de conformité à cette clause
+
+    niveau = Column(
+        SAEnum(NiveauMaturite),
+        nullable=False,
+        default=NiveauMaturite.non_conforme,
+    )
+    # Calculé automatiquement depuis `score` par iso_engine.score_to_niveau()
+    # Mis à jour à chaque modification du score
+
+    # -------------------------------------------------------------------------
+    # Analyse de l'écart
+    # -------------------------------------------------------------------------
+    type_ecart = Column(
+        SAEnum(TypeEcart),
+        nullable=True,
+    )
+    # Calculé par iso_engine ou saisi par l'auditeur
+    # NULL si non encore évalué
+
+    description_ecart = Column(Text, nullable=True)
+    # Description libre de l'écart constaté
+    # ex: "Aucune procédure documentée pour la maîtrise des achats > seuil"
+
+    preuves_existantes = Column(Text, nullable=True)
+    # Ce qui existe déjà et prouve un début de conformité
+    # ex: "Bons de commande archivés, suivi Excel partiel"
+
+    # -------------------------------------------------------------------------
+    # Recommandations (hybride auto + manuelle)
+    # -------------------------------------------------------------------------
+    recommandation_auto = Column(Text, nullable=True)
+    # Générée par iso_engine.py selon (clause.code, score, type_ecart)
+    # Exemples :
+    #   clause 7.5.3 + score 20 → "Mettre en place une procédure de maîtrise
+    #                              des documents avec droits d'accès définis."
+    #   clause 9.2   + score 45 → "Planifier un programme d'audit interne annuel."
+
+    recommandation_manuelle = Column(Text, nullable=True)
+    # Saisie libre par l'auditeur — surcharge recommandation_auto si renseignée
+
+    # Pas de champ recommandation_finale en DB :
+    # → calculé à la volée par le service : manuelle ?? manuelle : auto
+    # → évite la duplication et la désynchronisation
+
+    # -------------------------------------------------------------------------
+    # Pondération (pour le calcul du score global)
+    # -------------------------------------------------------------------------
+    poids = Column(Float, default=1.0, nullable=False)
+    # Permet de pondérer certaines clauses plus critiques pour l'organisme
+    # Par défaut 1.0 (toutes égales) — ajustable par l'admin
+
+    # -------------------------------------------------------------------------
+    # Flags
+    # -------------------------------------------------------------------------
+    est_applicable = Column(Boolean, default=True, nullable=False)
+    # False = clause exclue du périmètre pour ce processus
+    # (ex: clause 8.3 non applicable si pas de conception)
+    # Si False → non incluse dans le calcul du score_global
+
+    # -------------------------------------------------------------------------
+    # Relations
+    # -------------------------------------------------------------------------
+    diagnostic = relationship(
+        "DiagnosticISO",
+        back_populates="clauses_evaluees",
+    )
+
+    clause = relationship(
+        "ClauseISO",
+        back_populates="diagnostics",
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<DiagnosticClause "
+            f"diagnostic={self.diagnostic_id} "
+            f"clause={self.clause_id} "
+            f"score={self.score} "
+            f"niveau={self.niveau}>"
+        )
