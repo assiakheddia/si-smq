@@ -1,7 +1,7 @@
 """
 backend/app/data/parties_interessees_seed.py
 
-Parties intéressées identifiées dans les deux BPMN fournis.
+Parties intéressées identifiées dans les deux processus de labo et d'encadrement doctoral, avec leurs exigences spécifiques.
 """
 
 PARTIES_INTERESSEES_SEED = [
