@@ -1,169 +1,145 @@
 """
-backend/app/core/seeder.py
+seeder.py — Données initiales au démarrage FastAPI
 
-Chargement initial des données de référence au démarrage de l'application.
-Idempotent : ne réinsère pas si les données existent déjà.
-Appelé depuis app/main.py dans l'événement @app.on_event("startup").
+Contient uniquement les données structurelles stables :
+  - Référentiel normatif ISO 9001:2015 (clauses)
+  - Parties intéressées de base
+  - Compte administrateur par défaut
+
+Les processus sont désormais créés dynamiquement via l'API (POST /processus).
 """
 
+import logging
 from sqlalchemy.orm import Session
 
 from app.models.clause_iso import ClauseISO
-from app.models.processus import Processus, PartieInteressee, TypeProcessus, FrequenceCycle
-
-from app.data.clauses_iso_seed import CLAUSES_ISO_9001_2015
-from app.data.processus_seed import PROCESSUS_SEED
+from app.models.processus import PartieInteressee
+from app.models.utilisateur import Utilisateur, RoleEnum
+from app.data.clauses_iso_seed import CLAUSES_ISO_SEED
 from app.data.parties_interessees_seed import PARTIES_INTERESSEES_SEED
+from app.core.security import hash_password  # à implémenter dans security.py
+
+logger = logging.getLogger(__name__)
 
 
-# =============================================================================
-# SEED — Clauses ISO 9001:2015
-# =============================================================================
+# ---------------------------------------------------------------------------
+# §1 — Référentiel ISO 9001:2015
+# ---------------------------------------------------------------------------
 
 def seed_clauses_iso(db: Session) -> None:
-    if db.query(ClauseISO).count() > 0:
+    """
+    Insère les 93 clauses normatives ISO 9001:2015 (sections 4→10, 3 niveaux).
+    Idempotent : ignoré si les clauses existent déjà.
+    """
+    existing = db.query(ClauseISO).count()
+    if existing > 0:
+        logger.info("seed_clauses_iso : %d clauses déjà présentes — ignoré.", existing)
         return
 
-    code_to_id: dict[str, int] = {}
-
-    for entry in CLAUSES_ISO_9001_2015:
-        parent_id = None
-        if entry["parent_code"] is not None:
-            parent_id = code_to_id.get(entry["parent_code"])
-            if parent_id is None:
-                raise ValueError(
-                    f"[Seeder] Parent introuvable pour la clause {entry['code']} "
-                    f"(parent_code={entry['parent_code']})."
-                )
-
+    # Passe 1 : insérer sans parent_id pour avoir les IDs
+    code_to_obj: dict[str, ClauseISO] = {}
+    for item in CLAUSES_ISO_SEED:
         clause = ClauseISO(
-            code=entry["code"],
-            titre=entry["titre"],
-            description=entry.get("description"),
-            parent_id=parent_id,
-            niveau=entry["niveau"],
-            ordre=entry["ordre"],
-            est_feuille=entry["est_feuille"],
-            est_applicable=True,
+            code=item["code"],
+            titre=item["titre"],
+            description=item.get("description"),
+            niveau=item["niveau"],
+            est_applicable=item.get("est_applicable", True),
+            parent_id=None,
         )
         db.add(clause)
-        db.flush()
-        code_to_id[entry["code"]] = clause.id
+        code_to_obj[item["code"]] = clause
+
+    db.flush()  # génère les IDs sans commit
+
+    # Passe 2 : résoudre parent_id
+    for item in CLAUSES_ISO_SEED:
+        parent_code = item.get("parent_code")
+        if parent_code and parent_code in code_to_obj:
+            code_to_obj[item["code"]].parent_id = code_to_obj[parent_code].id
 
     db.commit()
-    print(f"[Seeder] {len(CLAUSES_ISO_9001_2015)} clauses ISO 9001:2015 insérées.")
+    logger.info("seed_clauses_iso : %d clauses insérées.", len(CLAUSES_ISO_SEED))
 
 
-# =============================================================================
-# SEED — Parties Intéressées
-# =============================================================================
+# ---------------------------------------------------------------------------
+# §2 — Parties intéressées
+# ---------------------------------------------------------------------------
 
 def seed_parties_interessees(db: Session) -> None:
-    if db.query(PartieInteressee).count() > 0:
+    """
+    Insère les parties intéressées de base (Ministère, ATRST, Direction...).
+    Idempotent : ignoré si au moins une partie existe déjà.
+
+    Note : des parties intéressées supplémentaires peuvent être ajoutées
+    dynamiquement via l'API (POST /parties-interessees).
+    """
+    existing = db.query(PartieInteressee).count()
+    if existing > 0:
+        logger.info(
+            "seed_parties_interessees : %d parties déjà présentes — ignoré.", existing
+        )
         return
 
-    for entry in PARTIES_INTERESSEES_SEED:
+    for item in PARTIES_INTERESSEES_SEED:
         partie = PartieInteressee(
-            nom=entry["nom"],
-            type=entry["type"],
-            description=entry.get("description"),
-            exigences=entry.get("exigences"),
-            est_actif=True,
+            nom=item["nom"],
+            type_partie=item.get("type_partie"),
+            exigences=item.get("exigences"),
+            influence=item.get("influence"),
+            interet=item.get("interet"),
         )
         db.add(partie)
 
     db.commit()
-    print(f"[Seeder] {len(PARTIES_INTERESSEES_SEED)} parties intéressées insérées.")
+    logger.info(
+        "seed_parties_interessees : %d parties insérées.", len(PARTIES_INTERESSEES_SEED)
+    )
 
 
-# =============================================================================
-# SEED — Processus (issus des deux BPMN)
-# =============================================================================
-
-def seed_processus(db: Session) -> None:
-    if db.query(Processus).count() > 0:
-        return
-
-    def _create_processus(entry: dict, parent_id: int | None = None) -> Processus:
-        proc = Processus(
-            code=entry["code"],
-            nom=entry["nom"],
-            objectif=entry.get("objectif"),
-            type=TypeProcessus(entry["type"]),
-            frequence_cycle=FrequenceCycle(entry.get("frequence_cycle", "annuel")),
-            declencheur=entry.get("declencheur"),
-            entrees=entry.get("entrees"),
-            sorties=entry.get("sorties"),
-            ressources_cles=entry.get("ressources_cles"),
-            parent_id=parent_id,
-            ordre=entry.get("ordre", 0),
-            est_actif=True,
-        )
-        db.add(proc)
-        db.flush()
-
-        for i, sous in enumerate(entry.get("sous_processus", []), start=1):
-            sous["ordre"] = i
-            _create_processus(sous, parent_id=proc.id)
-
-        return proc
-
-    for i, entry in enumerate(PROCESSUS_SEED, start=1):
-        entry["ordre"] = i
-        _create_processus(entry)
-
-    db.commit()
-    total = db.query(Processus).count()
-    print(f"[Seeder] {total} processus insérés (racines + sous-processus).")
-
-
-# =============================================================================
-# POINT D'ENTRÉE UNIQUE
-# =============================================================================
+# ---------------------------------------------------------------------------
+# §3 — Compte administrateur par défaut
+# ---------------------------------------------------------------------------
 
 def seed_admin_user(db: Session) -> None:
     """
-    Crée un compte admin par défaut si aucun admin n'existe.
-    Mot de passe initial à changer obligatoirement à la première connexion.
-
-    Credentials par défaut (dev uniquement) :
-      email    : admin@si-smq.local
-      password : Admin@SMQ2025!   ← à changer immédiatement en prod
+    Crée le compte admin initial si aucun utilisateur n'existe.
+    Mot de passe : défini via la variable d'environnement ADMIN_DEFAULT_PASSWORD
+    (fallback : 'changeme' en développement uniquement).
     """
-    from app.models.utilisateur import Utilisateur, RoleEnum
-    from app.core.security import hash_password  # passlib bcrypt
-
-    existe = db.query(Utilisateur).filter(
-        Utilisateur.role == RoleEnum.admin
-    ).first()
-
-    if existe:
+    existing = db.query(Utilisateur).count()
+    if existing > 0:
+        logger.info("seed_admin_user : utilisateurs déjà présents — ignoré.")
         return
 
+    import os
+    password_plain = os.getenv("ADMIN_DEFAULT_PASSWORD", "changeme")
+
     admin = Utilisateur(
+        email="admin@si-smq.local",
         nom="Administrateur",
         prenom="SI-SMQ",
-        email="admin@si-smq.local",
-        hashed_password=hash_password("Admin@SMQ2025!"),
         role=RoleEnum.admin,
-        poste="Administrateur Système",
-        departement="Direction Qualité",
         est_actif=True,
+        mot_de_passe_hash=hash_password(password_plain),
     )
     db.add(admin)
     db.commit()
-    print("[Seeder] Compte admin créé → admin@si-smq.local (changer le mot de passe !)")
+    logger.info("seed_admin_user : compte admin créé (admin@si-smq.local).")
 
+
+# ---------------------------------------------------------------------------
+# Point d'entrée principal
+# ---------------------------------------------------------------------------
 
 def run_all_seeders(db: Session) -> None:
     """
-    Ordre :
-      1. Clauses ISO    (aucune dépendance)
-      2. Parties        (aucune dépendance)
-      3. Admin user     (aucune dépendance)
-      4. Processus      (pilote_id = NULL au seed, assigné via interface admin)
+    Appelé une fois au démarrage FastAPI (lifespan ou @app.on_event).
+    Ordre : clauses → parties → admin.
+    Les processus ne sont PAS seedés : ils sont créés via l'API.
     """
+    logger.info("=== Démarrage des seeders SI-SMQ ===")
     seed_clauses_iso(db)
     seed_parties_interessees(db)
     seed_admin_user(db)
-    seed_processus(db)
+    logger.info("=== Seeders terminés ===")
