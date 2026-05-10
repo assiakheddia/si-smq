@@ -393,10 +393,10 @@ const PROCESSUS_DATA = {
       { id: "DOC-004", titre: "Règlement intérieur", format: "Word", revue: "Approuvée – Direction", version: "1.8" },
     ],
     preuves: [
-      { titre: "PV de délibération" },
-      { titre: "Fiche de suivi étudiant" },
-      { titre: "Rapport de soutenance signé" },
-    ],
+  { titre: "PV de délibération", format: "pdf" },
+  { titre: "Fiche de suivi étudiant", format: "xlsx" },
+  { titre: "Rapport de soutenance signé", format: "pdf" },
+],
     dysfonctionnementsDescription: "Identification et analyse des dysfonctionnements majeurs rencontrés lors de l'exécution du processus, ainsi que les actions correctives mises en place.",
     dysfonctionnements: [
       { 
@@ -767,138 +767,183 @@ const Tab1 = () => (
     </div>
   );
   
-const Tab4 = () => (
-  <div>
-    {/* Informations Documentées section */}
-    <div style={styles.sectionHeader}>
-      <div style={styles.sectionNum}>1</div>
-      <div>
-        <div style={styles.sectionTitle}>Informations Documentées</div>
-        <div style={styles.sectionSub}>Documents de référence et preuves de réalisation du processus</div>
-      </div>
-    </div>
-    
-    {/* Description text */}
-    <div style={{
-      background: C.lightBg,
-      padding: "16px 20px",
-      borderRadius: 12,
-      marginBottom: 28,
-      fontSize: 13,
-      color: C.text,
-      lineHeight: 1.6,
-      border: `1px solid ${C.border}`,
-    }}>
-      {processus.documentsDescription || "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."}
-    </div>
-    
-    {/* Documents de référence - Subsection (no number) */}
-    <div style={{ marginBottom: 20 }}>
-      <div style={{
-        fontSize: 16,
-        fontWeight: 700,
-        color: C.text,
-        fontFamily: "'Outfit', sans-serif",
-        marginBottom: 8,
-      }}>
-        Documents de référence
-      </div>
-      <div style={{
-        fontSize: 12,
-        color: C.muted,
-        marginBottom: 16,
-      }}>
-        Documents normatifs et de référence associés au processus
-      </div>
-    </div>
-    
-    {/* Documents table */}
-    <div style={{ overflowX: "auto", marginBottom: 24 }}>
-      <table style={styles.table}>
-        <thead>
-          <tr>
-            <th style={styles.th}>ID</th>
-            <th style={styles.th}>Titre / Description</th>
-            <th style={styles.th}>Format & Support</th>
-            <th style={styles.th}>Revue & Approbation</th>
-            <th style={styles.th}>Version</th>
-          </tr>
-        </thead>
-        <tbody>
-          {processus.documents.map((doc, i) => (
-            <tr key={i}>
-              <td style={styles.td}>{doc.id}</td>
-              <td style={styles.td}>{doc.titre}</td>
-              <td style={styles.td}>{doc.format}</td>
-              <td style={styles.td}>{doc.revue}</td>
-              <td style={styles.td}>{doc.version}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-    
-    {/* Pagination indicator */}
-    <div style={{
-      display: "flex",
-      justifyContent: "flex-end",
-      marginBottom: 28,
-      fontSize: 12,
-      color: C.muted,
-    }}>
-      Page 1 | 1
-    </div>
-    
-    {/* Enregistrements - Subsection (no number) */}
-    <div style={{ marginBottom: 20 }}>
-      <div style={{
-        fontSize: 16,
-        fontWeight: 700,
-        color: C.text,
-        fontFamily: "'Outfit', sans-serif",
-        marginBottom: 8,
-      }}>
-        Enregistrements (preuves de réalisation)
-      </div>
-      <div style={{
-        fontSize: 12,
-        color: C.muted,
-        marginBottom: 16,
-      }}>
-        Traces et preuves de l'exécution du processus
-      </div>
-    </div>
-    
-    {/* Bullet point list */}
-    <div style={{
-      background: C.lightBg,
-      borderRadius: 12,
-      padding: "20px 24px",
-      border: `1px solid ${C.border}`,
-    }}>
-      {processus.preuves.map((preuve, i) => (
-        <div key={i} style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          padding: "8px 0",
-          borderBottom: i < processus.preuves.length - 1 ? `1px solid ${C.border}` : "none",
-        }}>
-          <span style={{
-            width: 6,
-            height: 6,
-            borderRadius: "50%",
-            background: C.accent,
-            flexShrink: 0,
-          }} />
-          <span style={{ fontSize: 14, color: C.text }}>
-            {preuve.titre}
-          </span>
+const Tab4 = () => {
+  // Helper function to trigger file download
+  const handleFileDownload = (titre, format = "pdf") => {
+    // Create a sample file content (in real implementation, this would come from your backend)
+    // For demo purposes, we're creating a text blob
+    const content = `Document: ${titre}\n\nThis is a sample document for ${titre}.\n\nIn a real implementation, this would be an actual file from your server.`;
+    const blob = new Blob([content], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${titre.toLowerCase().replace(/\s+/g, '_')}.${format}`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div>
+      {/* Informations Documentées section */}
+      <div style={styles.sectionHeader}>
+        <div style={styles.sectionNum}>1</div>
+        <div>
+          <div style={styles.sectionTitle}>Informations Documentées</div>
+          <div style={styles.sectionSub}>Documents de référence et preuves de réalisation du processus</div>
         </div>
-      ))}
+      </div>
+      
+      {/* Description text */}
+      <div style={{
+        background: C.lightBg,
+        padding: "16px 20px",
+        borderRadius: 12,
+        marginBottom: 28,
+        fontSize: 13,
+        color: C.text,
+        lineHeight: 1.6,
+        border: `1px solid ${C.border}`,
+      }}>
+        {processus.documentsDescription || "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."}
+      </div>
+      
+      {/* Documents de référence - Subsection (no number) */}
+      <div style={{ marginBottom: 20 }}>
+        <div style={{
+          fontSize: 16,
+          fontWeight: 700,
+          color: C.text,
+          fontFamily: "'Outfit', sans-serif",
+          marginBottom: 8,
+        }}>
+          Documents de référence
+        </div>
+        <div style={{
+          fontSize: 12,
+          color: C.muted,
+          marginBottom: 16,
+        }}>
+          Documents normatifs et de référence associés au processus
+        </div>
+      </div>
+      
+      {/* Documents table */}
+      <div style={{ overflowX: "auto", marginBottom: 24 }}>
+        <table style={styles.table}>
+          <thead>
+            <tr>
+              <th style={styles.th}>ID</th>
+              <th style={styles.th}>Titre / Description</th>
+              <th style={styles.th}>Format & Support</th>
+              <th style={styles.th}>Revue & Approbation</th>
+              <th style={styles.th}>Version</th>
+            </tr>
+          </thead>
+          <tbody>
+            {processus.documents.map((doc, i) => (
+              <tr key={i}>
+                <td style={styles.td}>{doc.id}</td>
+                <td style={styles.td}>{doc.titre}</td>
+                <td style={styles.td}>{doc.format}</td>
+                <td style={styles.td}>{doc.revue}</td>
+                <td style={styles.td}>{doc.version}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      
+      {/* Pagination indicator */}
+      <div style={{
+        display: "flex",
+        justifyContent: "flex-end",
+        marginBottom: 28,
+        fontSize: 12,
+        color: C.muted,
+      }}>
+        Page 1 | 1
+      </div>
+      
+      {/* Enregistrements - Subsection (no number) */}
+      <div style={{ marginBottom: 20 }}>
+        <div style={{
+          fontSize: 16,
+          fontWeight: 700,
+          color: C.text,
+          fontFamily: "'Outfit', sans-serif",
+          marginBottom: 8,
+        }}>
+          Enregistrements (preuves de réalisation)
+        </div>
+        <div style={{
+          fontSize: 12,
+          color: C.muted,
+          marginBottom: 16,
+        }}>
+          Traces et preuves de l'exécution du processus (cliquez pour télécharger)
+        </div>
+      </div>
+      
+      {/* Clickable bullet point list for file downloads */}
+      <div style={{
+        background: C.lightBg,
+        borderRadius: 12,
+        padding: "20px 24px",
+        border: `1px solid ${C.border}`,
+      }}>
+        {processus.preuves.map((preuve, i) => (
+          <div 
+            key={i} 
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              padding: "8px 0",
+              borderBottom: i < processus.preuves.length - 1 ? `1px solid ${C.border}` : "none",
+              cursor: "pointer",
+              transition: "all 0.2s",
+            }}
+            onClick={() => handleFileDownload(preuve.titre, preuve.format || "pdf")}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "rgba(119,213,143,0.1)";
+              e.currentTarget.style.paddingLeft = "8px";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "transparent";
+              e.currentTarget.style.paddingLeft = "0";
+            }}
+          >
+            <span style={{
+              width: 6,
+              height: 6,
+              borderRadius: "50%",
+              background: C.accent,
+              flexShrink: 0,
+            }} />
+            <span style={{ 
+              fontSize: 14, 
+              color: C.primary,
+              textDecoration: "underline",
+              textUnderlineOffset: "3px",
+              fontWeight: 500,
+            }}>
+              {preuve.titre}
+            </span>
+            <span style={{
+              marginLeft: "auto",
+              fontSize: 11,
+              color: C.muted,
+            }}>
+              📄 {preuve.format || "PDF"}
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
-  </div>
-);
+  );
+};
   
 const Tab5 = () => {
   const [dysfIndex, setDysfIndex] = useState(0);
