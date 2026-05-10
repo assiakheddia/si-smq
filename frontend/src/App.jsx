@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Sidebar from "./components/Sidebar";
 import MainContent from "./components/MainContent";
 
@@ -7,6 +7,18 @@ export default function App() {
   const [activeNav, setActiveNav] = useState("processus");
   const SW = collapsed ? 64 : 220;
 
+  // ✅ Force green background on ALL root elements — covers full scroll height
+  useEffect(() => {
+    document.documentElement.style.background = "#eaf5eb";
+    document.body.style.background = "#eaf5eb";
+    document.body.style.minHeight = "100vh";
+    const root = document.getElementById("root");
+    if (root) {
+      root.style.background = "#eaf5eb";
+      root.style.minHeight = "100vh";
+    }
+  }, []);
+
   return (
     <>
       <style>{`
@@ -14,8 +26,8 @@ export default function App() {
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         html { font-size: clamp(13px, 1.1vw, 15px); }
         html, body, #root {
-          height: 100%;
-          background: #eaf5eb;
+          background: #eaf5eb !important;
+          min-height: 100vh;
         }
         body {
           font-family: 'Plus Jakarta Sans', sans-serif;
@@ -28,7 +40,7 @@ export default function App() {
       <div
         style={{
           display: "flex",
-          minHeight: "100%",
+          minHeight: "100vh",
           background: "#eaf5eb",
           position: "relative",
         }}
@@ -49,7 +61,6 @@ export default function App() {
             background: "#eaf5eb",
             transition: "margin-left 0.3s cubic-bezier(.4,0,.2,1)",
             position: "relative",
-            /* Ensure background covers full scroll height */
           }}
         >
           {/* Decorative blob */}
