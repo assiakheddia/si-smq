@@ -397,8 +397,35 @@ const PROCESSUS_DATA = {
       { titre: "Fiche de suivi étudiant" },
       { titre: "Rapport de soutenance signé" },
     ],
+    dysfonctionnementsDescription: "Identification et analyse des dysfonctionnements majeurs rencontrés lors de l'exécution du processus, ainsi que les actions correctives mises en place.",
     dysfonctionnements: [
-      { titre: "Retard attribution sujets", description: "Sujets attribués en retard", consequences: "Stress étudiants", causes: "Peu propositions", ameliorations: "Lancement plus tôt", gravite: "Majeur", responsable: "Coordinateur", echeance: "2026-09", statut: "En cours" },
+      { 
+        titre: "Retard dans la validation des sujets PFE", 
+        description: "Retard dans la validation des sujets PFE", 
+        consequences: "Perte de temps, stress étudiant, chevauchement avec les délais académiques", 
+        causes: "Manque de communication entre département et encadrants",
+        ameliorations: "Mise en place d'un workflow numérique de validation avec notifications automatiques\nQuota d'encadrement par enseignant\nRéglementation MESRS",
+        gravite: "Majeur", 
+        responsable: "Coordinateur", 
+        echeance: "2026-09", 
+        statut: "En cours" 
+      },
+      { 
+        titre: "Sujets non conformes aux exigences académiques", 
+        description: "Certains sujets proposés par les encadrants ne respectent pas les critères de qualité établis", 
+        consequences: "Refus des sujets par le jury, retards dans le calendrier d'attribution, surcharge de travail pour le comité de validation", 
+        causes: "Manque de formation des encadrants sur les critères de qualité\nAbsence de template standardisé pour la proposition de sujets",
+        ameliorations: "Organiser des ateliers de formation obligatoires\nCréer un template standard avec critères d'évaluation détaillés\nMettre en place une pré-évaluation avant soumission officielle\nDésigner un référent qualité par département",
+        gravite: "Moyen", 
+        responsable: "Comité pédagogique", 
+        echeance: "2026-12", 
+        statut: "En cours" 
+      },
+    ],
+    methodes: [
+      "Mise en place d'un workflow numérique de validation avec notifications automatiques",
+      "Quota d'encadrement par enseignant",
+      "Réglementation MESRS",
     ],
     etapes: [
       { numero: 1, nom: "Lancement appel à sujets", acteur: "Coordinateur", description: "Envoyer appel aux enseignants", entree: "Calendrier", sortie: "Liste sujets", duree: "2 semaines", document: "Formulaire" },
@@ -432,7 +459,7 @@ export default function FicheProcessus() {
           <div style={styles.content}>
             <div style={{ textAlign: "center", padding: "60px 20px" }}>
               <h2>Processus non trouvé</h2>
-              <button onClick={() => navigate("/")} style={styles.btnBack}>Retour à l'accueil</button>
+              <button onClick={() => navigate("/processus")} style={styles.btnBack}>Retour à l'accueil</button>
             </div>
           </div>
         </div>
@@ -873,40 +900,275 @@ const Tab4 = () => (
   </div>
 );
   
-  const Tab5 = () => (
+const Tab5 = () => {
+  const [dysfIndex, setDysfIndex] = useState(0);
+  const dysfonctionnementsList = processus.dysfonctionnements || [];
+  const currentDysf = dysfonctionnementsList[dysfIndex];
+  
+  const goToPrev = () => {
+    setDysfIndex((prev) => (prev > 0 ? prev - 1 : dysfonctionnementsList.length - 1));
+  };
+  
+  const goToNext = () => {
+    setDysfIndex((prev) => (prev < dysfonctionnementsList.length - 1 ? prev + 1 : 0));
+  };
+  
+  return (
     <div>
+      {/* Dysfonctionnements Majeurs Connus section */}
       <div style={styles.sectionHeader}>
         <div style={styles.sectionNum}>1</div>
         <div>
           <div style={styles.sectionTitle}>Dysfonctionnements Majeurs Connus</div>
+          <div style={styles.sectionSub}>Recenser les problèmes récurrents et proposer des améliorations</div>
         </div>
       </div>
       
-      {processus.dysfonctionnements.map((d, i) => (
-        <div key={i} style={styles.dysfCard}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: C.primary, marginBottom: 16 }}>Dysfonctionnement #{i + 1}: {d.titre}</div>
-          <div style={styles.grid2}>
-            <div style={styles.gridFull}>
-              <InfoField label="Description" value={d.description} />
-            </div>
-            <div style={styles.gridFull}>
-              <InfoField label="Conséquences" value={d.consequences} />
-            </div>
-            <div style={styles.gridFull}>
-              <InfoField label="Causes identifiées" value={d.causes} />
-            </div>
-            <div style={styles.gridFull}>
-              <InfoField label="Améliorations proposées" value={d.ameliorations} />
-            </div>
-            <InfoField label="Gravité" value={d.gravite} />
-            <InfoField label="Responsable" value={d.responsable} />
-            <InfoField label="Échéance" value={d.echeance} />
-            <InfoField label="Statut" value={d.statut} />
+      {/* Description text */}
+      <div style={{
+        background: C.lightBg,
+        padding: "16px 20px",
+        borderRadius: 12,
+        marginBottom: 28,
+        fontSize: 13,
+        color: C.text,
+        lineHeight: 1.6,
+        border: `1px solid ${C.border}`,
+      }}>
+        {processus.dysfonctionnementsDescription || "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."}
+      </div>
+      
+      {/* Dysfonctionnement table with navigation */}
+      <div style={{
+        border: `1px solid ${C.border}`,
+        borderRadius: 12,
+        overflow: "hidden",
+        marginBottom: 24,
+      }}>
+        {/* Table header with title and navigation arrows */}
+        <div style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          background: C.lightBg,
+          padding: "14px 20px",
+          borderBottom: `1px solid ${C.border}`,
+        }}>
+          <div style={{
+            fontSize: 14,
+            fontWeight: 700,
+            color: C.primary,
+          }}>
+            Dysfonctionnement #{dysfIndex + 1}: {currentDysf?.titre || ""}
+          </div>
+          
+          {/* Navigation arrows */}
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              onClick={goToPrev}
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 8,
+                border: `1px solid ${C.border}`,
+                background: C.white,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 16,
+                color: C.primary,
+                transition: "all 0.2s",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = C.lightBg;
+                e.currentTarget.style.borderColor = C.accent;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = C.white;
+                e.currentTarget.style.borderColor = C.border;
+              }}
+            >
+              ←
+            </button>
+            <button
+              onClick={goToNext}
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 8,
+                border: `1px solid ${C.border}`,
+                background: C.white,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 16,
+                color: C.primary,
+                transition: "all 0.2s",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = C.lightBg;
+                e.currentTarget.style.borderColor = C.accent;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = C.white;
+                e.currentTarget.style.borderColor = C.border;
+              }}
+            >
+              →
+            </button>
           </div>
         </div>
-      ))}
+        
+        {/* Table body */}
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <tbody>
+            {/* Description row */}
+            <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+              <td style={{
+                width: "200px",
+                padding: "14px 20px",
+                background: "#fafafa",
+                fontWeight: 600,
+                fontSize: 13,
+                color: C.muted,
+                textTransform: "uppercase",
+                letterSpacing: 0.5,
+                borderRight: `1px solid ${C.border}`,
+              }}>
+                Description
+              </td>
+              <td style={{
+                padding: "14px 20px",
+                fontSize: 14,
+                color: C.text,
+                lineHeight: 1.5,
+              }}>
+                {currentDysf?.description}
+              </td>
+            </tr>
+            
+            {/* Conséquences row */}
+            <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+              <td style={{
+                width: "200px",
+                padding: "14px 20px",
+                background: "#fafafa",
+                fontWeight: 600,
+                fontSize: 13,
+                color: C.muted,
+                textTransform: "uppercase",
+                letterSpacing: 0.5,
+                borderRight: `1px solid ${C.border}`,
+              }}>
+                Conséquences
+              </td>
+              <td style={{
+                padding: "14px 20px",
+                fontSize: 14,
+                color: C.text,
+                lineHeight: 1.5,
+              }}>
+                {currentDysf?.consequences}
+              </td>
+            </tr>
+            
+            {/* Causes row */}
+            <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+              <td style={{
+                width: "200px",
+                padding: "14px 20px",
+                background: "#fafafa",
+                fontWeight: 600,
+                fontSize: 13,
+                color: C.muted,
+                textTransform: "uppercase",
+                letterSpacing: 0.5,
+                borderRight: `1px solid ${C.border}`,
+              }}>
+                Causes
+              </td>
+              <td style={{
+                padding: "14px 20px",
+                fontSize: 14,
+                color: C.text,
+                lineHeight: 1.5,
+              }}>
+                {currentDysf?.causes}
+              </td>
+            </tr>
+            
+            {/* Améliorations proposées row */}
+            <tr>
+              <td style={{
+                width: "200px",
+                padding: "14px 20px",
+                background: "#fafafa",
+                fontWeight: 600,
+                fontSize: 13,
+                color: C.muted,
+                textTransform: "uppercase",
+                letterSpacing: 0.5,
+                borderRight: `1px solid ${C.border}`,
+                verticalAlign: "top",
+              }}>
+                Améliorations proposées
+              </td>
+              <td style={{
+                padding: "14px 20px",
+                fontSize: 14,
+                color: C.text,
+                lineHeight: 1.5,
+              }}>
+                {currentDysf?.ameliorations && (
+                  <div style={{ marginTop: 4 }}>
+                    {currentDysf.ameliorations.split('\n').map((item, i) => (
+                      <div key={i} style={{
+                        display: "flex",
+                        alignItems: "flex-start",
+                        gap: 8,
+                        marginBottom: 6,
+                      }}>
+                        <span style={{ color: C.primary }}>•</span>
+                        <span>{item}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      
+      {/* Pagination indicator */}
+      <div style={{
+        display: "flex",
+        justifyContent: "center",
+        gap: 8,
+        marginTop: 8,
+      }}>
+        {dysfonctionnementsList.map((_, idx) => (
+          <button
+            key={idx}
+            onClick={() => setDysfIndex(idx)}
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: "50%",
+              border: "none",
+              background: idx === dysfIndex ? C.primary : C.border,
+              cursor: "pointer",
+              padding: 0,
+              transition: "all 0.2s",
+            }}
+          />
+        ))}
+      </div>
     </div>
   );
+};
   
   const Tab6 = () => (
     <div>
@@ -1047,13 +1309,13 @@ const Tab4 = () => (
         
         {/* Action bar */}
         <div style={styles.actionBar}>
-          <button type="button" style={styles.btnBack} onClick={() => navigate("/")}>
+          <button type="button" style={styles.btnBack} onClick={() => navigate("/processus")}>
             ← Retour à la liste
           </button>
           <button 
             type="button" 
             style={styles.btnEdit} 
-            onClick={() => navigate(`/processus/${id}`)}
+            onClick={() => navigate(`/processus`)}
           >
             ✏️ Modifier le processus
           </button>
