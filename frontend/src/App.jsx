@@ -1,75 +1,92 @@
 import { useState } from "react";
-import Sidebar from "./components/Sidebar";
-import MainContent from "./components/MainContent";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import Login from "./pages/login.jsx";
+import MainContent from "./components/MainContent.jsx";
+import Sidebar from "./components/Sidebar.jsx";
+import ProcessFormPage from "./pages/ProcessFormPage.jsx";
 
-export default function App() {
+function ProcessusPage() {
   const [collapsed, setCollapsed] = useState(false);
   const [activeNav, setActiveNav] = useState("processus");
-  const SW = collapsed ? 64 : 220;
+  const sidebarWidth = collapsed ? 70 : 245;
 
   return (
-    <>
+    <div style={{ minHeight: "100vh", background: "#eaf5eb" }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Outfit:wght@700;800;900&display=swap');
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        html { font-size: clamp(13px, 1.1vw, 15px); }
-        html, body, #root {
-          height: 100%;
-          background: #eaf5eb;
+        .app-content {
+          margin-left: ${sidebarWidth}px;
+          transition: margin-left 0.3s cubic-bezier(.4,0,.2,1);
         }
-        body {
-          font-family: 'Plus Jakarta Sans', sans-serif;
-          overflow-x: hidden;
+
+        @media (max-width: 768px) {
+          .app-content {
+            margin-left: 0;
+          }
         }
-        ::-webkit-scrollbar { width: 5px; }
-        ::-webkit-scrollbar-thumb { background: #c8dfc9; border-radius: 10px; }
       `}</style>
 
-      <div
-        style={{
-          display: "flex",
-          minHeight: "100%",
-          background: "#eaf5eb",
-          position: "relative",
-        }}
-      >
-        <Sidebar
-          collapsed={collapsed}
-          setCollapsed={setCollapsed}
-          activeNav={activeNav}
-          setActiveNav={setActiveNav}
-          sidebarWidth={SW}
-        />
+      <Sidebar
+        collapsed={collapsed}
+        setCollapsed={setCollapsed}
+        activeNav={activeNav}
+        setActiveNav={setActiveNav}
+        sidebarWidth={sidebarWidth}
+      />
 
-        <div
-          style={{
-            marginLeft: SW,
-            flex: 1,
-            minWidth: 0,
-            background: "#eaf5eb",
-            transition: "margin-left 0.3s cubic-bezier(.4,0,.2,1)",
-            position: "relative",
-            /* Ensure background covers full scroll height */
-          }}
-        >
-          {/* Decorative blob */}
-          <div
-            style={{
-              position: "fixed",
-              top: -100,
-              right: -100,
-              width: 500,
-              height: 500,
-              borderRadius: "50%",
-              background:
-                "radial-gradient(circle, rgba(94,207,122,0.07) 0%, transparent 70%)",
-              pointerEvents: "none",
-              zIndex: 0,
-            }}
-          />
-          <MainContent collapsed={collapsed} />
-        </div>
-      </div>
-    </>
+      <main className="app-content">
+        <MainContent collapsed={collapsed} />
+      </main>
+    </div>
+  );
+}
+
+function ProcessFormLayout() {
+  const [collapsed, setCollapsed] = useState(false);
+  const [activeNav, setActiveNav] = useState("processus");
+  const sidebarWidth = collapsed ? 70 : 245;
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#eaf5eb" }}>
+      <style>{`
+        .app-content {
+          margin-left: ${sidebarWidth}px;
+          transition: margin-left 0.3s cubic-bezier(.4,0,.2,1);
+        }
+
+        @media (max-width: 768px) {
+          .app-content {
+            margin-left: 0;
+          }
+        }
+      `}</style>
+
+      <Sidebar
+        collapsed={collapsed}
+        setCollapsed={setCollapsed}
+        activeNav={activeNav}
+        setActiveNav={setActiveNav}
+        sidebarWidth={sidebarWidth}
+      />
+
+      <main className="app-content">
+        <ProcessFormPage />
+      </main>
+    </div>
+  );
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Navigate to="/login" replace />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/processus" element={<ProcessusPage />} />
+        <Route path="/processus/new" element={<ProcessFormLayout />} />
+        <Route path="/processus/:id" element={<ProcessFormLayout />} />
+        <Route path="/dashboard" element={<Navigate to="/processus" replace />} />
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
