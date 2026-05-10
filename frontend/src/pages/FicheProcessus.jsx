@@ -385,11 +385,17 @@ const PROCESSUS_DATA = {
     risques: [
       { description: "Sujets non attribués à temps", probabilite: "2", gravite: "3", mesure: "Suivi hebdomadaire", responsable: "Coordinateur" },
     ],
+    documentsDescription: "Documents de référence essentiels pour la bonne exécution du processus de gestion des PFE. Ils définissent les règles, les rôles et les responsabilités de chaque intervenant.",
     documents: [
-      { id: "DOC-001", titre: "Guide PFE", format: "PDF", version: "2.1", revue: "Validé", statut: "Approuvé" },
+      { id: "DOC-001", titre: "Charte PFE", format: "PDF", revue: "Approuvée – Direction", version: "2.1" },
+      { id: "DOC-002", titre: "Guide de l'encadrant", format: "PDF", revue: "Approuvée – Direction", version: "1.3" },
+      { id: "DOC-003", titre: "Formulaire d'évaluation", format: "Excel", revue: "Approuvée – Direction", version: "2.0" },
+      { id: "DOC-004", titre: "Règlement intérieur", format: "Word", revue: "Approuvée – Direction", version: "1.8" },
     ],
     preuves: [
-      { titre: "PV de réunion", type: "Compte-rendu", date: "15/03/2026", responsable: "Secrétariat" },
+      { titre: "PV de délibération" },
+      { titre: "Fiche de suivi étudiant" },
+      { titre: "Rapport de soutenance signé" },
     ],
     dysfonctionnements: [
       { titre: "Retard attribution sujets", description: "Sujets attribués en retard", consequences: "Stress étudiants", causes: "Peu propositions", ameliorations: "Lancement plus tôt", gravite: "Majeur", responsable: "Coordinateur", echeance: "2026-09", statut: "En cours" },
@@ -534,8 +540,8 @@ const Tab1 = () => (
           <td style={styles.td}>Refonte complète du processus</td>
           <td style={styles.td}>
             <span style={{
-              background: "#fef3c7",
-              color: "#92400e",
+              background: "#f3f4f6",
+              color: "#6b7280",
               padding: "2px 8px",
               borderRadius: 12,
               fontSize: 11,
@@ -734,22 +740,61 @@ const Tab1 = () => (
     </div>
   );
   
-  const Tab4 = () => (
-    <div>
-      <div style={styles.sectionHeader}>
-        <div style={styles.sectionNum}>1</div>
-        <div>
-          <div style={styles.sectionTitle}>Informations Documentées</div>
-        </div>
+const Tab4 = () => (
+  <div>
+    {/* Informations Documentées section */}
+    <div style={styles.sectionHeader}>
+      <div style={styles.sectionNum}>1</div>
+      <div>
+        <div style={styles.sectionTitle}>Informations Documentées</div>
+        <div style={styles.sectionSub}>Documents de référence et preuves de réalisation du processus</div>
       </div>
-      
-      <div style={{ marginBottom: 8, fontSize: 14, fontWeight: 700, color: C.text }}>Documents de référence</div>
+    </div>
+    
+    {/* Description text */}
+    <div style={{
+      background: C.lightBg,
+      padding: "16px 20px",
+      borderRadius: 12,
+      marginBottom: 28,
+      fontSize: 13,
+      color: C.text,
+      lineHeight: 1.6,
+      border: `1px solid ${C.border}`,
+    }}>
+      {processus.documentsDescription || "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."}
+    </div>
+    
+    {/* Documents de référence - Subsection (no number) */}
+    <div style={{ marginBottom: 20 }}>
+      <div style={{
+        fontSize: 16,
+        fontWeight: 700,
+        color: C.text,
+        fontFamily: "'Outfit', sans-serif",
+        marginBottom: 8,
+      }}>
+        Documents de référence
+      </div>
+      <div style={{
+        fontSize: 12,
+        color: C.muted,
+        marginBottom: 16,
+      }}>
+        Documents normatifs et de référence associés au processus
+      </div>
+    </div>
+    
+    {/* Documents table */}
+    <div style={{ overflowX: "auto", marginBottom: 24 }}>
       <table style={styles.table}>
         <thead>
           <tr>
-            {["ID", "Titre", "Format", "Version", "Revue & Approbation", "Statut"].map((h) => (
-              <th key={h} style={styles.th}>{h}</th>
-            ))}
+            <th style={styles.th}>ID</th>
+            <th style={styles.th}>Titre / Description</th>
+            <th style={styles.th}>Format & Support</th>
+            <th style={styles.th}>Revue & Approbation</th>
+            <th style={styles.th}>Version</th>
           </tr>
         </thead>
         <tbody>
@@ -758,39 +803,75 @@ const Tab1 = () => (
               <td style={styles.td}>{doc.id}</td>
               <td style={styles.td}>{doc.titre}</td>
               <td style={styles.td}>{doc.format}</td>
-              <td style={styles.td}>{doc.version}</td>
               <td style={styles.td}>{doc.revue}</td>
-              <td style={styles.td}>{doc.statut}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      
-      <div style={styles.divider} />
-      
-      <div style={{ marginBottom: 8, fontSize: 14, fontWeight: 700, color: C.text }}>Enregistrements / Preuves de réalisation</div>
-      
-      <table style={styles.table}>
-        <thead>
-          <tr>
-            {["Titre", "Type", "Date", "Responsable"].map((h) => (
-              <th key={h} style={styles.th}>{h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {processus.preuves.map((p, i) => (
-            <tr key={i}>
-              <td style={styles.td}>{p.titre}</td>
-              <td style={styles.td}>{p.type}</td>
-              <td style={styles.td}>{p.date}</td>
-              <td style={styles.td}>{p.responsable}</td>
+              <td style={styles.td}>{doc.version}</td>
             </tr>
           ))}
         </tbody>
       </table>
     </div>
-  );
+    
+    {/* Pagination indicator */}
+    <div style={{
+      display: "flex",
+      justifyContent: "flex-end",
+      marginBottom: 28,
+      fontSize: 12,
+      color: C.muted,
+    }}>
+      Page 1 | 1
+    </div>
+    
+    {/* Enregistrements - Subsection (no number) */}
+    <div style={{ marginBottom: 20 }}>
+      <div style={{
+        fontSize: 16,
+        fontWeight: 700,
+        color: C.text,
+        fontFamily: "'Outfit', sans-serif",
+        marginBottom: 8,
+      }}>
+        Enregistrements (preuves de réalisation)
+      </div>
+      <div style={{
+        fontSize: 12,
+        color: C.muted,
+        marginBottom: 16,
+      }}>
+        Traces et preuves de l'exécution du processus
+      </div>
+    </div>
+    
+    {/* Bullet point list */}
+    <div style={{
+      background: C.lightBg,
+      borderRadius: 12,
+      padding: "20px 24px",
+      border: `1px solid ${C.border}`,
+    }}>
+      {processus.preuves.map((preuve, i) => (
+        <div key={i} style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          padding: "8px 0",
+          borderBottom: i < processus.preuves.length - 1 ? `1px solid ${C.border}` : "none",
+        }}>
+          <span style={{
+            width: 6,
+            height: 6,
+            borderRadius: "50%",
+            background: C.accent,
+            flexShrink: 0,
+          }} />
+          <span style={{ fontSize: 14, color: C.text }}>
+            {preuve.titre}
+          </span>
+        </div>
+      ))}
+    </div>
+  </div>
+);
   
   const Tab5 = () => (
     <div>
