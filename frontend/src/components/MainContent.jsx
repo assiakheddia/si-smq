@@ -469,7 +469,7 @@ export default function MainContent({ collapsed }) {
            TOPBAR — fond blanc opaque, pas de backdrop
         ══════════════════════════════════════════ */
         .topbar {
-          display: flex; align-items: center; justify-content: space-between;
+          display: flex; align-items: center; justify-content: flex-end;
           background: #ffffff;
           border: 1px solid #e8ede9;
           border-radius: clamp(12px,1.3vw,16px);
@@ -479,17 +479,13 @@ export default function MainContent({ collapsed }) {
           box-shadow: 0 1px 4px rgba(0,0,0,0.05);
           animation: fadeUp 0.3s ease; gap: 10px;
         }
-        .t-search {
-          display: flex; align-items: center; gap: 9px;
-          background: #f3f5f7; border: 1px solid #e8eaed;
-          border-radius: 11px; padding: 8px 14px;
-          transition: border-color 0.18s, box-shadow 0.18s;
-          width: clamp(160px,28vw,340px);
+        .t-right {
+          display: flex;
+          align-items: center;
+          gap: clamp(6px,0.9vw,12px);
+          flex-shrink: 0;
+          margin-left: auto;
         }
-        .t-search:focus-within { border-color: #5ecf7a; box-shadow: 0 0 0 3px rgba(94,207,122,0.14); background: white; }
-        .t-search input { border:none; background:"#dcfce7"; outline:none; font-size:clamp(11.5px,1.05vw,13px); color:#333; width:100%; font-family:'Plus Jakarta Sans',sans-serif; }
-        .t-search input::placeholder { color: #b8bfc8; }
-        .t-right { display:flex; align-items:center; gap:clamp(6px,0.9vw,12px); flex-shrink: 0; }
         .icon-btn {
           height: clamp(30px,3vw,36px); min-width: clamp(30px,3vw,36px);
           border-radius: 10px; border: 1px solid #e8eaed; background: white;
@@ -617,7 +613,6 @@ export default function MainContent({ collapsed }) {
         @media (max-width: 1100px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }
         @media (max-width: 768px) {
           .mc-wrap { padding: 70px 14px 48px; }
-          .t-search { display: none; }
           .kpi-grid { grid-template-columns: repeat(2, 1fr); }
         }
         @media (max-width: 480px) {
@@ -635,23 +630,8 @@ export default function MainContent({ collapsed }) {
       )}
 
       <div className="mc-wrap">
-        {/* ── Topbar ── */}
+        {/* ── Topbar (search bar removed, right elements only) ── */}
         <div className="topbar">
-          <div className="t-search">
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="#b8bfc8"
-              strokeWidth="2"
-              strokeLinecap="round"
-            >
-              <circle cx="11" cy="11" r="7" />
-              <path d="M16.5 16.5L21 21" />
-            </svg>
-            <input placeholder="Rechercher dans l'application…" />
-          </div>
           <div className="t-right">
             <div className="icon-btn" style={{ gap: 5 }}>
               <svg
