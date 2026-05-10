@@ -1,7 +1,6 @@
 import { useState, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
-
 /* ═══════════════════════════════════════════════════════════════════
    DESIGN TOKENS
 ═══════════════════════════════════════════════════════════════════ */
@@ -92,7 +91,12 @@ const styles = {
     position: "relative",
     overflow: "hidden",
   },
-  headerCardBadges: { display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" },
+  headerCardBadges: {
+    display: "flex",
+    gap: 8,
+    marginBottom: 16,
+    flexWrap: "wrap",
+  },
   badge: {
     borderRadius: 20,
     padding: "4px 12px",
@@ -103,7 +107,12 @@ const styles = {
     border: "1px solid rgba(255,255,255,0.3)",
   },
   badgeGreen: { background: C.accent, color: C.dark },
-  headerCardBody: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 20 },
+  headerCardBody: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 20,
+  },
   headerCardLeft: { flex: 1 },
   headerCardTitle: {
     fontSize: 26,
@@ -112,8 +121,18 @@ const styles = {
     marginBottom: 8,
     color: "#fff",
   },
-  headerCardDesc: { fontSize: 13, opacity: 0.85, lineHeight: 1.6, maxWidth: 520 },
-  headerCardRight: { display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-end" },
+  headerCardDesc: {
+    fontSize: 13,
+    opacity: 0.85,
+    lineHeight: 1.6,
+    maxWidth: 520,
+  },
+  headerCardRight: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+    alignItems: "flex-end",
+  },
   pilotBox: {
     background: "rgba(255,255,255,0.15)",
     borderRadius: 12,
@@ -122,7 +141,13 @@ const styles = {
     minWidth: 160,
     border: "1px solid rgba(255,255,255,0.25)",
   },
-  pilotLabel: { fontSize: 10, opacity: 0.7, textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 },
+  pilotLabel: {
+    fontSize: 10,
+    opacity: 0.7,
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: 4,
+  },
   pilotName: { fontSize: 15, fontWeight: 700 },
   pilotEmail: { fontSize: 11, opacity: 0.8, marginTop: 2 },
   kpiRow: { display: "flex", gap: 8 },
@@ -135,7 +160,12 @@ const styles = {
     minWidth: 64,
   },
   kpiNum: { fontSize: 20, fontWeight: 800, display: "block" },
-  kpiLbl: { fontSize: 10, opacity: 0.75, textTransform: "uppercase", letterSpacing: 0.5 },
+  kpiLbl: {
+    fontSize: 10,
+    opacity: 0.75,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
   /* Completion bar */
   completionCard: {
     background: C.white,
@@ -146,7 +176,12 @@ const styles = {
     alignItems: "center",
     gap: 16,
   },
-  completionLabel: { fontSize: 13, fontWeight: 600, color: C.text, whiteSpace: "nowrap" },
+  completionLabel: {
+    fontSize: 13,
+    fontWeight: 600,
+    color: C.text,
+    whiteSpace: "nowrap",
+  },
   completionBarWrap: {
     flex: 1,
     height: 8,
@@ -225,11 +260,21 @@ const styles = {
   sectionSub: { fontSize: 12, color: C.muted, marginTop: 2 },
   /* Grid */
   grid2: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px 28px" },
-  grid3: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "20px 28px" },
+  grid3: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr 1fr",
+    gap: "20px 28px",
+  },
   gridFull: { gridColumn: "1 / -1" },
   /* Field */
   fieldWrap: { display: "flex", flexDirection: "column", gap: 6 },
-  label: { fontSize: 12, fontWeight: 600, color: C.muted, textTransform: "uppercase", letterSpacing: 0.5 },
+  label: {
+    fontSize: 12,
+    fontWeight: 600,
+    color: C.muted,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
   labelRequired: { color: C.danger },
   input: {
     width: "100%",
@@ -397,7 +442,11 @@ const styles = {
     fontSize: 13,
   },
   /* RACI */
-  raciGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px 20px" },
+  raciGrid: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: "14px 20px",
+  },
   /* Risk card */
   riskCard: {
     background: C.lightBg,
@@ -590,7 +639,9 @@ function Field({ label, required, error, children }) {
     <div style={styles.fieldWrap}>
       <label style={styles.label}>
         {label}
-        {required && <span style={{ ...styles.labelRequired, marginLeft: 3 }}>*</span>}
+        {required && (
+          <span style={{ ...styles.labelRequired, marginLeft: 3 }}>*</span>
+        )}
       </label>
       {children}
       {error && <span style={styles.errorMsg}>⚠ {error}</span>}
@@ -598,7 +649,14 @@ function Field({ label, required, error, children }) {
   );
 }
 
-function Input({ value, onChange, placeholder, error, type = "text", readOnly }) {
+function Input({
+  value,
+  onChange,
+  placeholder,
+  error,
+  type = "text",
+  readOnly,
+}) {
   return (
     <input
       type={type}
@@ -611,8 +669,12 @@ function Input({ value, onChange, placeholder, error, type = "text", readOnly })
         ...(error ? styles.inputError : {}),
         ...(readOnly ? { opacity: 0.65, cursor: "default" } : {}),
       }}
-      onFocus={(e) => { if (!readOnly) e.target.style.borderColor = C.primary; }}
-      onBlur={(e) => { e.target.style.borderColor = error ? C.danger : C.border; }}
+      onFocus={(e) => {
+        if (!readOnly) e.target.style.borderColor = C.primary;
+      }}
+      onBlur={(e) => {
+        e.target.style.borderColor = error ? C.danger : C.border;
+      }}
     />
   );
 }
@@ -625,8 +687,12 @@ function TextArea({ value, onChange, placeholder, rows = 3 }) {
       placeholder={placeholder}
       rows={rows}
       style={styles.textarea}
-      onFocus={(e) => { e.target.style.borderColor = C.primary; }}
-      onBlur={(e) => { e.target.style.borderColor = C.border; }}
+      onFocus={(e) => {
+        e.target.style.borderColor = C.primary;
+      }}
+      onBlur={(e) => {
+        e.target.style.borderColor = C.border;
+      }}
     />
   );
 }
@@ -641,10 +707,23 @@ function Select({ value, onChange, options, error }) {
       >
         <option value="">— Sélectionner —</option>
         {options.map((o) => (
-          <option key={o.value} value={o.value}>{o.label}</option>
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
         ))}
       </select>
-      <span style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: C.muted }}>▾</span>
+      <span
+        style={{
+          position: "absolute",
+          right: 12,
+          top: "50%",
+          transform: "translateY(-50%)",
+          pointerEvents: "none",
+          color: C.muted,
+        }}
+      >
+        ▾
+      </span>
     </div>
   );
 }
@@ -665,13 +744,20 @@ function TagInput({ tags, onChange, placeholder = "Ajouter..." }) {
       {tags.map((t) => (
         <span key={t} style={styles.tag}>
           {t}
-          <button type="button" style={styles.tagX} onClick={() => remove(t)}>×</button>
+          <button type="button" style={styles.tagX} onClick={() => remove(t)}>
+            ×
+          </button>
         </span>
       ))}
       <input
         value={input}
         onChange={(e) => setInput(e.target.value)}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === ",") { e.preventDefault(); add(); } }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === ",") {
+            e.preventDefault();
+            add();
+          }
+        }}
         onBlur={add}
         placeholder={tags.length === 0 ? placeholder : ""}
         style={styles.tagInput}
@@ -680,22 +766,45 @@ function TagInput({ tags, onChange, placeholder = "Ajouter..." }) {
   );
 }
 
-function DynamicList({ items, onChange, placeholder = "Entrer une valeur..." }) {
-  const update = (i, v) => { const a = [...items]; a[i] = v; onChange(a); };
+function DynamicList({
+  items,
+  onChange,
+  placeholder = "Entrer une valeur...",
+}) {
+  const update = (i, v) => {
+    const a = [...items];
+    a[i] = v;
+    onChange(a);
+  };
   const remove = (i) => onChange(items.filter((_, idx) => idx !== i));
   const add = () => onChange([...items, ""]);
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       {items.map((it, i) => (
         <div key={i} style={styles.dynItem}>
-          <span style={{ color: C.muted, fontSize: 12, fontWeight: 700, minWidth: 18 }}>→</span>
+          <span
+            style={{
+              color: C.muted,
+              fontSize: 12,
+              fontWeight: 700,
+              minWidth: 18,
+            }}
+          >
+            →
+          </span>
           <input
             value={it}
             onChange={(e) => update(i, e.target.value)}
             placeholder={placeholder}
             style={styles.dynInput}
           />
-          <button type="button" style={styles.dynRemove} onClick={() => remove(i)}>✕</button>
+          <button
+            type="button"
+            style={styles.dynRemove}
+            onClick={() => remove(i)}
+          >
+            ✕
+          </button>
         </div>
       ))}
       <button type="button" style={styles.addBtn} onClick={add}>
@@ -761,22 +870,61 @@ const INIT = {
 };
 
 function makeKpi() {
-  return { nom: "", unite: "", valeurCible: "", seuilAlerte: "", frequence: "", responsable: "" };
+  return {
+    nom: "",
+    unite: "",
+    valeurCible: "",
+    seuilAlerte: "",
+    frequence: "",
+    responsable: "",
+  };
 }
 function makeRisque() {
-  return { description: "", probabilite: "1", gravite: "1", mesure: "", responsable: "" };
+  return {
+    description: "",
+    probabilite: "1",
+    gravite: "1",
+    mesure: "",
+    responsable: "",
+  };
 }
 function makeDoc() {
-  return { id: "", titre: "", format: "PDF", version: "1.0", revue: "", statut: "Brouillon" };
+  return {
+    id: "",
+    titre: "",
+    format: "PDF",
+    version: "1.0",
+    revue: "",
+    statut: "Brouillon",
+  };
 }
 function makePreuve() {
   return { titre: "", type: "", date: "", responsable: "" };
 }
 function makeDysf() {
-  return { titre: "", description: "", consequences: "", causes: "", gravite: "Mineur", ameliorations: "", responsable: "", echeance: "", statut: "Ouvert" };
+  return {
+    titre: "",
+    description: "",
+    consequences: "",
+    causes: "",
+    gravite: "Mineur",
+    ameliorations: "",
+    responsable: "",
+    echeance: "",
+    statut: "Ouvert",
+  };
 }
 function makeEtape(num) {
-  return { numero: num, nom: "", acteur: "", description: "", entree: "", sortie: "", duree: "", document: "" };
+  return {
+    numero: num,
+    nom: "",
+    acteur: "",
+    description: "",
+    entree: "",
+    sortie: "",
+    duree: "",
+    document: "",
+  };
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -791,7 +939,13 @@ const TABS = [
   { id: 5, label: "Déroulement" },
 ];
 
-const REQUIRED_FIELDS = ["designation", "pilote", "email", "sousDept", "objectif"];
+const REQUIRED_FIELDS = [
+  "designation",
+  "pilote",
+  "email",
+  "sousDept",
+  "objectif",
+];
 
 /* ═══════════════════════════════════════════════════════════════════
    MAIN COMPONENT
@@ -808,11 +962,19 @@ export default function ProcessFormPage() {
   const [dirty, setDirty] = useState(false);
 
   /* ── Helpers ── */
-  const set = useCallback((key, value) => {
-    setForm((f) => ({ ...f, [key]: value }));
-    setDirty(true);
-    if (errors[key]) setErrors((e) => { const n = { ...e }; delete n[key]; return n; });
-  }, [errors]);
+  const set = useCallback(
+    (key, value) => {
+      setForm((f) => ({ ...f, [key]: value }));
+      setDirty(true);
+      if (errors[key])
+        setErrors((e) => {
+          const n = { ...e };
+          delete n[key];
+          return n;
+        });
+    },
+    [errors],
+  );
 
   const setNested = useCallback((parent, key, value) => {
     setForm((f) => ({ ...f, [parent]: { ...f[parent], [key]: value } }));
@@ -823,20 +985,30 @@ export default function ProcessFormPage() {
   const completionPct = (() => {
     let filled = 0;
     const checks = [
-      form.designation, form.pilote, form.email, form.sousDept,
-      form.typeProcessus, form.objectif,
-      form.fluxEntrees.some(Boolean), form.fluxSorties.some(Boolean),
-      form.kpis.length > 0, form.risques.length > 0,
+      form.designation,
+      form.pilote,
+      form.email,
+      form.sousDept,
+      form.typeProcessus,
+      form.objectif,
+      form.fluxEntrees.some(Boolean),
+      form.fluxSorties.some(Boolean),
+      form.kpis.length > 0,
+      form.risques.length > 0,
       form.etapes.length > 0,
     ];
-    checks.forEach((c) => { if (c) filled++; });
+    checks.forEach((c) => {
+      if (c) filled++;
+    });
     return Math.round((filled / checks.length) * 100);
   })();
 
   /* ── Validation ── */
   const validate = () => {
     const e = {};
-    REQUIRED_FIELDS.forEach((f) => { if (!form[f]?.trim()) e[f] = "Ce champ est obligatoire"; });
+    REQUIRED_FIELDS.forEach((f) => {
+      if (!form[f]?.trim()) e[f] = "Ce champ est obligatoire";
+    });
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -848,7 +1020,11 @@ export default function ProcessFormPage() {
 
   const handleCancel = () => {
     if (dirty) {
-      if (window.confirm("Des modifications non sauvegardées seront perdues. Continuer ?")) {
+      if (
+        window.confirm(
+          "Des modifications non sauvegardées seront perdues. Continuer ?",
+        )
+      ) {
         navigate("/processus");
       }
     } else {
@@ -877,7 +1053,11 @@ export default function ProcessFormPage() {
   ══════════════════════════════════════════════════════════════ */
   const Tab1 = () => (
     <div>
-      <SectionHeader num="1" title="Informations Générales" sub="Données d'identification et de responsabilité du processus" />
+      <SectionHeader
+        num="1"
+        title="Informations Générales"
+        sub="Données d'identification et de responsabilité du processus"
+      />
 
       <div style={styles.grid2}>
         <Field label="Identifiant processus">
@@ -896,7 +1076,11 @@ export default function ProcessFormPage() {
           />
         </Field>
 
-        <Field label="Désignation du processus" required error={errors.designation}>
+        <Field
+          label="Désignation du processus"
+          required
+          error={errors.designation}
+        >
           <Input
             value={form.designation}
             onChange={(e) => set("designation", e.target.value)}
@@ -964,7 +1148,11 @@ export default function ProcessFormPage() {
 
       <div style={styles.divider} />
 
-      <SectionHeader num="1b" title="RACI — Matrice des responsabilités" sub="Définir les rôles pour ce processus" />
+      <SectionHeader
+        num="1b"
+        title="RACI — Matrice des responsabilités"
+        sub="Définir les rôles pour ce processus"
+      />
       <div style={styles.raciGrid}>
         {[
           { key: "responsable", label: "Responsable (R)", icon: "🟢" },
@@ -987,8 +1175,13 @@ export default function ProcessFormPage() {
       <SectionHeader num="1c" title="Historique des révisions" />
       <div style={styles.historyPlaceholder}>
         <div style={{ fontSize: 24, marginBottom: 8 }}>📋</div>
-        <div style={{ fontWeight: 600, marginBottom: 4 }}>Aucun historique disponible</div>
-        <div style={{ fontSize: 12, opacity: 0.7 }}>L'historique sera généré automatiquement après le premier enregistrement du processus.</div>
+        <div style={{ fontWeight: 600, marginBottom: 4 }}>
+          Aucun historique disponible
+        </div>
+        <div style={{ fontSize: 12, opacity: 0.7 }}>
+          L'historique sera généré automatiquement après le premier
+          enregistrement du processus.
+        </div>
       </div>
     </div>
   );
@@ -998,55 +1191,130 @@ export default function ProcessFormPage() {
   ══════════════════════════════════════════════════════════════ */
   const Tab2 = () => (
     <div>
-      <SectionHeader num="2" title="Éléments Clés du Processus" sub="Flux, ressources, compétences et indicateurs de performance" />
+      <SectionHeader
+        num="2"
+        title="Éléments Clés du Processus"
+        sub="Flux, ressources, compétences et indicateurs de performance"
+      />
 
       <div style={styles.grid2}>
         <Field label="Période / Mois">
-          <Input value={form.periode} onChange={(e) => set("periode", e.target.value)} placeholder="Ex : Oct → Juin (9 mois)" />
+          <Input
+            value={form.periode}
+            onChange={(e) => set("periode", e.target.value)}
+            placeholder="Ex : Oct → Juin (9 mois)"
+          />
         </Field>
         <Field label="Objectif stratégique">
-          <Input value={form.objectifStrategique} onChange={(e) => set("objectifStrategique", e.target.value)} placeholder="Lien avec la stratégie globale..." />
+          <Input
+            value={form.objectifStrategique}
+            onChange={(e) => set("objectifStrategique", e.target.value)}
+            placeholder="Lien avec la stratégie globale..."
+          />
         </Field>
         <Field label="Clients / Bénéficiaires">
-          <TextArea value={form.clients} onChange={(e) => set("clients", e.target.value)} placeholder="Étudiants, Direction, Entreprises partenaires..." rows={2} />
+          <TextArea
+            value={form.clients}
+            onChange={(e) => set("clients", e.target.value)}
+            placeholder="Étudiants, Direction, Entreprises partenaires..."
+            rows={2}
+          />
         </Field>
         <Field label="Effectifs impliqués">
-          <TextArea value={form.effectifs} onChange={(e) => set("effectifs", e.target.value)} placeholder="Ex : 12 enseignants, 3 membres administratifs..." rows={2} />
+          <TextArea
+            value={form.effectifs}
+            onChange={(e) => set("effectifs", e.target.value)}
+            placeholder="Ex : 12 enseignants, 3 membres administratifs..."
+            rows={2}
+          />
         </Field>
       </div>
 
       <div style={styles.divider} />
 
       <div style={{ marginBottom: 20 }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12 }}>Flux d'entrées / Sorties</div>
+        <div
+          style={{
+            fontSize: 14,
+            fontWeight: 700,
+            color: C.text,
+            marginBottom: 12,
+          }}
+        >
+          Flux d'entrées / Sorties
+        </div>
         <div style={styles.fluxBox}>
           <div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 8, textTransform: "uppercase" }}>↙ Entrées</div>
-            <DynamicList items={form.fluxEntrees} onChange={(v) => set("fluxEntrees", v)} placeholder="Flux d'entrée..." />
+            <div
+              style={{
+                fontSize: 12,
+                fontWeight: 700,
+                color: C.muted,
+                marginBottom: 8,
+                textTransform: "uppercase",
+              }}
+            >
+              ↙ Entrées
+            </div>
+            <DynamicList
+              items={form.fluxEntrees}
+              onChange={(v) => set("fluxEntrees", v)}
+              placeholder="Flux d'entrée..."
+            />
           </div>
           <div style={styles.fluxArrow}>⇄</div>
           <div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 8, textTransform: "uppercase" }}>Sorties ↗</div>
-            <DynamicList items={form.fluxSorties} onChange={(v) => set("fluxSorties", v)} placeholder="Flux de sortie..." />
+            <div
+              style={{
+                fontSize: 12,
+                fontWeight: 700,
+                color: C.muted,
+                marginBottom: 8,
+                textTransform: "uppercase",
+              }}
+            >
+              Sorties ↗
+            </div>
+            <DynamicList
+              items={form.fluxSorties}
+              onChange={(v) => set("fluxSorties", v)}
+              placeholder="Flux de sortie..."
+            />
           </div>
         </div>
       </div>
 
       <div style={styles.grid2}>
         <Field label="Compétences clés">
-          <TagInput tags={form.competences} onChange={(v) => set("competences", v)} placeholder="Ajouter une compétence..." />
+          <TagInput
+            tags={form.competences}
+            onChange={(v) => set("competences", v)}
+            placeholder="Ajouter une compétence..."
+          />
         </Field>
         <Field label="Ressources matérielles">
-          <TagInput tags={form.ressourcesMat} onChange={(v) => set("ressourcesMat", v)} placeholder="Équipements, locaux..." />
+          <TagInput
+            tags={form.ressourcesMat}
+            onChange={(v) => set("ressourcesMat", v)}
+            placeholder="Équipements, locaux..."
+          />
         </Field>
         <Field label="Ressources logicielles" style={styles.gridFull}>
-          <TagInput tags={form.ressourcesLog} onChange={(v) => set("ressourcesLog", v)} placeholder="Logiciels, plateformes..." />
+          <TagInput
+            tags={form.ressourcesLog}
+            onChange={(v) => set("ressourcesLog", v)}
+            placeholder="Logiciels, plateformes..."
+          />
         </Field>
       </div>
 
       <div style={styles.divider} />
 
-      <SectionHeader num="2b" title="KPIs — Indicateurs de Performance" sub="Définir les mesures de suivi du processus" />
+      <SectionHeader
+        num="2b"
+        title="KPIs — Indicateurs de Performance"
+        sub="Définir les mesures de suivi du processus"
+      />
 
       {form.kpis.map((kpi, i) => (
         <div key={i} style={styles.kpiCard}>
@@ -1055,19 +1323,48 @@ export default function ProcessFormPage() {
             <button
               type="button"
               style={styles.removeCard}
-              onClick={() => set("kpis", form.kpis.filter((_, idx) => idx !== i))}
+              onClick={() =>
+                set(
+                  "kpis",
+                  form.kpis.filter((_, idx) => idx !== i),
+                )
+              }
             >
               ✕ Supprimer
             </button>
           </div>
           <div style={styles.grid3}>
             {[
-              { key: "nom", label: "Nom du KPI", placeholder: "Ex : Taux de réussite" },
-              { key: "unite", label: "Unité", placeholder: "%, jours, nombre..." },
-              { key: "valeurCible", label: "Valeur cible", placeholder: "Ex : ≥ 90%" },
-              { key: "seuilAlerte", label: "Seuil d'alerte", placeholder: "Ex : < 75%" },
-              { key: "frequence", label: "Fréquence de collecte", placeholder: "Mensuel, Annuel..." },
-              { key: "responsable", label: "Responsable", placeholder: "Nom ou rôle" },
+              {
+                key: "nom",
+                label: "Nom du KPI",
+                placeholder: "Ex : Taux de réussite",
+              },
+              {
+                key: "unite",
+                label: "Unité",
+                placeholder: "%, jours, nombre...",
+              },
+              {
+                key: "valeurCible",
+                label: "Valeur cible",
+                placeholder: "Ex : ≥ 90%",
+              },
+              {
+                key: "seuilAlerte",
+                label: "Seuil d'alerte",
+                placeholder: "Ex : < 75%",
+              },
+              {
+                key: "frequence",
+                label: "Fréquence de collecte",
+                placeholder: "Mensuel, Annuel...",
+              },
+              {
+                key: "responsable",
+                label: "Responsable",
+                placeholder: "Nom ou rôle",
+              },
             ].map(({ key, label, placeholder }) => (
               <Field key={key} label={label}>
                 <Input
@@ -1085,7 +1382,11 @@ export default function ProcessFormPage() {
         </div>
       ))}
 
-      <button type="button" style={styles.addBtn} onClick={() => set("kpis", [...form.kpis, makeKpi()])}>
+      <button
+        type="button"
+        style={styles.addBtn}
+        onClick={() => set("kpis", [...form.kpis, makeKpi()])}
+      >
         ＋ Ajouter un KPI
       </button>
     </div>
@@ -1096,82 +1397,208 @@ export default function ProcessFormPage() {
   ══════════════════════════════════════════════════════════════ */
   const Tab3 = () => (
     <div>
-      <SectionHeader num="3" title="Contexte et Environnement" sub="Cartographie des processus voisins et facteurs contextuels" />
+      <SectionHeader
+        num="3"
+        title="Contexte et Environnement"
+        sub="Cartographie des processus voisins et facteurs contextuels"
+      />
 
       <div style={{ ...styles.fluxBox, marginBottom: 24 }}>
         <div>
-          <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 8, textTransform: "uppercase" }}>← Processus AMONT</div>
-          <DynamicList items={form.processusAmont} onChange={(v) => set("processusAmont", v)} placeholder="Processus fournisseur..." />
+          <div
+            style={{
+              fontSize: 12,
+              fontWeight: 700,
+              color: C.muted,
+              marginBottom: 8,
+              textTransform: "uppercase",
+            }}
+          >
+            ← Processus AMONT
+          </div>
+          <DynamicList
+            items={form.processusAmont}
+            onChange={(v) => set("processusAmont", v)}
+            placeholder="Processus fournisseur..."
+          />
         </div>
         <div style={styles.fluxArrow}>⇄</div>
         <div>
-          <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 8, textTransform: "uppercase" }}>Processus AVAL →</div>
-          <DynamicList items={form.processusAval} onChange={(v) => set("processusAval", v)} placeholder="Processus client..." />
+          <div
+            style={{
+              fontSize: 12,
+              fontWeight: 700,
+              color: C.muted,
+              marginBottom: 8,
+              textTransform: "uppercase",
+            }}
+          >
+            Processus AVAL →
+          </div>
+          <DynamicList
+            items={form.processusAval}
+            onChange={(v) => set("processusAval", v)}
+            placeholder="Processus client..."
+          />
         </div>
       </div>
 
       <div style={styles.grid2}>
         <div style={styles.gridFull}>
           <Field label="Enjeux stratégiques">
-            <TextArea value={form.enjeuxStrategiques} onChange={(e) => set("enjeuxStrategiques", e.target.value)} placeholder="Décrire les enjeux liés à ce processus..." rows={3} />
+            <TextArea
+              value={form.enjeuxStrategiques}
+              onChange={(e) => set("enjeuxStrategiques", e.target.value)}
+              placeholder="Décrire les enjeux liés à ce processus..."
+              rows={3}
+            />
           </Field>
         </div>
         <Field label="Moyens alloués">
-          <TagInput tags={form.moyensAlloues} onChange={(v) => set("moyensAlloues", v)} placeholder="Ressources, outils..." />
+          <TagInput
+            tags={form.moyensAlloues}
+            onChange={(v) => set("moyensAlloues", v)}
+            placeholder="Ressources, outils..."
+          />
         </Field>
       </div>
 
       <div style={styles.divider} />
 
       <div style={{ marginBottom: 20 }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12 }}>⚠ Contraintes</div>
-        <DynamicList items={form.contraintes} onChange={(v) => set("contraintes", v)} placeholder="Contrainte réglementaire, temporelle..." />
+        <div
+          style={{
+            fontSize: 14,
+            fontWeight: 700,
+            color: C.text,
+            marginBottom: 12,
+          }}
+        >
+          ⚠ Contraintes
+        </div>
+        <DynamicList
+          items={form.contraintes}
+          onChange={(v) => set("contraintes", v)}
+          placeholder="Contrainte réglementaire, temporelle..."
+        />
       </div>
 
       <div style={styles.divider} />
 
-      <SectionHeader num="3b" title="Risques identifiés" sub="Probabilité × Gravité = Criticité calculée automatiquement" />
+      <SectionHeader
+        num="3b"
+        title="Risques identifiés"
+        sub="Probabilité × Gravité = Criticité calculée automatiquement"
+      />
 
       {form.risques.map((r, i) => {
         const crit = parseInt(r.probabilite || 1) * parseInt(r.gravite || 1);
-        const critColor = crit >= 9 ? "#e53935" : crit >= 4 ? C.warn : "#4caf50";
+        const critColor =
+          crit >= 9 ? "#e53935" : crit >= 4 ? C.warn : "#4caf50";
         return (
           <div key={i} style={styles.riskCard}>
             <div style={styles.kpiCardHeader}>
               <span style={styles.kpiCardTitle}>
                 Risque #{i + 1}{" "}
-                <span style={{ ...styles.critBadge, background: critColor + "22", color: critColor }}>
+                <span
+                  style={{
+                    ...styles.critBadge,
+                    background: critColor + "22",
+                    color: critColor,
+                  }}
+                >
                   Criticité : {crit}
                 </span>
               </span>
-              <button type="button" style={styles.removeCard} onClick={() => set("risques", form.risques.filter((_, idx) => idx !== i))}>
+              <button
+                type="button"
+                style={styles.removeCard}
+                onClick={() =>
+                  set(
+                    "risques",
+                    form.risques.filter((_, idx) => idx !== i),
+                  )
+                }
+              >
                 ✕ Supprimer
               </button>
             </div>
             <div style={styles.grid2}>
               <div style={styles.gridFull}>
                 <Field label="Description du risque">
-                  <Input value={r.description} onChange={(e) => { const u = [...form.risques]; u[i] = { ...u[i], description: e.target.value }; set("risques", u); }} placeholder="Décrire le risque identifié..." />
+                  <Input
+                    value={r.description}
+                    onChange={(e) => {
+                      const u = [...form.risques];
+                      u[i] = { ...u[i], description: e.target.value };
+                      set("risques", u);
+                    }}
+                    placeholder="Décrire le risque identifié..."
+                  />
                 </Field>
               </div>
               <Field label="Probabilité (1–3)">
-                <Select value={r.probabilite} onChange={(e) => { const u = [...form.risques]; u[i] = { ...u[i], probabilite: e.target.value }; set("risques", u); }} options={[{ value: "1", label: "1 – Faible" }, { value: "2", label: "2 – Moyenne" }, { value: "3", label: "3 – Élevée" }]} />
+                <Select
+                  value={r.probabilite}
+                  onChange={(e) => {
+                    const u = [...form.risques];
+                    u[i] = { ...u[i], probabilite: e.target.value };
+                    set("risques", u);
+                  }}
+                  options={[
+                    { value: "1", label: "1 – Faible" },
+                    { value: "2", label: "2 – Moyenne" },
+                    { value: "3", label: "3 – Élevée" },
+                  ]}
+                />
               </Field>
               <Field label="Gravité (1–3)">
-                <Select value={r.gravite} onChange={(e) => { const u = [...form.risques]; u[i] = { ...u[i], gravite: e.target.value }; set("risques", u); }} options={[{ value: "1", label: "1 – Mineure" }, { value: "2", label: "2 – Modérée" }, { value: "3", label: "3 – Sévère" }]} />
+                <Select
+                  value={r.gravite}
+                  onChange={(e) => {
+                    const u = [...form.risques];
+                    u[i] = { ...u[i], gravite: e.target.value };
+                    set("risques", u);
+                  }}
+                  options={[
+                    { value: "1", label: "1 – Mineure" },
+                    { value: "2", label: "2 – Modérée" },
+                    { value: "3", label: "3 – Sévère" },
+                  ]}
+                />
               </Field>
               <Field label="Mesure d'atténuation">
-                <Input value={r.mesure} onChange={(e) => { const u = [...form.risques]; u[i] = { ...u[i], mesure: e.target.value }; set("risques", u); }} placeholder="Action préventive ou corrective..." />
+                <Input
+                  value={r.mesure}
+                  onChange={(e) => {
+                    const u = [...form.risques];
+                    u[i] = { ...u[i], mesure: e.target.value };
+                    set("risques", u);
+                  }}
+                  placeholder="Action préventive ou corrective..."
+                />
               </Field>
               <Field label="Responsable">
-                <Input value={r.responsable} onChange={(e) => { const u = [...form.risques]; u[i] = { ...u[i], responsable: e.target.value }; set("risques", u); }} placeholder="Nom ou rôle..." />
+                <Input
+                  value={r.responsable}
+                  onChange={(e) => {
+                    const u = [...form.risques];
+                    u[i] = { ...u[i], responsable: e.target.value };
+                    set("risques", u);
+                  }}
+                  placeholder="Nom ou rôle..."
+                />
               </Field>
             </div>
           </div>
         );
       })}
 
-      <button type="button" style={styles.addBtn} onClick={() => set("risques", [...form.risques, makeRisque()])}>
+      <button
+        type="button"
+        style={styles.addBtn}
+        onClick={() => set("risques", [...form.risques, makeRisque()])}
+      >
         ＋ Ajouter un risque
       </button>
     </div>
@@ -1182,15 +1609,38 @@ export default function ProcessFormPage() {
   ══════════════════════════════════════════════════════════════ */
   const Tab4 = () => (
     <div>
-      <SectionHeader num="4" title="Informations Documentées" sub="Documents de référence et preuves de réalisation" />
+      <SectionHeader
+        num="4"
+        title="Informations Documentées"
+        sub="Documents de référence et preuves de réalisation"
+      />
 
-      <div style={{ marginBottom: 8, fontSize: 14, fontWeight: 700, color: C.text }}>Documents de référence</div>
+      <div
+        style={{
+          marginBottom: 8,
+          fontSize: 14,
+          fontWeight: 700,
+          color: C.text,
+        }}
+      >
+        Documents de référence
+      </div>
       <div style={{ overflowX: "auto", marginBottom: 12 }}>
         <table style={styles.table}>
           <thead>
             <tr>
-              {["ID", "Titre", "Format", "Version", "Revue & Approbation", "Statut", ""].map((h) => (
-                <th key={h} style={styles.th}>{h}</th>
+              {[
+                "ID",
+                "Titre",
+                "Format",
+                "Version",
+                "Revue & Approbation",
+                "Statut",
+                "",
+              ].map((h) => (
+                <th key={h} style={styles.th}>
+                  {h}
+                </th>
               ))}
             </tr>
           </thead>
@@ -1206,48 +1656,111 @@ export default function ProcessFormPage() {
                   <td key={key} style={styles.td}>
                     <input
                       value={doc[key]}
-                      onChange={(e) => { const u = [...form.documents]; u[i] = { ...u[i], [key]: e.target.value }; set("documents", u); }}
+                      onChange={(e) => {
+                        const u = [...form.documents];
+                        u[i] = { ...u[i], [key]: e.target.value };
+                        set("documents", u);
+                      }}
                       placeholder={placeholder}
-                      style={{ ...styles.dynInput, width: "100%", minWidth: 80 }}
+                      style={{
+                        ...styles.dynInput,
+                        width: "100%",
+                        minWidth: 80,
+                      }}
                     />
                   </td>
                 ))}
                 <td style={styles.td}>
                   <select
                     value={doc.format}
-                    onChange={(e) => { const u = [...form.documents]; u[i] = { ...u[i], format: e.target.value }; set("documents", u); }}
-                    style={{ ...styles.select, padding: "4px 8px", fontSize: 12 }}
+                    onChange={(e) => {
+                      const u = [...form.documents];
+                      u[i] = { ...u[i], format: e.target.value };
+                      set("documents", u);
+                    }}
+                    style={{
+                      ...styles.select,
+                      padding: "4px 8px",
+                      fontSize: 12,
+                    }}
                   >
-                    {["PDF", "Word", "Excel", "Image"].map((f) => <option key={f}>{f}</option>)}
+                    {["PDF", "Word", "Excel", "Image"].map((f) => (
+                      <option key={f}>{f}</option>
+                    ))}
                   </select>
                 </td>
                 <td style={styles.td}>
                   <select
                     value={doc.statut}
-                    onChange={(e) => { const u = [...form.documents]; u[i] = { ...u[i], statut: e.target.value }; set("documents", u); }}
-                    style={{ ...styles.select, padding: "4px 8px", fontSize: 12 }}
+                    onChange={(e) => {
+                      const u = [...form.documents];
+                      u[i] = { ...u[i], statut: e.target.value };
+                      set("documents", u);
+                    }}
+                    style={{
+                      ...styles.select,
+                      padding: "4px 8px",
+                      fontSize: 12,
+                    }}
                   >
-                    {["Brouillon", "En révision", "Approuvé", "Archivé"].map((s) => <option key={s}>{s}</option>)}
+                    {["Brouillon", "En révision", "Approuvé", "Archivé"].map(
+                      (s) => (
+                        <option key={s}>{s}</option>
+                      ),
+                    )}
                   </select>
                 </td>
                 <td style={styles.td}>
-                  <button type="button" style={styles.dynRemove} onClick={() => set("documents", form.documents.filter((_, idx) => idx !== i))}>✕</button>
+                  <button
+                    type="button"
+                    style={styles.dynRemove}
+                    onClick={() =>
+                      set(
+                        "documents",
+                        form.documents.filter((_, idx) => idx !== i),
+                      )
+                    }
+                  >
+                    ✕
+                  </button>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      <button type="button" style={styles.addBtn} onClick={() => set("documents", [...form.documents, makeDoc()])}>
+      <button
+        type="button"
+        style={styles.addBtn}
+        onClick={() => set("documents", [...form.documents, makeDoc()])}
+      >
         ＋ Ajouter un document
       </button>
 
       <div style={styles.divider} />
 
-      <div style={{ marginBottom: 8, fontSize: 14, fontWeight: 700, color: C.text }}>Enregistrements / Preuves de réalisation</div>
+      <div
+        style={{
+          marginBottom: 8,
+          fontSize: 14,
+          fontWeight: 700,
+          color: C.text,
+        }}
+      >
+        Enregistrements / Preuves de réalisation
+      </div>
 
       {form.preuves.map((p, i) => (
-        <div key={i} style={{ ...styles.dynItem, marginBottom: 8, flexWrap: "wrap", gap: 10, padding: "12px 14px" }}>
+        <div
+          key={i}
+          style={{
+            ...styles.dynItem,
+            marginBottom: 8,
+            flexWrap: "wrap",
+            gap: 10,
+            padding: "12px 14px",
+          }}
+        >
           {[
             { key: "titre", placeholder: "Titre de la preuve", flex: 2 },
             { key: "type", placeholder: "Type (PV, Rapport...)", flex: 1 },
@@ -1257,15 +1770,42 @@ export default function ProcessFormPage() {
             <input
               key={key}
               value={p[key]}
-              onChange={(e) => { const u = [...form.preuves]; u[i] = { ...u[i], [key]: e.target.value }; set("preuves", u); }}
+              onChange={(e) => {
+                const u = [...form.preuves];
+                u[i] = { ...u[i], [key]: e.target.value };
+                set("preuves", u);
+              }}
               placeholder={placeholder}
-              style={{ ...styles.dynInput, flex, minWidth: 120, border: `1px solid ${C.border}`, borderRadius: 8, padding: "6px 10px", background: C.white }}
+              style={{
+                ...styles.dynInput,
+                flex,
+                minWidth: 120,
+                border: `1px solid ${C.border}`,
+                borderRadius: 8,
+                padding: "6px 10px",
+                background: C.white,
+              }}
             />
           ))}
-          <button type="button" style={styles.dynRemove} onClick={() => set("preuves", form.preuves.filter((_, idx) => idx !== i))}>✕</button>
+          <button
+            type="button"
+            style={styles.dynRemove}
+            onClick={() =>
+              set(
+                "preuves",
+                form.preuves.filter((_, idx) => idx !== i),
+              )
+            }
+          >
+            ✕
+          </button>
         </div>
       ))}
-      <button type="button" style={styles.addBtn} onClick={() => set("preuves", [...form.preuves, makePreuve()])}>
+      <button
+        type="button"
+        style={styles.addBtn}
+        onClick={() => set("preuves", [...form.preuves, makePreuve()])}
+      >
         ＋ Ajouter une preuve
       </button>
     </div>
@@ -1276,49 +1816,167 @@ export default function ProcessFormPage() {
   ══════════════════════════════════════════════════════════════ */
   const Tab5 = () => (
     <div>
-      <SectionHeader num="5" title="Dysfonctionnements Majeurs Connus" sub="Recenser les problèmes récurrents et proposer des améliorations" />
+      <SectionHeader
+        num="5"
+        title="Dysfonctionnements Majeurs Connus"
+        sub="Recenser les problèmes récurrents et proposer des améliorations"
+      />
 
       {form.dysfonctionnements.map((d, i) => (
         <div key={i} style={styles.dysfCard}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: C.primary }}>Dysfonctionnement #{i + 1}</div>
-            <button type="button" style={styles.removeCard} onClick={() => set("dysfonctionnements", form.dysfonctionnements.filter((_, idx) => idx !== i))}>✕</button>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: 16,
+            }}
+          >
+            <div style={{ fontSize: 14, fontWeight: 700, color: C.primary }}>
+              Dysfonctionnement #{i + 1}
+            </div>
+            <button
+              type="button"
+              style={styles.removeCard}
+              onClick={() =>
+                set(
+                  "dysfonctionnements",
+                  form.dysfonctionnements.filter((_, idx) => idx !== i),
+                )
+              }
+            >
+              ✕
+            </button>
           </div>
           <div style={styles.grid2}>
             <div style={styles.gridFull}>
               <Field label="Titre">
-                <Input value={d.titre} onChange={(e) => { const u = [...form.dysfonctionnements]; u[i] = { ...u[i], titre: e.target.value }; set("dysfonctionnements", u); }} placeholder="Titre court du dysfonctionnement..." />
+                <Input
+                  value={d.titre}
+                  onChange={(e) => {
+                    const u = [...form.dysfonctionnements];
+                    u[i] = { ...u[i], titre: e.target.value };
+                    set("dysfonctionnements", u);
+                  }}
+                  placeholder="Titre court du dysfonctionnement..."
+                />
               </Field>
             </div>
             <Field label="Description">
-              <TextArea value={d.description} onChange={(e) => { const u = [...form.dysfonctionnements]; u[i] = { ...u[i], description: e.target.value }; set("dysfonctionnements", u); }} placeholder="Décrire le dysfonctionnement observé..." rows={3} />
+              <TextArea
+                value={d.description}
+                onChange={(e) => {
+                  const u = [...form.dysfonctionnements];
+                  u[i] = { ...u[i], description: e.target.value };
+                  set("dysfonctionnements", u);
+                }}
+                placeholder="Décrire le dysfonctionnement observé..."
+                rows={3}
+              />
             </Field>
             <Field label="Conséquences">
-              <TextArea value={d.consequences} onChange={(e) => { const u = [...form.dysfonctionnements]; u[i] = { ...u[i], consequences: e.target.value }; set("dysfonctionnements", u); }} placeholder="Impacts observés..." rows={3} />
+              <TextArea
+                value={d.consequences}
+                onChange={(e) => {
+                  const u = [...form.dysfonctionnements];
+                  u[i] = { ...u[i], consequences: e.target.value };
+                  set("dysfonctionnements", u);
+                }}
+                placeholder="Impacts observés..."
+                rows={3}
+              />
             </Field>
             <Field label="Causes identifiées">
-              <TextArea value={d.causes} onChange={(e) => { const u = [...form.dysfonctionnements]; u[i] = { ...u[i], causes: e.target.value }; set("dysfonctionnements", u); }} placeholder="Causes racines..." rows={3} />
+              <TextArea
+                value={d.causes}
+                onChange={(e) => {
+                  const u = [...form.dysfonctionnements];
+                  u[i] = { ...u[i], causes: e.target.value };
+                  set("dysfonctionnements", u);
+                }}
+                placeholder="Causes racines..."
+                rows={3}
+              />
             </Field>
             <Field label="Améliorations proposées">
-              <TextArea value={d.ameliorations} onChange={(e) => { const u = [...form.dysfonctionnements]; u[i] = { ...u[i], ameliorations: e.target.value }; set("dysfonctionnements", u); }} placeholder="Actions d'amélioration recommandées..." rows={3} />
+              <TextArea
+                value={d.ameliorations}
+                onChange={(e) => {
+                  const u = [...form.dysfonctionnements];
+                  u[i] = { ...u[i], ameliorations: e.target.value };
+                  set("dysfonctionnements", u);
+                }}
+                placeholder="Actions d'amélioration recommandées..."
+                rows={3}
+              />
             </Field>
             <Field label="Gravité">
-              <Select value={d.gravite} onChange={(e) => { const u = [...form.dysfonctionnements]; u[i] = { ...u[i], gravite: e.target.value }; set("dysfonctionnements", u); }} options={[{ value: "Mineur", label: "Mineur" }, { value: "Majeur", label: "Majeur" }, { value: "Critique", label: "Critique" }]} />
+              <Select
+                value={d.gravite}
+                onChange={(e) => {
+                  const u = [...form.dysfonctionnements];
+                  u[i] = { ...u[i], gravite: e.target.value };
+                  set("dysfonctionnements", u);
+                }}
+                options={[
+                  { value: "Mineur", label: "Mineur" },
+                  { value: "Majeur", label: "Majeur" },
+                  { value: "Critique", label: "Critique" },
+                ]}
+              />
             </Field>
             <Field label="Responsable">
-              <Input value={d.responsable} onChange={(e) => { const u = [...form.dysfonctionnements]; u[i] = { ...u[i], responsable: e.target.value }; set("dysfonctionnements", u); }} placeholder="Responsable du suivi..." />
+              <Input
+                value={d.responsable}
+                onChange={(e) => {
+                  const u = [...form.dysfonctionnements];
+                  u[i] = { ...u[i], responsable: e.target.value };
+                  set("dysfonctionnements", u);
+                }}
+                placeholder="Responsable du suivi..."
+              />
             </Field>
             <Field label="Échéance">
-              <Input type="date" value={d.echeance} onChange={(e) => { const u = [...form.dysfonctionnements]; u[i] = { ...u[i], echeance: e.target.value }; set("dysfonctionnements", u); }} />
+              <Input
+                type="date"
+                value={d.echeance}
+                onChange={(e) => {
+                  const u = [...form.dysfonctionnements];
+                  u[i] = { ...u[i], echeance: e.target.value };
+                  set("dysfonctionnements", u);
+                }}
+              />
             </Field>
             <Field label="Statut">
-              <Select value={d.statut} onChange={(e) => { const u = [...form.dysfonctionnements]; u[i] = { ...u[i], statut: e.target.value }; set("dysfonctionnements", u); }} options={[{ value: "Ouvert", label: "Ouvert" }, { value: "En cours", label: "En cours" }, { value: "Résolu", label: "Résolu" }, { value: "Clôturé", label: "Clôturé" }]} />
+              <Select
+                value={d.statut}
+                onChange={(e) => {
+                  const u = [...form.dysfonctionnements];
+                  u[i] = { ...u[i], statut: e.target.value };
+                  set("dysfonctionnements", u);
+                }}
+                options={[
+                  { value: "Ouvert", label: "Ouvert" },
+                  { value: "En cours", label: "En cours" },
+                  { value: "Résolu", label: "Résolu" },
+                  { value: "Clôturé", label: "Clôturé" },
+                ]}
+              />
             </Field>
             <div style={styles.gridFull}>
               <button
                 type="button"
-                style={{ ...styles.addBtn, borderStyle: "solid", borderColor: C.primary, background: "rgba(45,96,79,0.06)" }}
-                onClick={() => showToast(`Action corrective générée pour le dysfonctionnement #${i + 1}`)}
+                style={{
+                  ...styles.addBtn,
+                  borderStyle: "solid",
+                  borderColor: C.primary,
+                  background: "rgba(45,96,79,0.06)",
+                }}
+                onClick={() =>
+                  showToast(
+                    `Action corrective générée pour le dysfonctionnement #${i + 1}`,
+                  )
+                }
               >
                 ⚙ Générer action corrective
               </button>
@@ -1327,7 +1985,13 @@ export default function ProcessFormPage() {
         </div>
       ))}
 
-      <button type="button" style={styles.addBtn} onClick={() => set("dysfonctionnements", [...form.dysfonctionnements, makeDysf()])}>
+      <button
+        type="button"
+        style={styles.addBtn}
+        onClick={() =>
+          set("dysfonctionnements", [...form.dysfonctionnements, makeDysf()])
+        }
+      >
         ＋ Ajouter un dysfonctionnement
       </button>
     </div>
@@ -1338,31 +2002,91 @@ export default function ProcessFormPage() {
   ══════════════════════════════════════════════════════════════ */
   const Tab6 = () => (
     <div>
-      <SectionHeader num="6" title="Déroulement et Modélisation" sub="Définir les étapes chronologiques du processus" />
+      <SectionHeader
+        num="6"
+        title="Déroulement et Modélisation"
+        sub="Définir les étapes chronologiques du processus"
+      />
 
-      <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12 }}>Tâches chronologiques</div>
+      <div
+        style={{
+          fontSize: 14,
+          fontWeight: 700,
+          color: C.text,
+          marginBottom: 12,
+        }}
+      >
+        Tâches chronologiques
+      </div>
 
       {form.etapes.map((e, i) => (
         <div key={i} style={styles.etapeCard}>
           <div style={styles.etapeNum}>{e.numero}</div>
           <div style={{ flex: 1 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: C.primary }}>Étape {e.numero}</span>
-              <button type="button" style={styles.removeCard} onClick={() => set("etapes", form.etapes.filter((_, idx) => idx !== i))}>✕</button>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                marginBottom: 12,
+              }}
+            >
+              <span style={{ fontSize: 13, fontWeight: 700, color: C.primary }}>
+                Étape {e.numero}
+              </span>
+              <button
+                type="button"
+                style={styles.removeCard}
+                onClick={() =>
+                  set(
+                    "etapes",
+                    form.etapes.filter((_, idx) => idx !== i),
+                  )
+                }
+              >
+                ✕
+              </button>
             </div>
             <div style={styles.grid3}>
               {[
-                { key: "nom", label: "Nom de l'étape", placeholder: "Ex : Lancement appel à sujets..." },
-                { key: "acteur", label: "Acteur responsable", placeholder: "Enseignant, Admin..." },
-                { key: "duree", label: "Durée estimée", placeholder: "Ex : 2 semaines" },
-                { key: "entree", label: "Entrée", placeholder: "Données / documents d'entrée..." },
-                { key: "sortie", label: "Sortie", placeholder: "Résultats produits..." },
-                { key: "document", label: "Document associé", placeholder: "Référence documentaire..." },
+                {
+                  key: "nom",
+                  label: "Nom de l'étape",
+                  placeholder: "Ex : Lancement appel à sujets...",
+                },
+                {
+                  key: "acteur",
+                  label: "Acteur responsable",
+                  placeholder: "Enseignant, Admin...",
+                },
+                {
+                  key: "duree",
+                  label: "Durée estimée",
+                  placeholder: "Ex : 2 semaines",
+                },
+                {
+                  key: "entree",
+                  label: "Entrée",
+                  placeholder: "Données / documents d'entrée...",
+                },
+                {
+                  key: "sortie",
+                  label: "Sortie",
+                  placeholder: "Résultats produits...",
+                },
+                {
+                  key: "document",
+                  label: "Document associé",
+                  placeholder: "Référence documentaire...",
+                },
               ].map(({ key, label, placeholder }) => (
                 <Field key={key} label={label}>
                   <Input
                     value={e[key]}
-                    onChange={(ev) => { const u = [...form.etapes]; u[i] = { ...u[i], [key]: ev.target.value }; set("etapes", u); }}
+                    onChange={(ev) => {
+                      const u = [...form.etapes];
+                      u[i] = { ...u[i], [key]: ev.target.value };
+                      set("etapes", u);
+                    }}
                     placeholder={placeholder}
                   />
                 </Field>
@@ -1371,7 +2095,11 @@ export default function ProcessFormPage() {
                 <Field label="Description">
                   <TextArea
                     value={e.description}
-                    onChange={(ev) => { const u = [...form.etapes]; u[i] = { ...u[i], description: ev.target.value }; set("etapes", u); }}
+                    onChange={(ev) => {
+                      const u = [...form.etapes];
+                      u[i] = { ...u[i], description: ev.target.value };
+                      set("etapes", u);
+                    }}
                     placeholder="Détailler l'activité réalisée dans cette étape..."
                     rows={2}
                   />
@@ -1382,13 +2110,23 @@ export default function ProcessFormPage() {
         </div>
       ))}
 
-      <button type="button" style={styles.addBtn} onClick={() => set("etapes", [...form.etapes, makeEtape(form.etapes.length + 1)])}>
+      <button
+        type="button"
+        style={styles.addBtn}
+        onClick={() =>
+          set("etapes", [...form.etapes, makeEtape(form.etapes.length + 1)])
+        }
+      >
         ＋ Ajouter une étape
       </button>
 
       <div style={styles.divider} />
 
-      <SectionHeader num="6b" title="Cartographie BPMN" sub="Importer ou dessiner le diagramme de flux du processus" />
+      <SectionHeader
+        num="6b"
+        title="Cartographie BPMN"
+        sub="Importer ou dessiner le diagramme de flux du processus"
+      />
 
       <div style={styles.bpmnBox}>
         <div style={{ color: C.muted, fontSize: 38 }}>⬡</div>
@@ -1396,15 +2134,30 @@ export default function ProcessFormPage() {
           Aucune cartographie BPMN importée
         </div>
         <div style={styles.bpmnBtnRow}>
-          <button type="button" style={styles.bpmnBtn} onClick={() => showToast("Fonctionnalité d'import BPMN — à intégrer")}>
+          <button
+            type="button"
+            style={styles.bpmnBtn}
+            onClick={() =>
+              showToast("Fonctionnalité d'import BPMN — à intégrer")
+            }
+          >
             📂 Importer BPMN
           </button>
-          <button type="button" style={styles.bpmnBtn} onClick={() => showToast("Éditeur BPMN — à intégrer")}>
+          <button
+            type="button"
+            style={styles.bpmnBtn}
+            onClick={() => showToast("Éditeur BPMN — à intégrer")}
+          >
             ✏️ Dessiner BPMN
           </button>
           <button
             type="button"
-            style={{ ...styles.bpmnBtn, background: C.lightBg, borderColor: C.accent, color: C.primary }}
+            style={{
+              ...styles.bpmnBtn,
+              background: C.lightBg,
+              borderColor: C.accent,
+              color: C.primary,
+            }}
             onClick={() => showToast("Cartographie validée ✓")}
           >
             ✅ Valider cartographie
@@ -1414,7 +2167,14 @@ export default function ProcessFormPage() {
     </div>
   );
 
-  const tabContents = [<Tab1 />, <Tab2 />, <Tab3 />, <Tab4 />, <Tab5 />, <Tab6 />];
+  const tabContents = [
+    <Tab1 />,
+    <Tab2 />,
+    <Tab3 />,
+    <Tab4 />,
+    <Tab5 />,
+    <Tab6 />,
+  ];
 
   /* ══════════════════════════════════════════════════════════════
      RENDER
@@ -1430,8 +2190,6 @@ export default function ProcessFormPage() {
         ::-webkit-scrollbar-thumb { background: #77D58F; border-radius: 99px; }
         button:hover { opacity: 0.88; }
       `}</style>
-
-    
 
       {/* ── Main ── */}
       <div style={styles.main}>
@@ -1450,8 +2208,18 @@ export default function ProcessFormPage() {
             </span>
           </div>
           <div style={styles.topbarRight}>
-            <button style={styles.topbarBtn} title="Notifications">🔔</button>
-            <span style={{ fontSize: 13, color: C.muted, display: "flex", alignItems: "center", gap: 6 }}>
+            <button style={styles.topbarBtn} title="Notifications">
+              🔔
+            </button>
+            <span
+              style={{
+                fontSize: 13,
+                color: C.muted,
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
               🇫🇷 Français
             </span>
             <div style={styles.avatar}>RF</div>
@@ -1460,7 +2228,6 @@ export default function ProcessFormPage() {
 
         {/* Scrollable content */}
         <div style={styles.content}>
-
           {/* ── Header card ── */}
           <div style={styles.headerCard}>
             <div style={styles.headerCardBadges}>
@@ -1469,7 +2236,9 @@ export default function ProcessFormPage() {
                 {form.typeProcessus || "Type à définir"}
               </span>
               <span style={styles.badge}>Version: 1.0</span>
-              <span style={styles.badge}>Date: {new Date().toLocaleDateString("fr-FR")}</span>
+              <span style={styles.badge}>
+                Date: {new Date().toLocaleDateString("fr-FR")}
+              </span>
             </div>
             <div style={styles.headerCardBody}>
               <div style={styles.headerCardLeft}>
@@ -1477,7 +2246,8 @@ export default function ProcessFormPage() {
                   {form.designation || "Nom du processus"}
                 </div>
                 <div style={styles.headerCardDesc}>
-                  {form.objectif || "Description du processus — remplissez l'onglet Informations pour voir l'aperçu ici."}
+                  {form.objectif ||
+                    "Description du processus — remplissez l'onglet Informations pour voir l'aperçu ici."}
                 </div>
               </div>
               <div style={styles.headerCardRight}>
@@ -1512,13 +2282,25 @@ export default function ProcessFormPage() {
                 style={{
                   height: "100%",
                   width: `${completionPct}%`,
-                  background: completionPct >= 80 ? C.accent : completionPct >= 50 ? C.warn : C.danger,
+                  background:
+                    completionPct >= 80
+                      ? C.accent
+                      : completionPct >= 50
+                        ? C.warn
+                        : C.danger,
                   borderRadius: 99,
                   transition: "width 0.5s ease",
                 }}
               />
             </div>
-            <span style={{ fontSize: 14, fontWeight: 800, color: C.primary, minWidth: 42 }}>
+            <span
+              style={{
+                fontSize: 14,
+                fontWeight: 800,
+                color: C.primary,
+                minWidth: 42,
+              }}
+            >
               {completionPct}%
             </span>
             <span style={styles.statusBadge}>● Brouillon</span>
@@ -1531,16 +2313,17 @@ export default function ProcessFormPage() {
                 <button
                   key={t.id}
                   type="button"
-                  style={{ ...styles.tab, ...(activeTab === t.id ? styles.tabActive : {}) }}
+                  style={{
+                    ...styles.tab,
+                    ...(activeTab === t.id ? styles.tabActive : {}),
+                  }}
                   onClick={() => setActiveTab(t.id)}
                 >
                   {t.label}
                 </button>
               ))}
             </div>
-            <div style={styles.tabContent}>
-              {tabContents[activeTab]}
-            </div>
+            <div style={styles.tabContent}>{tabContents[activeTab]}</div>
           </div>
         </div>
 
@@ -1553,10 +2336,18 @@ export default function ProcessFormPage() {
             <button type="button" style={styles.btnDraft} onClick={handleDraft}>
               💾 Enregistrer brouillon
             </button>
-            <button type="button" style={styles.btnPreview} onClick={() => showToast("Mode prévisualisation — à implémenter")}>
+            <button
+              type="button"
+              style={styles.btnPreview}
+              onClick={() => showToast("Mode prévisualisation — à implémenter")}
+            >
               👁 Prévisualiser
             </button>
-            <button type="button" style={styles.btnPublish} onClick={handlePublish}>
+            <button
+              type="button"
+              style={styles.btnPublish}
+              onClick={handlePublish}
+            >
               🚀 Publier le processus
             </button>
           </div>
