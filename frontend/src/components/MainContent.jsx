@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 
 const ALL_DATA = [
   {
@@ -378,7 +379,9 @@ function ConfirmModal({ nom, onConfirm, onCancel }) {
 }
 
 export default function MainContent({ collapsed }) {
+  const navigate = useNavigate();
   const [data, setData] = useState(ALL_DATA);
+  
   const [search, setSearch] = useState("");
   const [deptFilter, setDeptFilter] = useState("Tous");
   const [sortField, setSortField] = useState(null);
@@ -757,6 +760,7 @@ export default function MainContent({ collapsed }) {
               </div>
             </div>
             <button
+            onClick={() => navigate("/processus/new")}
               style={{
                 display: "flex",
                 alignItems: "center",
