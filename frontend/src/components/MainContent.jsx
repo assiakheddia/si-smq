@@ -1082,7 +1082,12 @@ export default function MainContent({ collapsed }) {
                               onChange={() => toggleRow(row.id)}
                             />
                           </td>
-                          <td className="nom-cell">{row.nom}</td>
+                          <td className="nom-cell"
+                            style={{cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset:'1px'}}
+                            onClick={() => navigate(`/fiche-processus/${row.id}`)}
+                          >
+                            {row.nom}
+                          </td>
                           <td>{row.responsable}</td>
                           <td style={{ color: "#6b7280" }}>{row.tel}</td>
                           <td>
