@@ -1,35 +1,76 @@
+import { useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import Login from "./pages/Login";
+import Login from "./pages/login.jsx";
+import MainContent from "./components/MainContent.jsx";
+import Sidebar from "./components/Sidebar.jsx";
+import ProcessFormPage from "./pages/ProcessFormPage.jsx";
 
-// ──────────────────────────────────────────────────────────────────
-//  Page Dashboard temporaire — à remplacer par votre vrai dashboard
-// ──────────────────────────────────────────────────────────────────
-function Dashboard() {
+function ProcessusPage() {
+  const [collapsed, setCollapsed] = useState(false);
+  const [activeNav, setActiveNav] = useState("processus");
+  const sidebarWidth = collapsed ? 70 : 245;
+
   return (
-    <div
-      className="min-h-screen flex flex-col items-center justify-center gap-6"
-      style={{ background: "#F0FFEB", fontFamily: "'DM Sans', sans-serif" }}
-    >
-      <div
-        className="px-8 py-6 rounded-2xl text-center space-y-2"
-        style={{
-          background: "#FFFFFF",
-          boxShadow: "0 4px 20px rgba(45,96,79,0.12)",
-        }}
-      >
-        <p
-          className="text-xs font-bold tracking-widest uppercase"
-          style={{ color: "#77D58F" }}
-        >
-          QualiaFlow · SI-SMQ
-        </p>
-        <h1 className="text-2xl font-bold" style={{ color: "#2D604F" }}>
-          Bienvenue sur le tableau de bord
-        </h1>
-        <p className="text-sm" style={{ color: "#6B7280" }}>
-          Votre espace de management de la qualité ISO 9001.
-        </p>
-      </div>
+    <div style={{ minHeight: "100vh", background: "#eaf5eb" }}>
+      <style>{`
+        .app-content {
+          margin-left: ${sidebarWidth}px;
+          transition: margin-left 0.3s cubic-bezier(.4,0,.2,1);
+        }
+
+        @media (max-width: 768px) {
+          .app-content {
+            margin-left: 0;
+          }
+        }
+      `}</style>
+
+      <Sidebar
+        collapsed={collapsed}
+        setCollapsed={setCollapsed}
+        activeNav={activeNav}
+        setActiveNav={setActiveNav}
+        sidebarWidth={sidebarWidth}
+      />
+
+      <main className="app-content">
+        <MainContent collapsed={collapsed} />
+      </main>
+    </div>
+  );
+}
+
+function ProcessFormLayout() {
+  const [collapsed, setCollapsed] = useState(false);
+  const [activeNav, setActiveNav] = useState("processus");
+  const sidebarWidth = collapsed ? 70 : 245;
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#eaf5eb" }}>
+      <style>{`
+        .app-content {
+          margin-left: ${sidebarWidth}px;
+          transition: margin-left 0.3s cubic-bezier(.4,0,.2,1);
+        }
+
+        @media (max-width: 768px) {
+          .app-content {
+            margin-left: 0;
+          }
+        }
+      `}</style>
+
+      <Sidebar
+        collapsed={collapsed}
+        setCollapsed={setCollapsed}
+        activeNav={activeNav}
+        setActiveNav={setActiveNav}
+        sidebarWidth={sidebarWidth}
+      />
+
+      <main className="app-content">
+        <ProcessFormPage />
+      </main>
     </div>
   );
 }
@@ -38,16 +79,12 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Redirection racine vers /login */}
         <Route path="/" element={<Navigate to="/login" replace />} />
-
-        {/* Page de connexion */}
         <Route path="/login" element={<Login />} />
-
-        {/* Dashboard (placeholder) */}
-        <Route path="/dashboard" element={<Dashboard />} />
-
-        {/* Toute route inconnue → login */}
+        <Route path="/processus" element={<ProcessusPage />} />
+        <Route path="/processus/new" element={<ProcessFormLayout />} />
+        <Route path="/processus/:id" element={<ProcessFormLayout />} />
+        <Route path="/dashboard" element={<Navigate to="/processus" replace />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>

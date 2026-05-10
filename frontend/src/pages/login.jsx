@@ -1,14 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import logo from "../assets/logo-veridia.svg";
+import logo from "../assets/Vector.svg";
 
-// ──────────────────────────────────────────────────────────────────
-//  LOGO PLACEHOLDER
-//  Remplacez la balise <img> ci-dessous par votre vrai logo.
-//  Chemin suggéré : src/assets/logo-veridia.png
-//  Exemple : import logo from "../assets/logo-veridia.png";
-//  Puis      : <img src={logo} alt="Veridia" className="h-16 w-auto" />
-// ──────────────────────────────────────────────────────────────────
+
 const LogoPlaceholder = () => (
   <div className="flex flex-col items-center gap-3">
 
