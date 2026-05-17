@@ -1,8 +1,7 @@
 import { useParams, useNavigate } from "react-router-dom";
-import { useState } from "react";
-
+import { useState, useRef, useEffect, useCallback } from "react";
 /* ═══════════════════════════════════════════════════════════════════
-   DESIGN TOKENS (same as ProcessFormPage)
+   DESIGN TOKENS
 ═══════════════════════════════════════════════════════════════════ */
 const C = {
   dark: "#1e3d2f",
@@ -18,7 +17,7 @@ const C = {
   warn: "#f59e0b",
 };
 
-const styles = {
+const S = {
   page: {
     display: "flex",
     minHeight: "100vh",
@@ -41,27 +40,6 @@ const styles = {
     padding: "0 28px",
     flexShrink: 0,
   },
-  breadcrumb: {
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-    fontSize: 14,
-    color: C.muted,
-  },
-  breadcrumbActive: { color: C.text, fontWeight: 600 },
-  topbarRight: { display: "flex", alignItems: "center", gap: 16 },
-  avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: "50%",
-    background: C.primary,
-    color: "#fff",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: 13,
-    fontWeight: 700,
-  },
   content: {
     flex: 1,
     overflow: "auto",
@@ -78,7 +56,12 @@ const styles = {
     position: "relative",
     overflow: "hidden",
   },
-  headerCardBadges: { display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" },
+  headerCardBadges: {
+    display: "flex",
+    gap: 8,
+    marginBottom: 16,
+    flexWrap: "wrap",
+  },
   badge: {
     borderRadius: 20,
     padding: "4px 12px",
@@ -89,7 +72,13 @@ const styles = {
     border: "1px solid rgba(255,255,255,0.3)",
   },
   badgeGreen: { background: C.accent, color: C.dark },
-  headerCardBody: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 20, flexWrap: "wrap" },
+  headerCardBody: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 20,
+    flexWrap: "wrap",
+  },
   headerCardLeft: { flex: 1 },
   headerCardTitle: {
     fontSize: 26,
@@ -98,8 +87,18 @@ const styles = {
     marginBottom: 8,
     color: "#fff",
   },
-  headerCardDesc: { fontSize: 13, opacity: 0.85, lineHeight: 1.6, maxWidth: 520 },
-  headerCardRight: { display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-end" },
+  headerCardDesc: {
+    fontSize: 13,
+    opacity: 0.85,
+    lineHeight: 1.6,
+    maxWidth: 520,
+  },
+  headerCardRight: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+    alignItems: "flex-end",
+  },
   pilotBox: {
     background: "rgba(255,255,255,0.15)",
     borderRadius: 12,
@@ -108,7 +107,13 @@ const styles = {
     minWidth: 160,
     border: "1px solid rgba(255,255,255,0.25)",
   },
-  pilotLabel: { fontSize: 10, opacity: 0.7, textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 },
+  pilotLabel: {
+    fontSize: 10,
+    opacity: 0.7,
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: 4,
+  },
   pilotName: { fontSize: 15, fontWeight: 700 },
   pilotEmail: { fontSize: 11, opacity: 0.8, marginTop: 2 },
   kpiRow: { display: "flex", gap: 8 },
@@ -121,7 +126,12 @@ const styles = {
     minWidth: 64,
   },
   kpiNum: { fontSize: 20, fontWeight: 800, display: "block" },
-  kpiLbl: { fontSize: 10, opacity: 0.75, textTransform: "uppercase", letterSpacing: 0.5 },
+  kpiLbl: {
+    fontSize: 10,
+    opacity: 0.75,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
   tabsWrap: {
     background: C.white,
     borderRadius: 12,
@@ -145,6 +155,7 @@ const styles = {
     borderBottom: "2px solid transparent",
     whiteSpace: "nowrap",
     transition: "all 0.2s",
+    fontFamily: "'Plus Jakarta Sans', sans-serif",
   },
   tabActive: {
     color: C.primary,
@@ -152,12 +163,12 @@ const styles = {
     borderBottom: `2px solid ${C.primary}`,
     background: C.white,
   },
-  tabContent: { padding: "28px 28px 32px" },
+  tabContent: { padding: "28px 28px 36px" },
   sectionHeader: {
     display: "flex",
     alignItems: "center",
     gap: 12,
-    marginBottom: 24,
+    marginBottom: 22,
   },
   sectionNum: {
     width: 32,
@@ -171,6 +182,7 @@ const styles = {
     fontWeight: 800,
     fontSize: 14,
     flexShrink: 0,
+    fontFamily: "'Outfit', sans-serif",
   },
   sectionTitle: {
     fontSize: 17,
@@ -178,73 +190,35 @@ const styles = {
     fontWeight: 700,
     color: C.text,
   },
-  sectionSub: { fontSize: 12, color: C.muted, marginTop: 2 },
-  grid2: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px 28px" },
-  grid3: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "20px 28px" },
-  gridFull: { gridColumn: "1 / -1" },
-  infoRow: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 6,
-    padding: "12px 0",
-    borderBottom: `1px solid ${C.border}`,
+  sectionSub: {
+    fontSize: 12,
+    color: C.muted,
+    marginTop: 2,
+    fontFamily: "'Plus Jakarta Sans', sans-serif",
   },
-  label: { fontSize: 12, fontWeight: 600, color: C.muted, textTransform: "uppercase", letterSpacing: 0.5 },
-  value: { fontSize: 14, color: C.text, lineHeight: 1.5 },
-  tag: {
-    background: C.lightBg,
-    border: `1px solid ${C.accent}`,
-    color: C.primary,
-    borderRadius: 20,
-    padding: "3px 10px",
+  grid2: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px 28px" },
+  grid3: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr 1fr",
+    gap: "16px 20px",
+  },
+  gridFull: { gridColumn: "1 / -1" },
+  label: {
     fontSize: 12,
     fontWeight: 600,
-    display: "inline-flex",
-    alignItems: "center",
-    marginRight: 6,
-    marginBottom: 6,
+    color: C.muted,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 4,
+    fontFamily: "'Plus Jakarta Sans', sans-serif",
+  },
+  value: {
+    fontSize: 14,
+    color: C.text,
+    lineHeight: 1.6,
+    fontFamily: "'Plus Jakarta Sans', sans-serif",
   },
   divider: { height: 1, background: C.border, margin: "24px 0" },
-  historyPlaceholder: {
-    background: C.lightBg,
-    borderRadius: 12,
-    padding: "24px",
-    border: `1.5px dashed ${C.border}`,
-    textAlign: "center",
-    color: C.muted,
-    fontSize: 13,
-  },
-  raciGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px 20px" },
-  raciCard: {
-    background: C.lightBg,
-    borderRadius: 10,
-    padding: "12px 16px",
-    border: `1px solid ${C.border}`,
-  },
-  raciLabel: { fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", marginBottom: 6 },
-  raciValue: { fontSize: 14, color: C.text, fontWeight: 500 },
-  kpiCard: {
-    background: C.lightBg,
-    borderRadius: 12,
-    border: `1px solid ${C.border}`,
-    padding: "16px 18px",
-    marginBottom: 12,
-  },
-  kpiCardTitle: { fontSize: 13, fontWeight: 700, color: C.primary, marginBottom: 12 },
-  riskCard: {
-    background: C.lightBg,
-    borderRadius: 12,
-    border: `1px solid ${C.border}`,
-    padding: "16px 18px",
-    marginBottom: 12,
-  },
-  critBadge: {
-    display: "inline-block",
-    padding: "2px 10px",
-    borderRadius: 20,
-    fontWeight: 700,
-    fontSize: 12,
-  },
   table: { width: "100%", borderCollapse: "collapse", fontSize: 13 },
   th: {
     textAlign: "left",
@@ -263,62 +237,21 @@ const styles = {
     color: C.text,
     verticalAlign: "top",
   },
-  dysfCard: {
-    background: C.lightBg,
-    borderRadius: 14,
-    border: `1px solid ${C.border}`,
-    padding: "18px 20px",
-    marginBottom: 14,
-  },
   etapeCard: {
     display: "flex",
-    gap: 16,
-    background: C.lightBg,
-    borderRadius: 12,
-    border: `1px solid ${C.border}`,
-    padding: "14px 16px",
-    marginBottom: 12,
-    alignItems: "flex-start",
-  },
-  etapeNum: {
-    width: 28,
-    height: 28,
-    borderRadius: "50%",
-    background: C.primary,
-    color: "#fff",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontWeight: 800,
-    fontSize: 13,
-    flexShrink: 0,
-    marginTop: 2,
-  },
-  fluxBox: {
-    display: "grid",
-    gridTemplateColumns: "1fr 40px 1fr",
-    gap: 12,
-    alignItems: "start",
-    background: C.lightBg,
+    gap: 0,
+    background: C.white,
     border: `1px solid ${C.border}`,
     borderRadius: 12,
-    padding: 16,
+    overflow: "hidden",
     marginBottom: 12,
-  },
-  fluxArrow: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    color: C.muted,
-    fontSize: 22,
-    paddingTop: 4,
   },
   actionBar: {
     background: C.white,
     borderTop: `1px solid ${C.border}`,
     padding: "16px 28px",
     display: "flex",
-    justifyContent: "flex-end",
+    justifyContent: "space-between",
     gap: 12,
     flexShrink: 0,
   },
@@ -332,7 +265,7 @@ const styles = {
     fontSize: 14,
     cursor: "pointer",
     boxShadow: "0 4px 14px rgba(45,96,79,0.3)",
-    transition: "all 0.2s",
+    fontFamily: "'Plus Jakarta Sans', sans-serif",
   },
   btnBack: {
     padding: "10px 22px",
@@ -343,10 +276,13 @@ const styles = {
     fontWeight: 600,
     fontSize: 14,
     cursor: "pointer",
-    transition: "all 0.2s",
+    fontFamily: "'Plus Jakarta Sans', sans-serif",
   },
 };
 
+/* ═══════════════════════════════════════════════════════════════════
+   DONNÉES MOCK
+═══════════════════════════════════════════════════════════════════ */
 const PROCESSUS_DATA = {
   1: {
     identifiant: "PROC-007",
@@ -356,1011 +292,2864 @@ const PROCESSUS_DATA = {
     telephone: "(225) 555-0118",
     sousDept: "Soutenances",
     typeProcessus: "Réalisation",
-    objectif: "Organiser et piloter l'ensemble des activités liées aux projets de fin d'études : affectation des sujets, suivi des étudiants, planification et organisation des soutenances.",
-    structures: ["Département Informatique", "Direction des études", "Jury de soutenance"],
+    objectif:
+      "Organiser et piloter l'ensemble des activités liées aux projets de fin d'études : affectation des sujets, suivi des étudiants, planification et organisation des soutenances.",
+    structures: [
+      "Département Informatique",
+      "Direction des études",
+      "Jury de soutenance",
+    ],
     raci: {
       responsable: "Chef de département",
-      approbateur: "Directeur des études", 
+      approbateur: "Directeur des études",
       consulte: "Enseignants PFE",
       informe: "Secrétariat",
     },
     periode: "Septembre → Juin",
+    coutEstime: "Budget pédagogique annuel",
     objectifStrategique: "Améliorer la qualité des PFEs et l'encadrement",
-    fluxEntrees: ["Demandes de sujets", "CV étudiants", "Règlement"],
-    fluxSorties: ["Sujets attribués", "Calendrier soutenances", "Rapports finaux"],
-    clients: "Étudiants 5ème année, Entreprises partenaires",
-    effectifs: "12 enseignants, 3 membres administratifs",
-    competences: ["Encadrement", "Évaluation", "Communication"],
+    fluxEntrees: ["Demandes de sujets", "CV étudiants", "Règlement intérieur"],
+    fluxSorties: [
+      "Sujets attribués",
+      "Calendrier soutenances",
+      "Rapports finaux",
+    ],
+    clients: [
+      "Étudiants en fin de cycle",
+      "Entreprises partenaires",
+      "Direction pédagogique",
+    ],
+    effectifs: ["12 enseignants encadrants", "3 membres administratifs"],
+    competences: [
+      "Expertise technique dans la spécialité",
+      "Maîtrise des critères d'évaluation",
+      "Gestion de planning",
+    ],
     ressourcesMat: ["Salles de soutenance", "Vidéoprojecteurs"],
-    ressourcesLog: ["Plateforme PFE", "Teams"],
+    ressourcesLog: ["Plateforme PFE", "Messagerie Teams"],
     kpis: [
-      { nom: "Taux d'attribution", unite: "%", valeurCible: "100%", seuilAlerte: "<90%", frequence: "Mensuel", responsable: "Coordinateur" },
-      { nom: "Taux de réussite", unite: "%", valeurCible: "≥95%", seuilAlerte: "<85%", frequence: "Semestriel", responsable: "Jury" },
-    ],
-    processusAmont: ["Recrutement étudiants", "Proposition sujets"],
-    processusAval: ["Soutenance", "Délibération"],
-    enjeuxStrategiques: "Améliorer l'insertion professionnelle des diplômés",
-    moyensAlloues: ["Plateforme numérique", "Salles dédiées"],
-    contraintes: ["Calendrier académique", "Capacité d'encadrement"],
-    risques: [
-      { description: "Sujets non attribués à temps", probabilite: "2", gravite: "3", mesure: "Suivi hebdomadaire", responsable: "Coordinateur" },
-    ],
-    documentsDescription: "Documents de référence essentiels pour la bonne exécution du processus de gestion des PFE. Ils définissent les règles, les rôles et les responsabilités de chaque intervenant.",
-    documents: [
-      { id: "DOC-001", titre: "Charte PFE", format: "PDF", revue: "Approuvée – Direction", version: "2.1" },
-      { id: "DOC-002", titre: "Guide de l'encadrant", format: "PDF", revue: "Approuvée – Direction", version: "1.3" },
-      { id: "DOC-003", titre: "Formulaire d'évaluation", format: "Excel", revue: "Approuvée – Direction", version: "2.0" },
-      { id: "DOC-004", titre: "Règlement intérieur", format: "Word", revue: "Approuvée – Direction", version: "1.8" },
-    ],
-    preuves: [
-  { titre: "PV de délibération", format: "pdf" },
-  { titre: "Fiche de suivi étudiant", format: "xlsx" },
-  { titre: "Rapport de soutenance signé", format: "pdf" },
-],
-    dysfonctionnementsDescription: "Identification et analyse des dysfonctionnements majeurs rencontrés lors de l'exécution du processus, ainsi que les actions correctives mises en place.",
-    dysfonctionnements: [
-      { 
-        titre: "Retard dans la validation des sujets PFE", 
-        description: "Retard dans la validation des sujets PFE", 
-        consequences: "Perte de temps, stress étudiant, chevauchement avec les délais académiques", 
-        causes: "Manque de communication entre département et encadrants",
-        ameliorations: "Mise en place d'un workflow numérique de validation avec notifications automatiques\nQuota d'encadrement par enseignant\nRéglementation MESRS",
-        gravite: "Majeur", 
-        responsable: "Coordinateur", 
-        echeance: "2026-09", 
-        statut: "En cours" 
+      {
+        nom: "Taux de réussite aux soutenances",
+        unite: "%",
+        valeurCible: "≥ 90%",
+        seuilAlerte: "< 75%",
+        frequence: "Annuelle",
+        responsable: "Coordinateur",
+        couleur: "#d4f5dc",
+        couleurTexte: "#1a6b35",
       },
-      { 
-        titre: "Sujets non conformes aux exigences académiques", 
-        description: "Certains sujets proposés par les encadrants ne respectent pas les critères de qualité établis", 
-        consequences: "Refus des sujets par le jury, retards dans le calendrier d'attribution, surcharge de travail pour le comité de validation", 
-        causes: "Manque de formation des encadrants sur les critères de qualité\nAbsence de template standardisé pour la proposition de sujets",
-        ameliorations: "Organiser des ateliers de formation obligatoires\nCréer un template standard avec critères d'évaluation détaillés\nMettre en place une pré-évaluation avant soumission officielle\nDésigner un référent qualité par département",
-        gravite: "Moyen", 
-        responsable: "Comité pédagogique", 
-        echeance: "2026-12", 
-        statut: "En cours" 
+      {
+        nom: "Délai moyen de validation du sujet",
+        unite: "jours",
+        valeurCible: "< 15 jours",
+        seuilAlerte: "> 20j",
+        frequence: "Par promotion",
+        responsable: "Admin",
+        couleur: "#fff3d4",
+        couleurTexte: "#7a5800",
+      },
+      {
+        nom: "Taux d'encadrement couvert",
+        unite: "%",
+        valeurCible: "100%",
+        seuilAlerte: "< 90%",
+        frequence: "Semestrielle",
+        responsable: "Jury",
+        couleur: "#d4e8f5",
+        couleurTexte: "#1a4a6b",
       },
     ],
-    methodes: [
-      "Mise en place d'un workflow numérique de validation avec notifications automatiques",
+    processusAmont: ["Gestion des inscriptions", "Gestion des enseignants"],
+    processusAval: ["Délibération", "Archivage"],
+    enjeuxStrategiques:
+      "Garantir la qualité académique des travaux de fin d'études et la conformité aux exigences pédagogiques nationales.",
+    moyensAlloues: [
+      "Plateforme de dépôt en ligne",
+      "Salle de soutenance équipée",
+      "Système de gestion PFE (SGPFE)",
+    ],
+    contraintes: [
+      "Calendrier académique fixé",
       "Quota d'encadrement par enseignant",
       "Réglementation MESRS",
     ],
+    risques: [
+      {
+        description: "Manque d'encadrants disponibles",
+        probabilite: "2",
+        gravite: "3",
+        mesure: "Recrutement anticipé",
+        responsable: "Coordinateur",
+      },
+      {
+        description: "Indisponibilité des jurys",
+        probabilite: "2",
+        gravite: "2",
+        mesure: "Planning prévisionnel",
+        responsable: "Admin",
+      },
+      {
+        description: "Dépôt tardif des rapports",
+        probabilite: "3",
+        gravite: "2",
+        mesure: "Relances automatiques",
+        responsable: "Plateforme",
+      },
+    ],
+    documentsDescription:
+      "Documents de référence essentiels pour la bonne exécution du processus de gestion des PFE. Ils définissent les règles, les rôles et les responsabilités de chaque intervenant.",
+    documents: [
+      {
+        id: "DOC-001",
+        titre: "Charte PFE",
+        format: "PDF",
+        version: "2.1",
+        revue: "Approuvée – Direction",
+        statut: "Approuvé",
+      },
+      {
+        id: "DOC-002",
+        titre: "Guide de l'encadrant",
+        format: "PDF",
+        version: "1.3",
+        revue: "Approuvée – Direction",
+        statut: "Approuvé",
+      },
+      {
+        id: "DOC-003",
+        titre: "Formulaire d'évaluation",
+        format: "Excel",
+        version: "2.0",
+        revue: "Approuvée – Direction",
+        statut: "Approuvé",
+      },
+      {
+        id: "DOC-004",
+        titre: "Règlement intérieur",
+        format: "Word",
+        version: "1.8",
+        revue: "Approuvée – Direction",
+        statut: "Approuvé",
+      },
+    ],
+    preuves: [
+      { titre: "PV de délibération", format: "pdf" },
+      { titre: "Fiche de suivi étudiant", format: "xlsx" },
+      { titre: "Rapport de soutenance signé", format: "pdf" },
+    ],
+    dysfonctionnementsDescription:
+      "Identification et analyse des dysfonctionnements majeurs rencontrés lors de l'exécution du processus, ainsi que les actions correctives mises en place.",
+    dysfonctionnements: [
+      {
+        titre: "Retard dans la validation des sujets PFE",
+        description:
+          "Les sujets PFE sont souvent validés après le délai prévu, perturbant le calendrier global.",
+        consequences:
+          "Perte de temps, stress étudiant, chevauchement avec les délais académiques",
+        causes: "Manque de communication entre département et encadrants",
+        ameliorations:
+          "Mise en place d'un workflow numérique de validation avec notifications automatiques\nQuota d'encadrement par enseignant\nRéglementation MESRS",
+        gravite: "Majeur",
+        responsable: "Coordinateur",
+        echeance: "2026-09",
+        statut: "En cours",
+      },
+      {
+        titre: "Sujets non conformes aux exigences académiques",
+        description:
+          "Certains sujets proposés par les encadrants ne respectent pas les critères de qualité établis.",
+        consequences:
+          "Refus des sujets par le jury, retards dans le calendrier d'attribution, surcharge de travail pour le comité.",
+        causes:
+          "Manque de formation des encadrants\nAbsence de template standardisé",
+        ameliorations:
+          "Organiser des ateliers de formation obligatoires\nCréer un template standard avec critères d'évaluation\nMettre en place une pré-évaluation avant soumission\nDésigner un référent qualité par département",
+        gravite: "Moyen",
+        responsable: "Comité pédagogique",
+        echeance: "2026-12",
+        statut: "En cours",
+      },
+    ],
     etapes: [
-      { numero: 1, nom: "Lancement appel à sujets", acteur: "Coordinateur", description: "Envoyer appel aux enseignants", entree: "Calendrier", sortie: "Liste sujets", duree: "2 semaines", document: "Formulaire" },
-      { numero: 2, nom: "Dépôt des sujets", acteur: "Enseignants", description: "Déposer propositions", entree: "Template", sortie: "Sujets déposés", duree: "3 semaines", document: "Fiche sujet" },
-      { numero: 3, nom: "Affectation étudiants", acteur: "Coordinateur", description: "Attribuer sujets aux étudiants", entree: "Préférences", sortie: "Planning", duree: "2 semaines", document: "Tableau affectation" },
-      { numero: 4, nom: "Suivi PFE", acteur: "Encadrants", description: "Suivi hebdomadaire", entree: "Rapports", sortie: "Évaluations", duree: "6 mois", document: "Grille suivi" },
+      {
+        numero: 1,
+        nom: "Lancement appel à sujets",
+        acteur: "Coordinateur",
+        description: "Envoyer appel aux enseignants via plateforme",
+        entree: "Calendrier académique",
+        sortie: "Liste sujets proposés",
+        duree: "2 semaines",
+        document: "Formulaire proposition",
+      },
+      {
+        numero: 2,
+        nom: "Dépôt des sujets",
+        acteur: "Enseignants",
+        description: "Déposer propositions sur plateforme",
+        entree: "Template sujet",
+        sortie: "Sujets déposés",
+        duree: "3 semaines",
+        document: "Fiche sujet",
+      },
+      {
+        numero: 3,
+        nom: "Affectation étudiants",
+        acteur: "Coordinateur",
+        description: "Attribuer sujets selon préférences",
+        entree: "Préférences étudiants",
+        sortie: "Planning affectation",
+        duree: "2 semaines",
+        document: "Tableau affectation",
+      },
+      {
+        numero: 4,
+        nom: "Suivi PFE",
+        acteur: "Encadrants",
+        description: "Suivi hebdomadaire de l'avancement",
+        entree: "Rapports d'avancement",
+        sortie: "Évaluations intermédiaires",
+        duree: "6 mois",
+        document: "Grille de suivi",
+      },
     ],
   },
 };
 
 const TABS = [
   { id: 0, label: "Informations et historique" },
-  { id: 1, label: "Éléments clés" },
+  { id: 1, label: "Éléments Clés" },
   { id: 2, label: "Contexte" },
   { id: 3, label: "Documentation" },
   { id: 4, label: "Dysfonctionnements" },
   { id: 5, label: "Déroulement" },
 ];
 
+/* ═══════════════════════════════════════════════════════════════════
+   COMPOSANTS RÉUTILISABLES
+═══════════════════════════════════════════════════════════════════ */
+function SectionHeader({ num, title, sub }) {
+  return (
+    <div style={S.sectionHeader}>
+      <div style={S.sectionNum}>{num}</div>
+      <div>
+        <div style={S.sectionTitle}>{title}</div>
+        {sub && <div style={S.sectionSub}>{sub}</div>}
+      </div>
+    </div>
+  );
+}
+
+function InfoRow({ label, children, last }) {
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "200px 1fr",
+        gap: 16,
+        padding: "13px 18px",
+        borderBottom: last ? "none" : `1px solid ${C.border}`,
+        alignItems: "start",
+      }}
+    >
+      <span
+        style={{
+          fontSize: 13,
+          color: C.muted,
+          fontWeight: 500,
+          paddingTop: 2,
+          fontFamily: "'Plus Jakarta Sans', sans-serif",
+        }}
+      >
+        {label}
+      </span>
+      <div
+        style={{
+          fontSize: 13,
+          color: C.text,
+          lineHeight: 1.6,
+          fontFamily: "'Plus Jakarta Sans', sans-serif",
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function InfoField({ label, value }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 5,
+        padding: "10px 0",
+        borderBottom: `1px solid ${C.border}`,
+      }}
+    >
+      <div style={S.label}>{label}</div>
+      <div style={S.value}>{value || "—"}</div>
+    </div>
+  );
+}
+
+function Chip({ text, bg = "#d4f0dc", color = C.primary, border = C.accent }) {
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        padding: "4px 12px",
+        borderRadius: 20,
+        background: bg,
+        color,
+        border: `1px solid ${border}`,
+        fontSize: 12,
+        fontWeight: 600,
+        marginRight: 6,
+        marginBottom: 4,
+        fontFamily: "'Plus Jakarta Sans', sans-serif",
+      }}
+    >
+      {text}
+    </span>
+  );
+}
+
+function StatusBadge({ statut }) {
+  const map = {
+    Approuvé: { bg: "#dcfce7", color: "#166534" },
+    Archivé: { bg: "#fef3c7", color: "#92400e" },
+    "En cours": { bg: "#dbeafe", color: "#1e40af" },
+    Ouvert: { bg: "#fee2e2", color: "#7f1d1d" },
+    Résolu: { bg: "#dcfce7", color: "#166534" },
+    Clôturé: { bg: "#f3f4f6", color: "#6b7280" },
+    Majeur: { bg: "#fef3c7", color: "#92400e" },
+    Moyen: { bg: "#fff7ed", color: "#9a3412" },
+    Critique: { bg: "#fee2e2", color: "#7f1d1d" },
+    Mineur: { bg: "#dcfce7", color: "#166534" },
+  };
+  const s = map[statut] || { bg: "#f3f4f6", color: "#6b7280" };
+  return (
+    <span
+      style={{
+        background: s.bg,
+        color: s.color,
+        padding: "3px 10px",
+        borderRadius: 12,
+        fontSize: 11,
+        fontWeight: 700,
+        fontFamily: "'Plus Jakarta Sans', sans-serif",
+      }}
+    >
+      {statut}
+    </span>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   COMPOSANT PRINCIPAL
+═══════════════════════════════════════════════════════════════════ */
+const NODE_COLORS = {
+  task: { fill: "#B5D4F4", stroke: "#185FA5", text: "#0C447C" },
+  start: { fill: "#C0DD97", stroke: "#3B6D11", text: "#27500A" },
+  end: { fill: "#F7C1C1", stroke: "#A32D2D", text: "#791F1F" },
+  gateway: { fill: "#FAC775", stroke: "#854F0B", text: "#633806" },
+};
+
+const BPMN_SAMPLE = {
+  lanes: [
+    { id: "l1", label: "Direction", h: 110 },
+    { id: "l2", label: "Chef Dept.", h: 110 },
+    { id: "l3", label: "Étudiant", h: 110 },
+  ],
+  nodes: [
+    { id: "n1", type: "start", x: 110, y: 95, label: "Début", lane: "l1" },
+    {
+      id: "n2",
+      type: "task",
+      x: 240,
+      y: 95,
+      label: "Appel à sujets",
+      lane: "l1",
+    },
+    {
+      id: "n3",
+      type: "gateway",
+      x: 380,
+      y: 95,
+      label: "Validation",
+      lane: "l1",
+    },
+    {
+      id: "n4",
+      type: "task",
+      x: 380,
+      y: 205,
+      label: "Attribution sujet",
+      lane: "l2",
+    },
+    {
+      id: "n5",
+      type: "task",
+      x: 520,
+      y: 205,
+      label: "Encadrement",
+      lane: "l2",
+    },
+    {
+      id: "n6",
+      type: "task",
+      x: 520,
+      y: 315,
+      label: "Rédaction PFE",
+      lane: "l3",
+    },
+    {
+      id: "n7",
+      type: "task",
+      x: 660,
+      y: 315,
+      label: "Dépôt mémoire",
+      lane: "l3",
+    },
+    {
+      id: "n8",
+      type: "task",
+      x: 660,
+      y: 205,
+      label: "Jury & soutenance",
+      lane: "l2",
+    },
+    { id: "n9", type: "end", x: 800, y: 205, label: "Fin", lane: "l2" },
+  ],
+  edges: [
+    { id: "e1", from: "n1", to: "n2", label: "" },
+    { id: "e2", from: "n2", to: "n3", label: "" },
+    { id: "e3", from: "n3", to: "n4", label: "Approuvé" },
+    { id: "e4", from: "n4", to: "n5", label: "" },
+    { id: "e5", from: "n5", to: "n6", label: "" },
+    { id: "e6", from: "n6", to: "n7", label: "" },
+    { id: "e7", from: "n7", to: "n8", label: "" },
+    { id: "e8", from: "n8", to: "n9", label: "" },
+  ],
+};
+
+function bpmnNodeW(label) {
+  return Math.max(90, label.length * 7 + 24);
+}
+function bpmnMakeId() {
+  return "n" + Math.random().toString(36).slice(2, 7);
+}
+function bpmnMakeLaneId() {
+  return "l" + Math.random().toString(36).slice(2, 7);
+}
+
+function BpmnNodeShape({
+  node,
+  selected,
+  onMouseDown,
+  onMouseUp,
+  onHandleMouseDown,
+}) {
+  const col = NODE_COLORS[node.type];
+  const sw = selected ? 2.5 : 1.5;
+
+  const Handle = ({ cx, cy }) => (
+    <circle
+      cx={cx}
+      cy={cy}
+      r={7}
+      fill={col.stroke}
+      opacity={0}
+      style={{ cursor: "crosshair" }}
+      onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
+      onMouseLeave={(e) => (e.currentTarget.style.opacity = "0")}
+      onMouseDown={(e) => {
+        e.stopPropagation();
+        onHandleMouseDown(e, node.id);
+      }}
+    />
+  );
+
+  const shared = {
+    style: { cursor: "pointer" },
+    onMouseDown: (e) => onMouseDown(e, node.id),
+    onMouseUp: (e) => onMouseUp(e, node.id),
+  };
+
+  if (node.type === "start")
+    return (
+      <g transform={`translate(${node.x},${node.y})`} {...shared}>
+        <circle r={18} fill={col.fill} stroke={col.stroke} strokeWidth={sw} />
+        <circle r={12} fill="none" stroke={col.stroke} strokeWidth={1} />
+        <text
+          y={32}
+          textAnchor="middle"
+          fontSize={10}
+          fill={col.text}
+          fontFamily="sans-serif"
+        >
+          {node.label}
+        </text>
+        <Handle cx={18} cy={0} />
+      </g>
+    );
+
+  if (node.type === "end")
+    return (
+      <g transform={`translate(${node.x},${node.y})`} {...shared}>
+        <circle r={18} fill={col.fill} stroke={col.stroke} strokeWidth={sw} />
+        <circle r={10} fill={col.stroke} />
+        <text
+          y={32}
+          textAnchor="middle"
+          fontSize={10}
+          fill={col.text}
+          fontFamily="sans-serif"
+        >
+          {node.label}
+        </text>
+        <Handle cx={-18} cy={0} />
+      </g>
+    );
+
+  if (node.type === "gateway")
+    return (
+      <g transform={`translate(${node.x},${node.y})`} {...shared}>
+        <polygon
+          points="0,-24 24,0 0,24 -24,0"
+          fill={col.fill}
+          stroke={col.stroke}
+          strokeWidth={sw}
+        />
+        <text
+          y={5}
+          textAnchor="middle"
+          fontSize={13}
+          fill={col.text}
+          fontWeight="700"
+          fontFamily="sans-serif"
+        >
+          ?
+        </text>
+        <text
+          y={40}
+          textAnchor="middle"
+          fontSize={10}
+          fill={col.text}
+          fontFamily="sans-serif"
+        >
+          {node.label}
+        </text>
+        <Handle cx={24} cy={0} />
+        <Handle cx={-24} cy={0} />
+        <Handle cx={0} cy={24} />
+      </g>
+    );
+
+  const w = bpmnNodeW(node.label),
+    h = 40;
+  const words = node.label.split(" ");
+  let lines = [],
+    cur = "";
+  words.forEach((word) => {
+    const t = cur ? cur + " " + word : word;
+    if (t.length > 13) {
+      if (cur) lines.push(cur);
+      cur = word;
+    } else cur = t;
+  });
+  if (cur) lines.push(cur);
+  const ty = lines.length > 1 ? -6 : 5;
+
+  return (
+    <g transform={`translate(${node.x},${node.y})`} {...shared}>
+      <rect
+        x={-w / 2}
+        y={-h / 2}
+        width={w}
+        height={h}
+        rx={6}
+        fill={col.fill}
+        stroke={col.stroke}
+        strokeWidth={sw}
+      />
+      {lines.map((l, i) => (
+        <text
+          key={i}
+          y={ty + i * 14}
+          textAnchor="middle"
+          fontSize={10}
+          fill={col.text}
+          fontFamily="sans-serif"
+        >
+          {l}
+        </text>
+      ))}
+      <Handle cx={w / 2} cy={0} />
+      <Handle cx={-w / 2} cy={0} />
+      <Handle cx={0} cy={h / 2} />
+      <Handle cx={0} cy={-h / 2} />
+    </g>
+  );
+}
+
+function BpmnEditor({ onChange, initialData }) {
+  const _useState = useState;
+  const _useRef = useRef;
+  const _useEffect = useEffect;
+  const _useCallback = useCallback;
+
+  const [bNodes, setBNodes] = _useState(
+    () => initialData?.nodes ?? BPMN_SAMPLE.nodes,
+  );
+  const [bEdges, setBEdges] = _useState(
+    () => initialData?.edges ?? BPMN_SAMPLE.edges,
+  );
+  const [bLanes, setBLanes] = _useState(
+    () => initialData?.lanes ?? BPMN_SAMPLE.lanes,
+  );
+  const [bSelected, setBSelected] = _useState(null);
+  const [bMode, setBMode_] = _useState("select");
+  const [bConnectFrom, setBConnectFrom] = _useState(null);
+  const [bZoom, setBZoom] = _useState(1);
+  const [bPan, setBPan] = _useState({ x: 0, y: 0 });
+  const [editingEdge, setEditingEdge] = _useState(null);
+  const [edgeLabel, setEdgeLabel] = _useState("");
+  const [labelInput, setLabelInput] = _useState("");
+  const [laneInput, setLaneInput] = _useState("");
+
+  const dragRef = _useRef(null);
+  const panRef = _useRef(null);
+  const movedRef = _useRef(false);
+  const wrapRef = _useRef(null);
+
+  _useEffect(() => {
+    onChange?.({ nodes: bNodes, edges: bEdges, lanes: bLanes });
+  }, [bNodes, bEdges, bLanes]);
+
+  const selNode = bNodes.find((n) => n.id === bSelected);
+  _useEffect(() => {
+    if (selNode) {
+      setLabelInput(selNode.label);
+      setLaneInput(selNode.lane || "");
+    }
+  }, [bSelected]);
+
+  const svgCoords = _useCallback(
+    (e) => {
+      const r = wrapRef.current.getBoundingClientRect();
+      return {
+        x: (e.clientX - r.left - bPan.x) / bZoom,
+        y: (e.clientY - r.top - bPan.y) / bZoom,
+      };
+    },
+    [bPan, bZoom],
+  );
+
+  function setBMode(m) {
+    setBMode_(m);
+    setBConnectFrom(null);
+  }
+
+  function addBNode(type) {
+    const id = bpmnMakeId();
+    const labels = {
+      task: "Tâche",
+      start: "Début",
+      end: "Fin",
+      gateway: "Décision",
+    };
+    setBNodes((p) => [
+      ...p,
+      {
+        id,
+        type,
+        x: 200 + Math.random() * 300,
+        y: 80 + Math.random() * 250,
+        label: labels[type],
+        lane: null,
+      },
+    ]);
+    setBSelected(id);
+  }
+
+  function addBLane() {
+    setBLanes((p) => [
+      ...p,
+      { id: bpmnMakeLaneId(), label: "Acteur " + (p.length + 1), h: 110 },
+    ]);
+  }
+
+  function deleteBSelected() {
+    if (!bSelected) return;
+    setBNodes((p) => p.filter((n) => n.id !== bSelected));
+    setBEdges((p) =>
+      p.filter((e) => e.from !== bSelected && e.to !== bSelected),
+    );
+    setBSelected(null);
+  }
+
+  function clearBAll() {
+    if (!window.confirm("Réinitialiser le diagramme ?")) return;
+    setBNodes([]);
+    setBEdges([]);
+    setBLanes([]);
+    setBSelected(null);
+  }
+
+  function loadBSample() {
+    setBNodes(BPMN_SAMPLE.nodes);
+    setBEdges(BPMN_SAMPLE.edges);
+    setBLanes(BPMN_SAMPLE.lanes);
+    setBSelected(null);
+    setBPan({ x: 0, y: 0 });
+    setBZoom(1);
+  }
+
+  function onNodeMouseDown(e, id) {
+    e.stopPropagation();
+    if (bMode === "connect") {
+      if (!bConnectFrom) {
+        setBConnectFrom(id);
+        return;
+      }
+      if (bConnectFrom !== id)
+        setBEdges((p) => [
+          ...p,
+          { id: bpmnMakeId(), from: bConnectFrom, to: id, label: "" },
+        ]);
+      setBConnectFrom(null);
+      setBMode("select");
+      return;
+    }
+    if (bMode === "select") {
+      const n = bNodes.find((n) => n.id === id);
+      const c = svgCoords(e);
+      dragRef.current = { id, offX: c.x - n.x, offY: c.y - n.y };
+      movedRef.current = false;
+    }
+  }
+
+  function onNodeMouseUp(e, id) {
+    e.stopPropagation();
+    if (!movedRef.current) setBSelected(id);
+    dragRef.current = null;
+    movedRef.current = false;
+  }
+
+  function onHandleMouseDown(e, id) {
+    e.stopPropagation();
+    setBConnectFrom(id);
+    setBMode_("connect");
+  }
+
+  function onCanvasMouseDown(e) {
+    if (
+      e.target.tagName.toLowerCase() === "svg" ||
+      e.target === wrapRef.current
+    ) {
+      setBSelected(null);
+      setBConnectFrom(null);
+    }
+    if (bMode === "pan")
+      panRef.current = {
+        startX: e.clientX,
+        startY: e.clientY,
+        originX: bPan.x,
+        originY: bPan.y,
+      };
+  }
+
+  function onCanvasMouseMove(e) {
+    if (dragRef.current && bMode === "select") {
+      movedRef.current = true;
+      const c = svgCoords(e);
+      const { id, offX, offY } = dragRef.current;
+      setBNodes((p) =>
+        p.map((n) =>
+          n.id === id ? { ...n, x: c.x - offX, y: c.y - offY } : n,
+        ),
+      );
+    }
+    if (panRef.current)
+      setBPan({
+        x: panRef.current.originX + (e.clientX - panRef.current.startX),
+        y: panRef.current.originY + (e.clientY - panRef.current.startY),
+      });
+  }
+
+  function onCanvasMouseUp() {
+    dragRef.current = null;
+    panRef.current = null;
+    movedRef.current = false;
+  }
+
+  function onWheel(e) {
+    e.preventDefault();
+    setBZoom((z) =>
+      Math.min(2.5, Math.max(0.25, z + (e.deltaY < 0 ? 0.08 : -0.08))),
+    );
+  }
+
+  function onEdgeClick(e, edgeId) {
+    e.stopPropagation();
+    const ed = bEdges.find((x) => x.id === edgeId);
+    setEditingEdge(edgeId);
+    setEdgeLabel(ed?.label || "");
+  }
+
+  function confirmEdgeLabel() {
+    setBEdges((p) =>
+      p.map((e) => (e.id === editingEdge ? { ...e, label: edgeLabel } : e)),
+    );
+    setEditingEdge(null);
+  }
+
+  const computedLanes = bLanes.map((l, i) => ({
+    ...l,
+    y: 40 + bLanes.slice(0, i).reduce((a, x) => a + x.h, 0),
+  }));
+  const totalLaneH = computedLanes.reduce((a, l) => a + l.h, 0);
+
+  const tbtn = (active) => ({
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 5,
+    padding: "5px 11px",
+    borderRadius: 8,
+    border: `1px solid ${active ? C.accent : C.border}`,
+    background: active ? C.lightBg : C.white,
+    color: active ? C.primary : C.text,
+    fontSize: 12,
+    fontWeight: 600,
+    cursor: "pointer",
+    fontFamily: "'Plus Jakarta Sans', sans-serif",
+  });
+  const sep = {
+    width: 1,
+    height: 22,
+    background: C.border,
+    margin: "0 4px",
+    flexShrink: 0,
+  };
+  const pinp = {
+    padding: "5px 10px",
+    borderRadius: 8,
+    border: `1px solid ${C.border}`,
+    background: C.white,
+    fontSize: 12,
+    color: C.text,
+    width: 150,
+    fontFamily: "'Plus Jakarta Sans', sans-serif",
+  };
+  const psel = {
+    padding: "5px 10px",
+    borderRadius: 8,
+    border: `1px solid ${C.border}`,
+    background: C.white,
+    fontSize: 12,
+    color: C.text,
+    fontFamily: "'Plus Jakarta Sans', sans-serif",
+  };
+  const cursors = { select: "default", pan: "grab", connect: "crosshair" };
+
+  return (
+    <div
+      style={{
+        border: `1px solid ${C.border}`,
+        borderRadius: 14,
+        overflow: "hidden",
+        background: C.white,
+      }}
+    >
+      {/* TOOLBAR */}
+      <div
+        style={{
+          display: "flex",
+          gap: 5,
+          padding: "10px 14px",
+          borderBottom: `1px solid ${C.border}`,
+          background: "#f7fbf8",
+          flexWrap: "wrap",
+          alignItems: "center",
+        }}
+      >
+        <button
+          style={tbtn(bMode === "select")}
+          onClick={() => setBMode("select")}
+        >
+          ↖ Sélection
+        </button>
+        <button style={tbtn(bMode === "pan")} onClick={() => setBMode("pan")}>
+          ✥ Déplacer
+        </button>
+        <button
+          style={tbtn(bMode === "connect")}
+          onClick={() => setBMode("connect")}
+        >
+          → Connecter
+        </button>
+        <div style={sep} />
+        <button style={tbtn(false)} onClick={() => addBNode("task")}>
+          ▭ Tâche
+        </button>
+        <button style={tbtn(false)} onClick={() => addBNode("start")}>
+          ● Début
+        </button>
+        <button style={tbtn(false)} onClick={() => addBNode("end")}>
+          ◉ Fin
+        </button>
+        <button style={tbtn(false)} onClick={() => addBNode("gateway")}>
+          ◆ Passerelle
+        </button>
+        <div style={sep} />
+        <button style={tbtn(false)} onClick={addBLane}>
+          ⊞ Lane
+        </button>
+        <button
+          style={{ ...tbtn(false), color: C.danger }}
+          onClick={deleteBSelected}
+        >
+          ✕ Supprimer
+        </button>
+        <div style={sep} />
+        <button style={tbtn(false)} onClick={loadBSample}>
+          ↺ Exemple PFE
+        </button>
+        <button style={{ ...tbtn(false), color: C.muted }} onClick={clearBAll}>
+          🗑 Vider
+        </button>
+        {bConnectFrom && (
+          <span
+            style={{
+              fontSize: 11,
+              color: C.primary,
+              fontWeight: 700,
+              background: C.lightBg,
+              padding: "4px 10px",
+              borderRadius: 8,
+              marginLeft: 4,
+            }}
+          >
+            → Cliquez sur le nœud cible
+          </span>
+        )}
+      </div>
+
+      {/* CANVAS */}
+      <div
+        ref={wrapRef}
+        style={{
+          position: "relative",
+          height: 490,
+          background: "#f9fdfb",
+          overflow: "hidden",
+          cursor: cursors[bMode],
+        }}
+        onMouseDown={onCanvasMouseDown}
+        onMouseMove={onCanvasMouseMove}
+        onMouseUp={onCanvasMouseUp}
+        onWheel={onWheel}
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: "100%",
+            height: "100%",
+          }}
+        >
+          <defs>
+            <marker
+              id="bpmnarr"
+              markerWidth="8"
+              markerHeight="8"
+              refX="7"
+              refY="3.5"
+              orient="auto"
+            >
+              <polygon points="0,0 8,3.5 0,7" fill={C.muted} />
+            </marker>
+            <marker
+              id="bpmnarrsel"
+              markerWidth="8"
+              markerHeight="8"
+              refX="7"
+              refY="3.5"
+              orient="auto"
+            >
+              <polygon points="0,0 8,3.5 0,7" fill="#378ADD" />
+            </marker>
+          </defs>
+          <g transform={`translate(${bPan.x},${bPan.y}) scale(${bZoom})`}>
+            {computedLanes.length > 0 && (
+              <>
+                <rect
+                  x={0}
+                  y={40}
+                  width={1050}
+                  height={totalLaneH}
+                  rx={6}
+                  fill="none"
+                  stroke={C.border}
+                  strokeWidth={1.5}
+                />
+                {computedLanes.map((l, i) => (
+                  <g key={l.id}>
+                    {i > 0 && (
+                      <line
+                        x1={0}
+                        y1={l.y}
+                        x2={1050}
+                        y2={l.y}
+                        stroke={C.border}
+                        strokeWidth={1}
+                        strokeDasharray="5 4"
+                      />
+                    )}
+                    <rect
+                      x={0}
+                      y={l.y}
+                      width={60}
+                      height={l.h}
+                      fill={C.lightBg}
+                      stroke={C.border}
+                      strokeWidth={1}
+                    />
+                    <text
+                      transform={`translate(28,${l.y + l.h / 2}) rotate(-90)`}
+                      textAnchor="middle"
+                      fontSize={10}
+                      fill={C.muted}
+                      fontWeight={600}
+                      fontFamily="sans-serif"
+                    >
+                      {l.label}
+                    </text>
+                  </g>
+                ))}
+              </>
+            )}
+            {bEdges.map((e) => {
+              const from = bNodes.find((n) => n.id === e.from);
+              const to = bNodes.find((n) => n.id === e.to);
+              if (!from || !to) return null;
+              const mx = (from.x + to.x) / 2;
+              const sel = bSelected === e.from || bSelected === e.to;
+              return (
+                <g key={e.id}>
+                  <path
+                    d={`M${from.x},${from.y} C${mx},${from.y} ${mx},${to.y} ${to.x},${to.y}`}
+                    stroke="transparent"
+                    strokeWidth={14}
+                    fill="none"
+                    style={{ cursor: "pointer" }}
+                    onClick={(ev) => onEdgeClick(ev, e.id)}
+                  />
+                  <path
+                    d={`M${from.x},${from.y} C${mx},${from.y} ${mx},${to.y} ${to.x},${to.y}`}
+                    stroke={sel ? "#378ADD" : C.muted}
+                    strokeWidth={sel ? 2 : 1.5}
+                    fill="none"
+                    markerEnd={`url(#bpmnarr${sel ? "sel" : ""})`}
+                    style={{ pointerEvents: "none" }}
+                  />
+                  {e.label && (
+                    <text
+                      x={mx}
+                      y={(from.y + to.y) / 2 - 6}
+                      textAnchor="middle"
+                      fontSize={9}
+                      fill={C.muted}
+                      fontFamily="sans-serif"
+                    >
+                      {e.label}
+                    </text>
+                  )}
+                </g>
+              );
+            })}
+            {bNodes.map((n) => (
+              <BpmnNodeShape
+                key={n.id}
+                node={n}
+                selected={n.id === bSelected}
+                onMouseDown={onNodeMouseDown}
+                onMouseUp={onNodeMouseUp}
+                onHandleMouseDown={onHandleMouseDown}
+              />
+            ))}
+          </g>
+        </svg>
+      </div>
+
+      {/* PROPRIÉTÉS */}
+      <div
+        style={{
+          padding: "10px 14px",
+          borderTop: `1px solid ${C.border}`,
+          background: "#f7fbf8",
+          display: "flex",
+          gap: 10,
+          alignItems: "center",
+          flexWrap: "wrap",
+          fontSize: 12,
+          minHeight: 44,
+        }}
+      >
+        {selNode ? (
+          <>
+            <span style={{ color: C.muted }}>Libellé :</span>
+            <input
+              style={pinp}
+              value={labelInput}
+              onChange={(e) => setLabelInput(e.target.value)}
+              onBlur={() =>
+                setBNodes((p) =>
+                  p.map((n) =>
+                    n.id === bSelected ? { ...n, label: labelInput } : n,
+                  ),
+                )
+              }
+              onKeyDown={(e) =>
+                e.key === "Enter" &&
+                setBNodes((p) =>
+                  p.map((n) =>
+                    n.id === bSelected ? { ...n, label: labelInput } : n,
+                  ),
+                )
+              }
+            />
+            <span style={{ color: C.muted }}>Lane :</span>
+            <select
+              style={psel}
+              value={laneInput}
+              onChange={(e) => {
+                setLaneInput(e.target.value);
+                setBNodes((p) =>
+                  p.map((n) =>
+                    n.id === bSelected
+                      ? { ...n, lane: e.target.value || null }
+                      : n,
+                  ),
+                );
+              }}
+            >
+              <option value="">— Aucune —</option>
+              {bLanes.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.label}
+                </option>
+              ))}
+            </select>
+            <button
+              style={{ ...tbtn(false), color: C.danger, marginLeft: "auto" }}
+              onClick={deleteBSelected}
+            >
+              ✕ Supprimer
+            </button>
+          </>
+        ) : (
+          <span style={{ color: C.muted, fontSize: 11 }}>
+            Cliquez sur un nœud pour le modifier · Survolez un nœud pour les
+            points de connexion
+          </span>
+        )}
+      </div>
+
+      {/* POPUP LABEL ARÊTE */}
+      {editingEdge && (
+        <div
+          style={{
+            padding: "8px 14px",
+            borderTop: `1px solid ${C.border}`,
+            background: C.lightBg,
+            display: "flex",
+            gap: 8,
+            alignItems: "center",
+            fontSize: 12,
+          }}
+        >
+          <span style={{ color: C.muted }}>Libellé de la connexion :</span>
+          <input
+            autoFocus
+            style={pinp}
+            value={edgeLabel}
+            onChange={(e) => setEdgeLabel(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") confirmEdgeLabel();
+              if (e.key === "Escape") setEditingEdge(null);
+            }}
+          />
+          <button
+            style={{
+              ...tbtn(true),
+              background: C.primary,
+              color: "#fff",
+              borderColor: C.primary,
+            }}
+            onClick={confirmEdgeLabel}
+          >
+            ✓ OK
+          </button>
+          <button style={tbtn(false)} onClick={() => setEditingEdge(null)}>
+            Annuler
+          </button>
+        </div>
+      )}
+
+      {/* ZOOM */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "7px 14px",
+          borderTop: `1px solid ${C.border}`,
+          background: "#f7fbf8",
+          fontSize: 11,
+          color: C.muted,
+        }}
+      >
+        <button
+          style={{ ...tbtn(false), padding: "2px 8px", fontSize: 14 }}
+          onClick={() => setBZoom((z) => Math.max(0.25, z - 0.1))}
+        >
+          −
+        </button>
+        <input
+          type="range"
+          min={25}
+          max={250}
+          value={Math.round(bZoom * 100)}
+          onChange={(e) => setBZoom(e.target.value / 100)}
+          style={{ width: 100 }}
+        />
+        <button
+          style={{ ...tbtn(false), padding: "2px 8px", fontSize: 14 }}
+          onClick={() => setBZoom((z) => Math.min(2.5, z + 0.1))}
+        >
+          +
+        </button>
+        <span style={{ minWidth: 36 }}>{Math.round(bZoom * 100)}%</span>
+        <button
+          style={{ ...tbtn(false), padding: "2px 8px", fontSize: 11 }}
+          onClick={() => {
+            setBZoom(1);
+            setBPan({ x: 0, y: 0 });
+          }}
+        >
+          ↺ Réinitialiser vue
+        </button>
+        <div style={{ flex: 1 }} />
+        <span>
+          Mode :{" "}
+          <strong>
+            {
+              {
+                select: "Sélection",
+                pan: "Déplacer vue",
+                connect: "Connexion",
+              }[bMode]
+            }
+          </strong>
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export default function FicheProcessus() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState(0);
-  
-  const processus = PROCESSUS_DATA[id];
-  
-  if (!processus) {
-    return (
-      <div style={styles.page}>
-        <div style={styles.main}>
-          <div style={styles.content}>
-            <div style={{ textAlign: "center", padding: "60px 20px" }}>
-              <h2>Processus non trouvé</h2>
-              <button onClick={() => navigate("/processus")} style={styles.btnBack}>Retour à l'accueil</button>
+  const processus = PROCESSUS_DATA[id] || PROCESSUS_DATA[1];
+
+  /* ══════════════════════════════════════════════════════════════
+     TAB 1 — Informations et historique
+  ══════════════════════════════════════════════════════════════ */
+  const Tab1 = () => (
+    <div>
+      <SectionHeader
+        num="1"
+        title="Informations Générales"
+        sub="Données d'identification et de responsabilité du processus"
+      />
+
+      <div
+        style={{
+          background: C.white,
+          border: `1px solid ${C.border}`,
+          borderRadius: 12,
+          overflow: "hidden",
+          marginBottom: 24,
+        }}
+      >
+        <InfoRow label="Identifiant processus">
+          <span
+            style={{
+              fontWeight: 700,
+              color: C.primary,
+              fontFamily: "'Outfit',sans-serif",
+            }}
+          >
+            {processus.identifiant}
+          </span>
+        </InfoRow>
+        <InfoRow label="Type de processus">
+          <Chip text={processus.typeProcessus} />
+        </InfoRow>
+        <InfoRow label="Désignation">{processus.designation}</InfoRow>
+        <InfoRow label="Pilote du processus">
+          <span style={{ fontWeight: 600 }}>{processus.pilote}</span>
+        </InfoRow>
+        <InfoRow label="Email">
+          <a
+            href={`mailto:${processus.email}`}
+            style={{
+              color: C.primary,
+              textDecoration: "none",
+              fontWeight: 500,
+            }}
+          >
+            {processus.email}
+          </a>
+        </InfoRow>
+        <InfoRow label="Téléphone">{processus.telephone}</InfoRow>
+        <InfoRow label="Sous-département">
+          <Chip
+            text={processus.sousDept}
+            bg={C.lightBg}
+            color={C.primary}
+            border={C.border}
+          />
+        </InfoRow>
+        <InfoRow label="Objectif du processus">
+          <span style={{ lineHeight: 1.7 }}>{processus.objectif}</span>
+        </InfoRow>
+        <InfoRow label="Structures concernées">
+          <div
+            style={{ display: "flex", flexWrap: "wrap", gap: 6, paddingTop: 2 }}
+          >
+            {processus.structures.map((s, i) => (
+              <Chip key={i} text={s} />
+            ))}
+          </div>
+        </InfoRow>
+        <InfoRow label="RACI — Responsable">
+          {processus.raci.responsable}
+        </InfoRow>
+        <InfoRow label="RACI — Approbateur">
+          {processus.raci.approbateur}
+        </InfoRow>
+        <InfoRow label="RACI — Consulté">{processus.raci.consulte}</InfoRow>
+        <InfoRow label="RACI — Informé" last>
+          {processus.raci.informe}
+        </InfoRow>
+      </div>
+
+      <div style={S.divider} />
+
+      <SectionHeader
+        num="2"
+        title="Historique des révisions"
+        sub="Suivi des modifications et versions du processus"
+      />
+
+      <table style={S.table}>
+        <thead>
+          <tr>
+            {["Version", "Date", "Auteur", "Modifications", "Statut"].map(
+              (h) => (
+                <th key={h} style={S.th}>
+                  {h}
+                </th>
+              ),
+            )}
+          </tr>
+        </thead>
+        <tbody>
+          {[
+            {
+              v: "2.1",
+              d: "27/03/2026",
+              a: "Ryma Felkir",
+              m: "Mise à jour des KPIs et ajout des nouvelles étapes",
+              s: "Approuvé",
+            },
+            {
+              v: "2.0",
+              d: "15/01/2026",
+              a: "Ryma Felkir",
+              m: "Refonte complète du processus",
+              s: "Archivé",
+            },
+            {
+              v: "1.0",
+              d: "10/09/2025",
+              a: "Admin Système",
+              m: "Création initiale",
+              s: "Archivé",
+            },
+          ].map((h, i) => (
+            <tr
+              key={i}
+              style={{ background: i % 2 === 0 ? C.white : C.lightBg }}
+            >
+              <td style={S.td}>
+                <span style={{ fontWeight: 700, color: C.primary }}>{h.v}</span>
+              </td>
+              <td style={S.td}>{h.d}</td>
+              <td style={S.td}>{h.a}</td>
+              <td style={S.td}>{h.m}</td>
+              <td style={S.td}>
+                <StatusBadge statut={h.s} />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  /* ══════════════════════════════════════════════════════════════
+     TAB 2 — Éléments Clés
+  ══════════════════════════════════════════════════════════════ */
+  const Tab2 = () => (
+    <div>
+      <SectionHeader
+        num="2"
+        title="Éléments Clés du Processus"
+        sub="Flux, ressources, compétences et indicateurs de performance"
+      />
+
+      {/* Délai + Coût */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: 14,
+          marginBottom: 24,
+        }}
+      >
+        <div
+          style={{
+            background: C.accent,
+            borderRadius: 12,
+            padding: "15px 20px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <span style={{ fontSize: 13, fontWeight: 700, color: C.dark }}>
+            Délai globale
+          </span>
+          <span
+            style={{
+              fontFamily: "'Outfit',sans-serif",
+              fontWeight: 800,
+              fontSize: 15,
+              color: C.dark,
+            }}
+          >
+            {processus.periode}
+          </span>
+        </div>
+        <div
+          style={{
+            background: "#fef3c7",
+            border: "1px solid #fde68a",
+            borderRadius: 12,
+            padding: "15px 20px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <span style={{ fontSize: 13, fontWeight: 700, color: "#78350f" }}>
+            Coût estimé
+          </span>
+          <span
+            style={{
+              fontFamily: "'Outfit',sans-serif",
+              fontWeight: 700,
+              fontSize: 13,
+              color: "#78350f",
+            }}
+          >
+            {processus.coutEstime}
+          </span>
+        </div>
+      </div>
+
+      {/* Flux */}
+      <div
+        style={{
+          fontSize: 14,
+          fontWeight: 700,
+          color: C.text,
+          marginBottom: 12,
+        }}
+      >
+        Flux d'entrées / sorties
+      </div>
+      <div style={{ display: "flex", gap: 0, marginBottom: 24 }}>
+        <div
+          style={{
+            flex: 1,
+            background: C.white,
+            border: `1px solid ${C.border}`,
+            borderRadius: "12px 0 0 12px",
+            padding: "16px 18px",
+            minHeight: 120,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              color: C.muted,
+              textTransform: "uppercase",
+              letterSpacing: 1,
+              marginBottom: 10,
+            }}
+          >
+            ↙ Entrées
+          </div>
+          {processus.fluxEntrees.map((f, i) => (
+            <div
+              key={i}
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                gap: 8,
+                marginBottom: 7,
+              }}
+            >
+              <span style={{ color: C.accent, flexShrink: 0 }}>→</span>
+              <span style={{ fontSize: 13, color: C.text }}>{f}</span>
+            </div>
+          ))}
+        </div>
+        <div
+          style={{
+            width: 48,
+            background: C.lightBg,
+            border: `1px solid ${C.border}`,
+            borderLeft: "none",
+            borderRight: "none",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+            <path
+              d="M8 7l4-4 4 4M8 17l4 4 4-4M12 3v18"
+              stroke={C.muted}
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </div>
+        <div
+          style={{
+            flex: 1,
+            background: C.white,
+            border: `1px solid ${C.border}`,
+            borderRadius: "0 12px 12px 0",
+            padding: "16px 18px",
+            minHeight: 120,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              color: C.muted,
+              textTransform: "uppercase",
+              letterSpacing: 1,
+              marginBottom: 10,
+            }}
+          >
+            Sorties ↗
+          </div>
+          {processus.fluxSorties.map((f, i) => (
+            <div
+              key={i}
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                gap: 8,
+                marginBottom: 7,
+              }}
+            >
+              <span style={{ color: C.accent, flexShrink: 0 }}>→</span>
+              <span style={{ fontSize: 13, color: C.text }}>{f}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Infos tableau */}
+      <div
+        style={{
+          background: C.white,
+          border: `1px solid ${C.border}`,
+          borderRadius: 12,
+          overflow: "hidden",
+          marginBottom: 24,
+        }}
+      >
+        <InfoRow label="Clients (bénéficiaires)...">
+          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+            {processus.clients.map((c, i) => (
+              <span key={i}>· {c}</span>
+            ))}
+          </div>
+        </InfoRow>
+        <InfoRow label="Effectifs impliqués...">
+          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+            {processus.effectifs.map((e, i) => (
+              <span key={i}>{e}</span>
+            ))}
+          </div>
+        </InfoRow>
+        <InfoRow label="Compétences clés...">
+          <div
+            style={{ display: "flex", flexWrap: "wrap", gap: 4, paddingTop: 2 }}
+          >
+            {processus.competences.map((c, i) => (
+              <Chip key={i} text={c} />
+            ))}
+          </div>
+        </InfoRow>
+        <InfoRow label="Ressources matérielles...">
+          <div
+            style={{ display: "flex", flexWrap: "wrap", gap: 4, paddingTop: 2 }}
+          >
+            {processus.ressourcesMat.map((r, i) => (
+              <Chip
+                key={i}
+                text={r}
+                bg="#eff6ff"
+                color="#1d4ed8"
+                border="#bfdbfe"
+              />
+            ))}
+          </div>
+        </InfoRow>
+        <InfoRow label="Ressources logicielles..." last>
+          <div
+            style={{ display: "flex", flexWrap: "wrap", gap: 4, paddingTop: 2 }}
+          >
+            {processus.ressourcesLog.map((r, i) => (
+              <Chip
+                key={i}
+                text={r}
+                bg="#fdf4ff"
+                color="#7e22ce"
+                border="#e9d5ff"
+              />
+            ))}
+          </div>
+        </InfoRow>
+      </div>
+
+      {/* KPIs */}
+      <div style={S.divider} />
+      <SectionHeader
+        num="2b"
+        title="KPIs — Indicateurs de Performance"
+        sub="Valeurs cibles, seuils d'alerte et responsables de suivi"
+      />
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        {processus.kpis.map((kpi, i) => (
+          <div
+            key={i}
+            style={{
+              background: kpi.couleur,
+              borderRadius: 14,
+              border: `1px solid ${kpi.couleurTexte}22`,
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "12px 18px",
+                borderBottom: `1px solid ${kpi.couleurTexte}18`,
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: kpi.couleurTexte,
+                  fontFamily: "'Plus Jakarta Sans',sans-serif",
+                }}
+              >
+                {kpi.nom}
+              </span>
+              <Chip
+                text={kpi.frequence}
+                bg="rgba(255,255,255,0.6)"
+                color={kpi.couleurTexte}
+                border={kpi.couleurTexte + "33"}
+              />
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr 1fr 1fr",
+                gap: 0,
+              }}
+            >
+              {[
+                { label: "Valeur cible", value: kpi.valeurCible, big: true },
+                { label: "Seuil d'alerte", value: kpi.seuilAlerte },
+                { label: "Unité", value: kpi.unite },
+                { label: "Responsable", value: kpi.responsable },
+              ].map((f, j) => (
+                <div
+                  key={j}
+                  style={{
+                    padding: "12px 16px",
+                    borderRight:
+                      j < 3 ? `1px solid ${kpi.couleurTexte}15` : "none",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      color: kpi.couleurTexte,
+                      opacity: 0.65,
+                      textTransform: "uppercase",
+                      letterSpacing: 0.8,
+                      marginBottom: 6,
+                    }}
+                  >
+                    {f.label}
+                  </div>
+                  <div
+                    style={{
+                      fontFamily: f.big
+                        ? "'Outfit',sans-serif"
+                        : "'Plus Jakarta Sans',sans-serif",
+                      fontWeight: f.big ? 900 : 600,
+                      fontSize: f.big ? 22 : 14,
+                      color: kpi.couleurTexte,
+                      lineHeight: 1.2,
+                    }}
+                  >
+                    {f.value}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  /* ══════════════════════════════════════════════════════════════
+     TAB 3 — Contexte
+  ══════════════════════════════════════════════════════════════ */
+  const Tab3 = () => (
+    <div>
+      <SectionHeader
+        num="3"
+        title="Contexte et Environnement"
+        sub="Cartographie des processus voisins et facteurs contextuels"
+      />
+
+      <div
+        style={{
+          fontSize: 14,
+          fontWeight: 700,
+          color: C.text,
+          marginBottom: 14,
+        }}
+      >
+        Processus voisins
+      </div>
+      <div style={{ display: "flex", gap: 0, marginBottom: 28 }}>
+        <div
+          style={{
+            flex: 1,
+            background: C.white,
+            border: `1px solid ${C.border}`,
+            borderRadius: "12px 0 0 12px",
+            padding: "16px 18px",
+            minHeight: 140,
+          }}
+        >
+          <div
+            style={{
+              display: "inline-flex",
+              background: C.lightBg,
+              border: `1px solid ${C.border}`,
+              borderRadius: 6,
+              padding: "4px 10px",
+              marginBottom: 14,
+            }}
+          >
+            <span style={{ fontSize: 12, fontWeight: 700, color: C.primary }}>
+              — AMONT
+            </span>
+          </div>
+          {processus.processusAmont.map((p, i) => (
+            <div
+              key={i}
+              style={{
+                background: "#e8f5e9",
+                border: "1px solid #c8e6c9",
+                borderRadius: 8,
+                padding: "8px 12px",
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                marginBottom: 8,
+              }}
+            >
+              <span style={{ color: C.primary, fontSize: 12 }}>←</span>
+              <span style={{ fontSize: 13, color: C.text }}>{p}</span>
+            </div>
+          ))}
+        </div>
+        <div
+          style={{
+            width: 48,
+            background: C.lightBg,
+            border: `1px solid ${C.border}`,
+            borderLeft: "none",
+            borderRight: "none",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+            <path
+              d="M8 7l4-4 4 4M8 17l4 4 4-4M12 3v18"
+              stroke={C.muted}
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </div>
+        <div
+          style={{
+            flex: 1,
+            background: C.white,
+            border: `1px solid ${C.border}`,
+            borderRadius: "0 12px 12px 0",
+            padding: "16px 18px",
+            minHeight: 140,
+          }}
+        >
+          <div
+            style={{
+              display: "inline-flex",
+              background: C.lightBg,
+              border: `1px solid ${C.border}`,
+              borderRadius: 6,
+              padding: "4px 10px",
+              marginBottom: 14,
+            }}
+          >
+            <span style={{ fontSize: 12, fontWeight: 700, color: C.primary }}>
+              AVAL —
+            </span>
+          </div>
+          {processus.processusAval.map((p, i) => (
+            <div
+              key={i}
+              style={{
+                background: "#e8f5e9",
+                border: "1px solid #c8e6c9",
+                borderRadius: 8,
+                padding: "8px 12px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 6,
+                marginBottom: 8,
+              }}
+            >
+              <span style={{ fontSize: 13, color: C.text }}>{p}</span>
+              <span style={{ color: C.primary, fontSize: 12 }}>→</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div
+        style={{
+          background: C.white,
+          border: `1px solid ${C.border}`,
+          borderRadius: 12,
+          overflow: "hidden",
+          marginBottom: 24,
+        }}
+      >
+        <InfoRow label="Enjeux stratégiques">
+          <span style={{ lineHeight: 1.7 }}>
+            {processus.enjeuxStrategiques}
+          </span>
+        </InfoRow>
+        <InfoRow label="Moyens alloués">
+          <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+            {processus.moyensAlloues.map((m, i) => (
+              <div
+                key={i}
+                style={{
+                  display: "inline-flex",
+                  background: "#e8f5e9",
+                  border: "1px solid #c8e6c9",
+                  borderRadius: 20,
+                  padding: "5px 14px",
+                  width: "fit-content",
+                }}
+              >
+                <span
+                  style={{ fontSize: 12, fontWeight: 600, color: C.primary }}
+                >
+                  {m}
+                </span>
+              </div>
+            ))}
+          </div>
+        </InfoRow>
+        <InfoRow label="Contraintes">
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {processus.contraintes.map((c, i) => (
+              <div
+                key={i}
+                style={{ display: "flex", alignItems: "center", gap: 8 }}
+              >
+                <span style={{ color: "#f59e0b", fontSize: 14 }}>⚡</span>
+                <span style={{ fontSize: 13, color: C.text }}>{c}</span>
+              </div>
+            ))}
+          </div>
+        </InfoRow>
+        <InfoRow label="Risques identifiés" last>
+          <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+            {processus.risques.map((r, i) => {
+              const palettes = [
+                { bg: "#fef3c7", text: "#78350f", border: "#fde68a" },
+                { bg: "#fee2e2", text: "#7f1d1d", border: "#fecaca" },
+                { bg: "#d4e8f5", text: "#1a4a6b", border: "#bfdbfe" },
+              ];
+              const p = palettes[i % palettes.length];
+              const crit = parseInt(r.probabilite) * parseInt(r.gravite);
+              const critColor =
+                crit >= 9 ? "#e53935" : crit >= 4 ? C.warn : "#4caf50";
+              return (
+                <div
+                  key={i}
+                  style={{
+                    background: p.bg,
+                    border: `1px solid ${p.border}`,
+                    borderRadius: 20,
+                    padding: "7px 14px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 10,
+                  }}
+                >
+                  <span
+                    style={{ fontSize: 12, fontWeight: 600, color: p.text }}
+                  >
+                    {r.description}
+                  </span>
+                  <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                    <span
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 700,
+                        color: critColor,
+                        background: critColor + "18",
+                        padding: "2px 8px",
+                        borderRadius: 10,
+                      }}
+                    >
+                      C:{crit}
+                    </span>
+                    <span style={{ fontSize: 10, color: p.text, opacity: 0.7 }}>
+                      {r.responsable}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </InfoRow>
+      </div>
+    </div>
+  );
+
+  /* ══════════════════════════════════════════════════════════════
+     TAB 4 — Documentation
+  ══════════════════════════════════════════════════════════════ */
+  const Tab4 = () => {
+    const handleFileDownload = (titre, format = "pdf") => {
+      const content = `Document: ${titre}\n\nThis is a sample document for ${titre}.\n\nIn a real implementation, this would be an actual file from your server.`;
+      const blob = new Blob([content], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${titre.toLowerCase().replace(/\s+/g, "_")}.${format}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    };
+
+    return (
+      <div>
+        <div style={S.sectionHeader}>
+          <div style={S.sectionNum}>1</div>
+          <div>
+            <div style={S.sectionTitle}>Informations Documentées</div>
+            <div style={S.sectionSub}>
+              Documents de référence et preuves de réalisation du processus
+            </div>
+          </div>
+        </div>
+
+        <div
+          style={{
+            background: C.lightBg,
+            padding: "16px 20px",
+            borderRadius: 12,
+            marginBottom: 28,
+            fontSize: 13,
+            color: C.text,
+            lineHeight: 1.6,
+            border: `1px solid ${C.border}`,
+          }}
+        >
+          {processus.documentsDescription ||
+            "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."}
+        </div>
+
+        <div style={{ marginBottom: 20 }}>
+          <div
+            style={{
+              fontSize: 16,
+              fontWeight: 700,
+              color: C.text,
+              fontFamily: "'Outfit', sans-serif",
+              marginBottom: 8,
+            }}
+          >
+            Documents de référence
+          </div>
+          <div
+            style={{
+              fontSize: 12,
+              color: C.muted,
+              marginBottom: 16,
+            }}
+          >
+            Documents normatifs et de référence associés au processus
+          </div>
+        </div>
+
+        <div style={{ overflowX: "auto", marginBottom: 24 }}>
+          <table style={S.table}>
+            <thead>
+              <tr>
+                <th style={S.th}>ID</th>
+                <th style={S.th}>Titre / Description</th>
+                <th style={S.th}>Format &amp; Support</th>
+                <th style={S.th}>Revue &amp; Approbation</th>
+                <th style={S.th}>Version</th>
+              </tr>
+            </thead>
+            <tbody>
+              {processus.documents.map((doc, i) => (
+                <tr key={i}>
+                  <td style={S.td}>{doc.id}</td>
+                  <td style={S.td}>{doc.titre}</td>
+                  <td style={S.td}>{doc.format}</td>
+                  <td style={S.td}>{doc.revue}</td>
+                  <td style={S.td}>{doc.version}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "flex-end",
+            marginBottom: 28,
+            fontSize: 12,
+            color: C.muted,
+          }}
+        >
+          Page 1 | 1
+        </div>
+
+        <div style={{ marginBottom: 20 }}>
+          <div
+            style={{
+              fontSize: 16,
+              fontWeight: 700,
+              color: C.text,
+              fontFamily: "'Outfit', sans-serif",
+              marginBottom: 8,
+            }}
+          >
+            Enregistrements (preuves de réalisation)
+          </div>
+          <div
+            style={{
+              fontSize: 12,
+              color: C.muted,
+              marginBottom: 16,
+            }}
+          >
+            Traces et preuves de l'exécution du processus (cliquez pour
+            télécharger)
+          </div>
+        </div>
+
+        <div
+          style={{
+            background: C.lightBg,
+            borderRadius: 12,
+            padding: "20px 24px",
+            border: `1px solid ${C.border}`,
+          }}
+        >
+          {processus.preuves.map((preuve, i) => (
+            <div
+              key={i}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                padding: "8px 0",
+                borderBottom:
+                  i < processus.preuves.length - 1
+                    ? `1px solid ${C.border}`
+                    : "none",
+                cursor: "pointer",
+                transition: "all 0.2s",
+              }}
+              onClick={() =>
+                handleFileDownload(preuve.titre, preuve.format || "pdf")
+              }
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "rgba(119,213,143,0.1)";
+                e.currentTarget.style.paddingLeft = "8px";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "transparent";
+                e.currentTarget.style.paddingLeft = "0";
+              }}
+            >
+              <span
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: "50%",
+                  background: C.accent,
+                  flexShrink: 0,
+                }}
+              />
+              <span
+                style={{
+                  fontSize: 14,
+                  color: C.primary,
+                  textDecoration: "underline",
+                  textUnderlineOffset: "3px",
+                  fontWeight: 500,
+                }}
+              >
+                {preuve.titre}
+              </span>
+              <span
+                style={{
+                  marginLeft: "auto",
+                  fontSize: 11,
+                  color: C.muted,
+                }}
+              >
+                📄 {preuve.format || "PDF"}
+              </span>
+            </div>
+          ))}
         </div>
       </div>
     );
-  }
-  
-  const completionPct = 85; // Calculate based on filled fields
-  
-  // Helper component for displaying label/value pairs
-  const InfoField = ({ label, value }) => (
-    <div style={styles.infoRow}>
-      <div style={styles.label}>{label}</div>
-      <div style={styles.value}>{value || "—"}</div>
-    </div>
-  );
-  
-const Tab1 = () => (
-  <div>
-    {/* Informations section */}
-    <div style={styles.sectionHeader}>
-      <div style={styles.sectionNum}>1</div>
-      <div>
-        <div style={styles.sectionTitle}>Informations Générales</div>
-        <div style={styles.sectionSub}>Données d'identification et de responsabilité du processus</div>
-      </div>
-    </div>
-    
-    <div style={styles.grid2}>
-      <InfoField label="Identifiant processus" value={processus.identifiant} />
-      <InfoField label="Type de processus" value={processus.typeProcessus} />
-      <InfoField label="Désignation du processus" value={processus.designation} />
-      <InfoField label="Pilote du processus" value={processus.pilote} />
-      <InfoField label="Email" value={processus.email} />
-      <InfoField label="Téléphone" value={processus.telephone} />
-      <InfoField label="Sous-département" value={processus.sousDept} />
-      <div style={styles.gridFull}>
-        <InfoField label="Objectif du processus" value={processus.objectif} />
-      </div>
-    </div>
-    
-    {/* Structures concernées (displayed as tags/chips) */}
-    <div style={{ marginTop: 24, marginBottom: 24 }}>
-      <div style={styles.label}>Structures concernées</div>
-      <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 10 }}>
-        {processus.structures.map((s, i) => (
-          <span key={i} style={{
-            background: C.lightBg,
-            border: `1px solid ${C.border}`,
-            borderRadius: 8,
-            padding: "8px 16px",
-            fontSize: 13,
-            fontWeight: 500,
-            color: C.text,
-          }}>
-            {s}
-          </span>
-        ))}
-      </div>
-    </div>
-    
-    <div style={styles.divider} />
-    
-    {/* Historique des révisions section */}
-    <div style={styles.sectionHeader}>
-      <div style={styles.sectionNum}>2</div>
-      <div>
-        <div style={styles.sectionTitle}>Historique des révisions</div>
-        <div style={styles.sectionSub}>Suivi des modifications du processus</div>
-      </div>
-    </div>
-    
-    {/* Version history table */}
-    <table style={styles.table}>
-      <thead>
-        <tr>
-          <th style={styles.th}>Version</th>
-          <th style={styles.th}>Date</th>
-          <th style={styles.th}>Auteur</th>
-          <th style={styles.th}>Modifications</th>
-          <th style={styles.th}>Statut</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td style={styles.td}>2.1</td>
-          <td style={styles.td}>27/03/2026</td>
-          <td style={styles.td}>Ryma Felkir</td>
-          <td style={styles.td}>Mise à jour des KPIs et ajout des nouvelles étapes</td>
-          <td style={styles.td}>
-            <span style={{
-              background: "#dcfce7",
-              color: "#166534",
-              padding: "2px 8px",
-              borderRadius: 12,
-              fontSize: 11,
-              fontWeight: 600,
-            }}>Approuvé</span>
-          </td>
-        </tr>
-        <tr>
-          <td style={styles.td}>2.0</td>
-          <td style={styles.td}>15/01/2026</td>
-          <td style={styles.td}>Ryma Felkir</td>
-          <td style={styles.td}>Refonte complète du processus</td>
-          <td style={styles.td}>
-            <span style={{
-              background: "#f3f4f6",
-              color: "#6b7280",
-              padding: "2px 8px",
-              borderRadius: 12,
-              fontSize: 11,
-              fontWeight: 600,
-            }}>Archivé</span>
-          </td>
-        </tr>
-        <tr>
-          <td style={styles.td}>1.0</td>
-          <td style={styles.td}>10/09/2025</td>
-          <td style={styles.td}>Admin Système</td>
-          <td style={styles.td}>Création initiale</td>
-          <td style={styles.td}>
-            <span style={{
-              background: "#f3f4f6",
-              color: "#6b7280",
-              padding: "2px 8px",
-              borderRadius: 12,
-              fontSize: 11,
-              fontWeight: 600,
-            }}>Archivé</span>
-          </td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-);
-  
-  const Tab2 = () => (
-    <div>
-      <div style={styles.sectionHeader}>
-        <div style={styles.sectionNum}>1</div>
-        <div>
-          <div style={styles.sectionTitle}>Éléments Clés du Processus</div>
-          <div style={styles.sectionSub}>Flux, ressources, compétences et indicateurs de performance</div>
-        </div>
-      </div>
-      
-      <div style={styles.grid2}>
-        <InfoField label="Période / Mois" value={processus.periode} />
-        <InfoField label="Objectif stratégique" value={processus.objectifStrategique} />
-        <InfoField label="Clients / Bénéficiaires" value={processus.clients} />
-        <InfoField label="Effectifs impliqués" value={processus.effectifs} />
-      </div>
-      
-      <div style={styles.divider} />
-      
-      <div style={styles.fluxBox}>
-        <div>
-          <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 8 }}>↙ Entrées</div>
-          {processus.fluxEntrees.map((item, i) => (
-            <div key={i} style={{ padding: "4px 0", fontSize: 13 }}>• {item}</div>
-          ))}
-        </div>
-        <div style={styles.fluxArrow}>⇄</div>
-        <div>
-          <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 8 }}>Sorties ↗</div>
-          {processus.fluxSorties.map((item, i) => (
-            <div key={i} style={{ padding: "4px 0", fontSize: 13 }}>• {item}</div>
-          ))}
-        </div>
-      </div>
-      
-      <div style={styles.grid2}>
-        <div style={styles.gridFull}>
-          <div style={styles.label}>Compétences clés</div>
-          <div>
-            {processus.competences.map((c, i) => (
-              <span key={i} style={styles.tag}>{c}</span>
-            ))}
-          </div>
-        </div>
-        <div>
-          <div style={styles.label}>Ressources matérielles</div>
-          <div>
-            {processus.ressourcesMat.map((r, i) => (
-              <span key={i} style={styles.tag}>{r}</span>
-            ))}
-          </div>
-        </div>
-        <div>
-          <div style={styles.label}>Ressources logicielles</div>
-          <div>
-            {processus.ressourcesLog.map((r, i) => (
-              <span key={i} style={styles.tag}>{r}</span>
-            ))}
-          </div>
-        </div>
-      </div>
-      
-      <div style={styles.divider} />
-      
-      <div style={styles.sectionHeader}>
-        <div style={styles.sectionNum}>2</div>
-        <div>
-          <div style={styles.sectionTitle}>KPIs — Indicateurs de Performance</div>
-        </div>
-      </div>
-      
-      {processus.kpis.map((kpi, i) => (
-        <div key={i} style={styles.kpiCard}>
-          <div style={styles.kpiCardTitle}>KPI #{i + 1}: {kpi.nom}</div>
-          <div style={styles.grid3}>
-            <InfoField label="Unité" value={kpi.unite} />
-            <InfoField label="Valeur cible" value={kpi.valeurCible} />
-            <InfoField label="Seuil d'alerte" value={kpi.seuilAlerte} />
-            <InfoField label="Fréquence" value={kpi.frequence} />
-            <InfoField label="Responsable" value={kpi.responsable} />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-  
-  const Tab3 = () => (
-    <div>
-      <div style={styles.sectionHeader}>
-        <div style={styles.sectionNum}>1</div>
-        <div>
-          <div style={styles.sectionTitle}>Contexte et Environnement</div>
-        </div>
-      </div>
-      
-      <div style={styles.fluxBox}>
-        <div>
-          <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 8 }}>← Processus AMONT</div>
-          {processus.processusAmont.map((item, i) => (
-            <div key={i} style={{ padding: "4px 0", fontSize: 13 }}>• {item}</div>
-          ))}
-        </div>
-        <div style={styles.fluxArrow}>⇄</div>
-        <div>
-          <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 8 }}>Processus AVAL →</div>
-          {processus.processusAval.map((item, i) => (
-            <div key={i} style={{ padding: "4px 0", fontSize: 13 }}>• {item}</div>
-          ))}
-        </div>
-      </div>
-      
-      <InfoField label="Enjeux stratégiques" value={processus.enjeuxStrategiques} />
-      
-      <div style={styles.grid2}>
-        <div>
-          <div style={styles.label}>Moyens alloués</div>
-          <div>
-            {processus.moyensAlloues.map((m, i) => (
-              <span key={i} style={styles.tag}>{m}</span>
-            ))}
-          </div>
-        </div>
-        <div>
-          <div style={styles.label}>Contraintes</div>
-          <div>
-            {processus.contraintes.map((c, i) => (
-              <span key={i} style={styles.tag}>{c}</span>
-            ))}
-          </div>
-        </div>
-      </div>
-      
-      <div style={styles.divider} />
-      
-      <div style={styles.sectionHeader}>
-        <div style={styles.sectionNum}>2</div>
-        <div>
-          <div style={styles.sectionTitle}>Risques identifiés</div>
-        </div>
-      </div>
-      
-      {processus.risques.map((r, i) => {
-        const crit = parseInt(r.probabilite) * parseInt(r.gravite);
-        const critColor = crit >= 9 ? C.danger : crit >= 4 ? C.warn : "#4caf50";
-        return (
-          <div key={i} style={styles.riskCard}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
-              <span style={styles.kpiCardTitle}>Risque #{i + 1}</span>
-              <span style={{ ...styles.critBadge, background: critColor + "22", color: critColor }}>
-                Criticité : {crit}
-              </span>
-            </div>
-            <div style={styles.grid2}>
-              <div style={styles.gridFull}>
-                <div style={styles.label}>Description</div>
-                <div style={styles.value}>{r.description}</div>
-              </div>
-              <InfoField label="Probabilité" value={r.probabilite === "1" ? "Faible" : r.probabilite === "2" ? "Moyenne" : "Élevée"} />
-              <InfoField label="Gravité" value={r.gravite === "1" ? "Mineure" : r.gravite === "2" ? "Modérée" : "Sévère"} />
-              <div style={styles.gridFull}>
-                <InfoField label="Mesure d'atténuation" value={r.mesure} />
-              </div>
-              <InfoField label="Responsable" value={r.responsable} />
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-  
-const Tab4 = () => {
-  // Helper function to trigger file download
-  const handleFileDownload = (titre, format = "pdf") => {
-    // Create a sample file content (in real implementation, this would come from your backend)
-    // For demo purposes, we're creating a text blob
-    const content = `Document: ${titre}\n\nThis is a sample document for ${titre}.\n\nIn a real implementation, this would be an actual file from your server.`;
-    const blob = new Blob([content], { type: 'application/pdf' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${titre.toLowerCase().replace(/\s+/g, '_')}.${format}`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
   };
 
-  return (
-    <div>
-      {/* Informations Documentées section */}
-      <div style={styles.sectionHeader}>
-        <div style={styles.sectionNum}>1</div>
-        <div>
-          <div style={styles.sectionTitle}>Informations Documentées</div>
-          <div style={styles.sectionSub}>Documents de référence et preuves de réalisation du processus</div>
+  /* ══════════════════════════════════════════════════════════════
+     TAB 5 — Dysfonctionnements
+  ══════════════════════════════════════════════════════════════ */
+  const Tab5 = () => {
+    const [dysfIndex, setDysfIndex] = useState(0);
+    const dysfonctionnementsList = processus.dysfonctionnements || [];
+    const currentDysf = dysfonctionnementsList[dysfIndex];
+
+    const goToPrev = () => {
+      setDysfIndex((prev) =>
+        prev > 0 ? prev - 1 : dysfonctionnementsList.length - 1,
+      );
+    };
+
+    const goToNext = () => {
+      setDysfIndex((prev) =>
+        prev < dysfonctionnementsList.length - 1 ? prev + 1 : 0,
+      );
+    };
+
+    return (
+      <div>
+        <div style={S.sectionHeader}>
+          <div style={S.sectionNum}>1</div>
+          <div>
+            <div style={S.sectionTitle}>Dysfonctionnements Majeurs Connus</div>
+            <div style={S.sectionSub}>
+              Recenser les problèmes récurrents et proposer des améliorations
+            </div>
+          </div>
         </div>
-      </div>
-      
-      {/* Description text */}
-      <div style={{
-        background: C.lightBg,
-        padding: "16px 20px",
-        borderRadius: 12,
-        marginBottom: 28,
-        fontSize: 13,
-        color: C.text,
-        lineHeight: 1.6,
-        border: `1px solid ${C.border}`,
-      }}>
-        {processus.documentsDescription || "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."}
-      </div>
-      
-      {/* Documents de référence - Subsection (no number) */}
-      <div style={{ marginBottom: 20 }}>
-        <div style={{
-          fontSize: 16,
-          fontWeight: 700,
-          color: C.text,
-          fontFamily: "'Outfit', sans-serif",
-          marginBottom: 8,
-        }}>
-          Documents de référence
+
+        <div
+          style={{
+            background: C.lightBg,
+            padding: "16px 20px",
+            borderRadius: 12,
+            marginBottom: 28,
+            fontSize: 13,
+            color: C.text,
+            lineHeight: 1.6,
+            border: `1px solid ${C.border}`,
+          }}
+        >
+          {processus.dysfonctionnementsDescription ||
+            "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."}
         </div>
-        <div style={{
-          fontSize: 12,
-          color: C.muted,
-          marginBottom: 16,
-        }}>
-          Documents normatifs et de référence associés au processus
-        </div>
-      </div>
-      
-      {/* Documents table */}
-      <div style={{ overflowX: "auto", marginBottom: 24 }}>
-        <table style={styles.table}>
-          <thead>
-            <tr>
-              <th style={styles.th}>ID</th>
-              <th style={styles.th}>Titre / Description</th>
-              <th style={styles.th}>Format & Support</th>
-              <th style={styles.th}>Revue & Approbation</th>
-              <th style={styles.th}>Version</th>
-            </tr>
-          </thead>
-          <tbody>
-            {processus.documents.map((doc, i) => (
-              <tr key={i}>
-                <td style={styles.td}>{doc.id}</td>
-                <td style={styles.td}>{doc.titre}</td>
-                <td style={styles.td}>{doc.format}</td>
-                <td style={styles.td}>{doc.revue}</td>
-                <td style={styles.td}>{doc.version}</td>
+
+        <div
+          style={{
+            border: `1px solid ${C.border}`,
+            borderRadius: 12,
+            overflow: "hidden",
+            marginBottom: 24,
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              background: C.lightBg,
+              padding: "14px 20px",
+              borderBottom: `1px solid ${C.border}`,
+            }}
+          >
+            <div
+              style={{
+                fontSize: 14,
+                fontWeight: 700,
+                color: C.primary,
+              }}
+            >
+              Dysfonctionnement #{dysfIndex + 1}: {currentDysf?.titre || ""}
+            </div>
+
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                onClick={goToPrev}
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 8,
+                  border: `1px solid ${C.border}`,
+                  background: C.white,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 16,
+                  color: C.primary,
+                  transition: "all 0.2s",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = C.lightBg;
+                  e.currentTarget.style.borderColor = C.accent;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = C.white;
+                  e.currentTarget.style.borderColor = C.border;
+                }}
+              >
+                ←
+              </button>
+              <button
+                onClick={goToNext}
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 8,
+                  border: `1px solid ${C.border}`,
+                  background: C.white,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 16,
+                  color: C.primary,
+                  transition: "all 0.2s",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = C.lightBg;
+                  e.currentTarget.style.borderColor = C.accent;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = C.white;
+                  e.currentTarget.style.borderColor = C.border;
+                }}
+              >
+                →
+              </button>
+            </div>
+          </div>
+
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <tbody>
+              <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                <td
+                  style={{
+                    width: "200px",
+                    padding: "14px 20px",
+                    background: "#fafafa",
+                    fontWeight: 600,
+                    fontSize: 13,
+                    color: C.muted,
+                    textTransform: "uppercase",
+                    letterSpacing: 0.5,
+                    borderRight: `1px solid ${C.border}`,
+                  }}
+                >
+                  Description
+                </td>
+                <td
+                  style={{
+                    padding: "14px 20px",
+                    fontSize: 14,
+                    color: C.text,
+                    lineHeight: 1.5,
+                  }}
+                >
+                  {currentDysf?.description}
+                </td>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      
-      {/* Pagination indicator */}
-      <div style={{
-        display: "flex",
-        justifyContent: "flex-end",
-        marginBottom: 28,
-        fontSize: 12,
-        color: C.muted,
-      }}>
-        Page 1 | 1
-      </div>
-      
-      {/* Enregistrements - Subsection (no number) */}
-      <div style={{ marginBottom: 20 }}>
-        <div style={{
-          fontSize: 16,
-          fontWeight: 700,
-          color: C.text,
-          fontFamily: "'Outfit', sans-serif",
-          marginBottom: 8,
-        }}>
-          Enregistrements (preuves de réalisation)
+
+              <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                <td
+                  style={{
+                    width: "200px",
+                    padding: "14px 20px",
+                    background: "#fafafa",
+                    fontWeight: 600,
+                    fontSize: 13,
+                    color: C.muted,
+                    textTransform: "uppercase",
+                    letterSpacing: 0.5,
+                    borderRight: `1px solid ${C.border}`,
+                  }}
+                >
+                  Conséquences
+                </td>
+                <td
+                  style={{
+                    padding: "14px 20px",
+                    fontSize: 14,
+                    color: C.text,
+                    lineHeight: 1.5,
+                  }}
+                >
+                  {currentDysf?.consequences}
+                </td>
+              </tr>
+
+              <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                <td
+                  style={{
+                    width: "200px",
+                    padding: "14px 20px",
+                    background: "#fafafa",
+                    fontWeight: 600,
+                    fontSize: 13,
+                    color: C.muted,
+                    textTransform: "uppercase",
+                    letterSpacing: 0.5,
+                    borderRight: `1px solid ${C.border}`,
+                  }}
+                >
+                  Causes
+                </td>
+                <td
+                  style={{
+                    padding: "14px 20px",
+                    fontSize: 14,
+                    color: C.text,
+                    lineHeight: 1.5,
+                  }}
+                >
+                  {currentDysf?.causes}
+                </td>
+              </tr>
+
+              <tr>
+                <td
+                  style={{
+                    width: "200px",
+                    padding: "14px 20px",
+                    background: "#fafafa",
+                    fontWeight: 600,
+                    fontSize: 13,
+                    color: C.muted,
+                    textTransform: "uppercase",
+                    letterSpacing: 0.5,
+                    borderRight: `1px solid ${C.border}`,
+                    verticalAlign: "top",
+                  }}
+                >
+                  Améliorations proposées
+                </td>
+                <td
+                  style={{
+                    padding: "14px 20px",
+                    fontSize: 14,
+                    color: C.text,
+                    lineHeight: 1.5,
+                  }}
+                >
+                  {currentDysf?.ameliorations && (
+                    <div style={{ marginTop: 4 }}>
+                      {currentDysf.ameliorations.split("\n").map((item, i) => (
+                        <div
+                          key={i}
+                          style={{
+                            display: "flex",
+                            alignItems: "flex-start",
+                            gap: 8,
+                            marginBottom: 6,
+                          }}
+                        >
+                          <span style={{ color: C.primary }}>•</span>
+                          <span>{item}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
-        <div style={{
-          fontSize: 12,
-          color: C.muted,
-          marginBottom: 16,
-        }}>
-          Traces et preuves de l'exécution du processus (cliquez pour télécharger)
+
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "center",
+            gap: 8,
+            marginTop: 8,
+          }}
+        >
+          {dysfonctionnementsList.map((_, idx) => (
+            <button
+              key={idx}
+              onClick={() => setDysfIndex(idx)}
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: "50%",
+                border: "none",
+                background: idx === dysfIndex ? C.primary : C.border,
+                cursor: "pointer",
+                padding: 0,
+                transition: "all 0.2s",
+              }}
+            />
+          ))}
         </div>
       </div>
-      
-      {/* Clickable bullet point list for file downloads */}
-      <div style={{
-        background: C.lightBg,
-        borderRadius: 12,
-        padding: "20px 24px",
-        border: `1px solid ${C.border}`,
-      }}>
-        {processus.preuves.map((preuve, i) => (
-          <div 
-            key={i} 
+    );
+  };
+
+  /* ══════════════════════════════════════════════════════════════
+     TAB 6 — Déroulement
+  ══════════════════════════════════════════════════════════════ */
+  const Tab6 = () => (
+    <div>
+      <SectionHeader
+        num="6"
+        title="Déroulement et Modélisation"
+        sub="Étapes chronologiques du processus"
+      />
+
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 12,
+          marginBottom: 24,
+        }}
+      >
+        {processus.etapes.map((e, i) => (
+          <div
+            key={i}
+            style={{
+              display: "flex",
+              gap: 0,
+              background: C.white,
+              border: `1px solid ${C.border}`,
+              borderRadius: 12,
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                width: 52,
+                background: `linear-gradient(180deg, ${C.primary}, ${C.dark})`,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+              }}
+            >
+              <span
+                style={{
+                  fontFamily: "'Outfit',sans-serif",
+                  fontWeight: 900,
+                  fontSize: 20,
+                  color: "#fff",
+                }}
+              >
+                {e.numero}
+              </span>
+            </div>
+            <div style={{ flex: 1, padding: "14px 18px" }}>
+              <div
+                style={{
+                  fontSize: 14,
+                  fontWeight: 700,
+                  color: C.primary,
+                  marginBottom: 10,
+                  fontFamily: "'Outfit',sans-serif",
+                }}
+              >
+                {e.nom}
+              </div>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(130px,1fr))",
+                  gap: "8px 16px",
+                  marginBottom: 8,
+                }}
+              >
+                {[
+                  { label: "Acteur", value: e.acteur },
+                  { label: "Durée", value: e.duree },
+                  { label: "Entrée", value: e.entree },
+                  { label: "Sortie", value: e.sortie },
+                  { label: "Document", value: e.document },
+                ].map((f) => (
+                  <div key={f.label}>
+                    <div
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 700,
+                        color: C.muted,
+                        textTransform: "uppercase",
+                        letterSpacing: 0.5,
+                        marginBottom: 2,
+                      }}
+                    >
+                      {f.label}
+                    </div>
+                    <div style={{ fontSize: 12, color: C.text }}>{f.value}</div>
+                  </div>
+                ))}
+              </div>
+              {e.description && (
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: C.muted,
+                    lineHeight: 1.6,
+                    borderTop: `1px solid ${C.border}`,
+                    paddingTop: 8,
+                  }}
+                >
+                  {e.description}
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={S.divider} />
+      <SectionHeader
+        num="6b"
+        title="Cartographie BPMN"
+        sub="Diagramme de flux du processus"
+      />
+      <BpmnEditor
+        initialData={BPMN_SAMPLE}
+        onChange={(data) => console.log("BPMN updated:", data)}
+      />
+    </div>
+  );
+
+  const tabContents = [
+    <Tab1 />,
+    <Tab2 />,
+    <Tab3 />,
+    <Tab4 />,
+    <Tab5 />,
+    <Tab6 />,
+  ];
+
+  /* ══════════════════════════════════════════════════════════════
+     RENDER
+  ══════════════════════════════════════════════════════════════ */
+  return (
+    <div style={S.page}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Outfit:wght@600;700;800;900&display=swap');
+        *, *::before, *::after { box-sizing: border-box; }
+        ::-webkit-scrollbar { width:6px; height:6px; }
+        ::-webkit-scrollbar-track { background:#eaf5eb; }
+        ::-webkit-scrollbar-thumb { background:#77D58F; border-radius:99px; }
+        button { font-family:'Plus Jakarta Sans',sans-serif; }
+        button:hover { opacity:0.88; cursor:pointer; }
+      `}</style>
+
+      <div style={S.main}>
+        {/* Topbar */}
+        <div style={S.topbar}>
+          <div
             style={{
               display: "flex",
               alignItems: "center",
-              gap: 12,
-              padding: "8px 0",
-              borderBottom: i < processus.preuves.length - 1 ? `1px solid ${C.border}` : "none",
-              cursor: "pointer",
-              transition: "all 0.2s",
-            }}
-            onClick={() => handleFileDownload(preuve.titre, preuve.format || "pdf")}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = "rgba(119,213,143,0.1)";
-              e.currentTarget.style.paddingLeft = "8px";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = "transparent";
-              e.currentTarget.style.paddingLeft = "0";
+              gap: 8,
+              fontSize: 14,
             }}
           >
-            <span style={{
-              width: 6,
-              height: 6,
-              borderRadius: "50%",
-              background: C.accent,
-              flexShrink: 0,
-            }} />
-            <span style={{ 
-              fontSize: 14, 
-              color: C.primary,
-              textDecoration: "underline",
-              textUnderlineOffset: "3px",
-              fontWeight: 500,
-            }}>
-              {preuve.titre}
-            </span>
-            <span style={{
-              marginLeft: "auto",
-              fontSize: 11,
-              color: C.muted,
-            }}>
-              📄 {preuve.format || "PDF"}
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
-  
-const Tab5 = () => {
-  const [dysfIndex, setDysfIndex] = useState(0);
-  const dysfonctionnementsList = processus.dysfonctionnements || [];
-  const currentDysf = dysfonctionnementsList[dysfIndex];
-  
-  const goToPrev = () => {
-    setDysfIndex((prev) => (prev > 0 ? prev - 1 : dysfonctionnementsList.length - 1));
-  };
-  
-  const goToNext = () => {
-    setDysfIndex((prev) => (prev < dysfonctionnementsList.length - 1 ? prev + 1 : 0));
-  };
-  
-  return (
-    <div>
-      {/* Dysfonctionnements Majeurs Connus section */}
-      <div style={styles.sectionHeader}>
-        <div style={styles.sectionNum}>1</div>
-        <div>
-          <div style={styles.sectionTitle}>Dysfonctionnements Majeurs Connus</div>
-          <div style={styles.sectionSub}>Recenser les problèmes récurrents et proposer des améliorations</div>
-        </div>
-      </div>
-      
-      {/* Description text */}
-      <div style={{
-        background: C.lightBg,
-        padding: "16px 20px",
-        borderRadius: 12,
-        marginBottom: 28,
-        fontSize: 13,
-        color: C.text,
-        lineHeight: 1.6,
-        border: `1px solid ${C.border}`,
-      }}>
-        {processus.dysfonctionnementsDescription || "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."}
-      </div>
-      
-      {/* Dysfonctionnement table with navigation */}
-      <div style={{
-        border: `1px solid ${C.border}`,
-        borderRadius: 12,
-        overflow: "hidden",
-        marginBottom: 24,
-      }}>
-        {/* Table header with title and navigation arrows */}
-        <div style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          background: C.lightBg,
-          padding: "14px 20px",
-          borderBottom: `1px solid ${C.border}`,
-        }}>
-          <div style={{
-            fontSize: 14,
-            fontWeight: 700,
-            color: C.primary,
-          }}>
-            Dysfonctionnement #{dysfIndex + 1}: {currentDysf?.titre || ""}
-          </div>
-          
-          {/* Navigation arrows */}
-          <div style={{ display: "flex", gap: 8 }}>
-            <button
-              onClick={goToPrev}
-              style={{
-                width: 32,
-                height: 32,
-                borderRadius: 8,
-                border: `1px solid ${C.border}`,
-                background: C.white,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: 16,
-                color: C.primary,
-                transition: "all 0.2s",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = C.lightBg;
-                e.currentTarget.style.borderColor = C.accent;
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = C.white;
-                e.currentTarget.style.borderColor = C.border;
-              }}
+            <span
+              style={{ cursor: "pointer", color: C.muted }}
+              onClick={() => navigate("/processus")}
             >
-              ←
-            </button>
-            <button
-              onClick={goToNext}
-              style={{
-                width: 32,
-                height: 32,
-                borderRadius: 8,
-                border: `1px solid ${C.border}`,
-                background: C.white,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: 16,
-                color: C.primary,
-                transition: "all 0.2s",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = C.lightBg;
-                e.currentTarget.style.borderColor = C.accent;
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = C.white;
-                e.currentTarget.style.borderColor = C.border;
-              }}
-            >
-              →
-            </button>
-          </div>
-        </div>
-        
-        {/* Table body */}
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <tbody>
-            {/* Description row */}
-            <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-              <td style={{
-                width: "200px",
-                padding: "14px 20px",
-                background: "#fafafa",
-                fontWeight: 600,
-                fontSize: 13,
-                color: C.muted,
-                textTransform: "uppercase",
-                letterSpacing: 0.5,
-                borderRight: `1px solid ${C.border}`,
-              }}>
-                Description
-              </td>
-              <td style={{
-                padding: "14px 20px",
-                fontSize: 14,
-                color: C.text,
-                lineHeight: 1.5,
-              }}>
-                {currentDysf?.description}
-              </td>
-            </tr>
-            
-            {/* Conséquences row */}
-            <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-              <td style={{
-                width: "200px",
-                padding: "14px 20px",
-                background: "#fafafa",
-                fontWeight: 600,
-                fontSize: 13,
-                color: C.muted,
-                textTransform: "uppercase",
-                letterSpacing: 0.5,
-                borderRight: `1px solid ${C.border}`,
-              }}>
-                Conséquences
-              </td>
-              <td style={{
-                padding: "14px 20px",
-                fontSize: 14,
-                color: C.text,
-                lineHeight: 1.5,
-              }}>
-                {currentDysf?.consequences}
-              </td>
-            </tr>
-            
-            {/* Causes row */}
-            <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-              <td style={{
-                width: "200px",
-                padding: "14px 20px",
-                background: "#fafafa",
-                fontWeight: 600,
-                fontSize: 13,
-                color: C.muted,
-                textTransform: "uppercase",
-                letterSpacing: 0.5,
-                borderRight: `1px solid ${C.border}`,
-              }}>
-                Causes
-              </td>
-              <td style={{
-                padding: "14px 20px",
-                fontSize: 14,
-                color: C.text,
-                lineHeight: 1.5,
-              }}>
-                {currentDysf?.causes}
-              </td>
-            </tr>
-            
-            {/* Améliorations proposées row */}
-            <tr>
-              <td style={{
-                width: "200px",
-                padding: "14px 20px",
-                background: "#fafafa",
-                fontWeight: 600,
-                fontSize: 13,
-                color: C.muted,
-                textTransform: "uppercase",
-                letterSpacing: 0.5,
-                borderRight: `1px solid ${C.border}`,
-                verticalAlign: "top",
-              }}>
-                Améliorations proposées
-              </td>
-              <td style={{
-                padding: "14px 20px",
-                fontSize: 14,
-                color: C.text,
-                lineHeight: 1.5,
-              }}>
-                {currentDysf?.ameliorations && (
-                  <div style={{ marginTop: 4 }}>
-                    {currentDysf.ameliorations.split('\n').map((item, i) => (
-                      <div key={i} style={{
-                        display: "flex",
-                        alignItems: "flex-start",
-                        gap: 8,
-                        marginBottom: 6,
-                      }}>
-                        <span style={{ color: C.primary }}>•</span>
-                        <span>{item}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      
-      {/* Pagination indicator */}
-      <div style={{
-        display: "flex",
-        justifyContent: "center",
-        gap: 8,
-        marginTop: 8,
-      }}>
-        {dysfonctionnementsList.map((_, idx) => (
-          <button
-            key={idx}
-            onClick={() => setDysfIndex(idx)}
-            style={{
-              width: 8,
-              height: 8,
-              borderRadius: "50%",
-              border: "none",
-              background: idx === dysfIndex ? C.primary : C.border,
-              cursor: "pointer",
-              padding: 0,
-              transition: "all 0.2s",
-            }}
-          />
-        ))}
-      </div>
-    </div>
-  );
-};
-  
-  const Tab6 = () => (
-    <div>
-      <div style={styles.sectionHeader}>
-        <div style={styles.sectionNum}>1</div>
-        <div>
-          <div style={styles.sectionTitle}>Déroulement et Modélisation</div>
-        </div>
-      </div>
-      
-      {processus.etapes.map((etape, i) => (
-        <div key={i} style={styles.etapeCard}>
-          <div style={styles.etapeNum}>{etape.numero}</div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: C.primary, marginBottom: 12 }}>Étape {etape.numero}: {etape.nom}</div>
-            <div style={styles.grid3}>
-              <InfoField label="Acteur responsable" value={etape.acteur} />
-              <InfoField label="Durée estimée" value={etape.duree} />
-              <InfoField label="Entrée" value={etape.entree} />
-              <InfoField label="Sortie" value={etape.sortie} />
-              <InfoField label="Document associé" value={etape.document} />
-            </div>
-            <div style={{ marginTop: 12 }}>
-              <div style={styles.label}>Description</div>
-              <div style={styles.value}>{etape.description}</div>
-            </div>
-          </div>
-        </div>
-      ))}
-      
-      <div style={styles.divider} />
-      
-      <div style={styles.sectionHeader}>
-        <div style={styles.sectionNum}>2</div>
-        <div>
-          <div style={styles.sectionTitle}>Cartographie BPMN</div>
-        </div>
-      </div>
-      
-      <div style={{ ...styles.historyPlaceholder, minHeight: 200, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ fontSize: 48, marginBottom: 16 }}>⬡</div>
-        <div style={{ fontWeight: 500 }}>Diagramme BPMN</div>
-        <div style={{ fontSize: 12, marginTop: 8 }}>Version 1.0</div>
-      </div>
-    </div>
-  );
-  
-  const tabContents = [<Tab1 />, <Tab2 />, <Tab3 />, <Tab4 />, <Tab5 />, <Tab6 />];
-  
-  return (
-    <div style={styles.page}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Outfit:wght@600;700;800&display=swap');
-        * { box-sizing: border-box; }
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: #eaf5eb; }
-        ::-webkit-scrollbar-thumb { background: #77D58F; border-radius: 99px; }
-        button:hover { opacity: 0.88; cursor: pointer; }
-      `}</style>
-      
-      <div style={styles.main}>
-        {/* Topbar */}
-        <div style={styles.topbar}>
-          <div style={styles.breadcrumb}>
-            <span style={{ cursor: "pointer", color: C.muted }} onClick={() => navigate("/")}>
               Fiches Processus
             </span>
-            <span style={{ color: C.border }}>›</span>
-            <span style={styles.breadcrumbActive}>{processus.designation}</span>
-          </div>
-          <div style={styles.topbarRight}>
-            <span style={{ fontSize: 13, color: C.muted, display: "flex", alignItems: "center", gap: 6 }}>
-              🇫🇷 Français
+            <span style={{ color: C.border, fontSize: 16 }}>/</span>
+            <span style={{ color: C.primary, fontWeight: 700 }}>
+              {processus.designation}
             </span>
-            <div style={styles.avatar}>RF</div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+            <div style={{ position: "relative", cursor: "pointer" }}>
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke={C.muted}
+                strokeWidth="1.8"
+                strokeLinecap="round"
+              >
+                <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                <path d="M13.73 21a2 2 0 01-3.46 0" />
+              </svg>
+              <span
+                style={{
+                  position: "absolute",
+                  top: -4,
+                  right: -4,
+                  width: 16,
+                  height: 16,
+                  borderRadius: "50%",
+                  background: "#e53935",
+                  border: "2px solid " + C.white,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 9,
+                  color: "#fff",
+                  fontWeight: 700,
+                }}
+              >
+                6
+              </span>
+            </div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                cursor: "pointer",
+              }}
+            >
+              <span style={{ fontSize: 18 }}>🇫🇷</span>
+              <span style={{ fontSize: 13, color: C.muted, fontWeight: 500 }}>
+                Français
+              </span>
+            </div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                cursor: "pointer",
+              }}
+            >
+              <div
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: "50%",
+                  background: `linear-gradient(135deg,${C.primary},#3a7a62)`,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 12,
+                  fontWeight: 800,
+                  color: "#fff",
+                  fontFamily: "'Outfit',sans-serif",
+                }}
+              >
+                SL
+              </div>
+              <div>
+                <div
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 700,
+                    color: C.text,
+                    lineHeight: 1.2,
+                  }}
+                >
+                  SILI Lyna
+                </div>
+                <div style={{ fontSize: 11, color: C.muted }}>Admin</div>
+              </div>
+            </div>
           </div>
         </div>
-        
-        {/* Scrollable content */}
-        <div style={styles.content}>
-          
+
+        {/* Content */}
+        <div style={S.content}>
           {/* Header card */}
-          <div style={styles.headerCard}>
-            <div style={styles.headerCardBadges}>
-              <span style={styles.badge}>Code: {processus.identifiant}</span>
-              <span style={{ ...styles.badge, ...styles.badgeGreen }}>{processus.typeProcessus}</span>
-              <span style={styles.badge}>Version: 2.1</span>
-              <span style={styles.badge}>Date: 27/03/2026</span>
+          <div style={S.headerCard}>
+            <div
+              style={{
+                position: "absolute",
+                top: -60,
+                right: -60,
+                width: 200,
+                height: 200,
+                borderRadius: "50%",
+                background: "rgba(255,255,255,0.05)",
+                pointerEvents: "none",
+              }}
+            />
+            <div style={S.headerCardBadges}>
+              <span style={S.badge}>Code: {processus.identifiant}</span>
+              <span style={{ ...S.badge, ...S.badgeGreen }}>
+                {processus.typeProcessus}
+              </span>
+              <span style={S.badge}>Version: 2.1</span>
+              <span style={S.badge}>Date: 27/03/2026</span>
             </div>
-            <div style={styles.headerCardBody}>
-              <div style={styles.headerCardLeft}>
-                <div style={styles.headerCardTitle}>{processus.designation}</div>
-                <div style={styles.headerCardDesc}>{processus.objectif}</div>
+            <div style={S.headerCardBody}>
+              <div style={S.headerCardLeft}>
+                <div style={S.headerCardTitle}>{processus.designation}</div>
+                <div style={S.headerCardDesc}>{processus.objectif}</div>
               </div>
-              <div style={styles.headerCardRight}>
-                <div style={styles.pilotBox}>
-                  <div style={styles.pilotLabel}>Pilote</div>
-                  <div style={styles.pilotName}>{processus.pilote}</div>
-                  <div style={styles.pilotEmail}>{processus.email}</div>
+              <div style={S.headerCardRight}>
+                <div style={S.pilotBox}>
+                  <div style={S.pilotLabel}>Pilote</div>
+                  <div style={S.pilotName}>{processus.pilote}</div>
+                  <div style={S.pilotEmail}>{processus.email}</div>
                 </div>
-                <div style={styles.kpiRow}>
-                  <div style={styles.kpiBox}>
-                    <span style={styles.kpiNum}>{processus.kpis.length}</span>
-                    <span style={styles.kpiLbl}>KPIs</span>
-                  </div>
-                  <div style={styles.kpiBox}>
-                    <span style={styles.kpiNum}>{processus.etapes.length}</span>
-                    <span style={styles.kpiLbl}>Tâches</span>
-                  </div>
-                  <div style={styles.kpiBox}>
-                    <span style={styles.kpiNum}>{processus.risques.length}</span>
-                    <span style={styles.kpiLbl}>Risques</span>
-                  </div>
+                <div style={S.kpiRow}>
+                  {[
+                    { num: processus.kpis.length, lbl: "KPIs" },
+                    { num: processus.etapes.length, lbl: "Tâches" },
+                    { num: processus.risques.length, lbl: "Risques" },
+                  ].map((k) => (
+                    <div key={k.lbl} style={S.kpiBox}>
+                      <span style={S.kpiNum}>{k.num}</span>
+                      <span style={S.kpiLbl}>{k.lbl}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
           </div>
-          
+
           {/* Tabs */}
-          <div style={styles.tabsWrap}>
-            <div style={styles.tabsHeader}>
+          <div style={S.tabsWrap}>
+            <div style={S.tabsHeader}>
               {TABS.map((t) => (
                 <button
                   key={t.id}
                   type="button"
-                  style={{ ...styles.tab, ...(activeTab === t.id ? styles.tabActive : {}) }}
+                  style={{
+                    ...S.tab,
+                    ...(activeTab === t.id ? S.tabActive : {}),
+                  }}
                   onClick={() => setActiveTab(t.id)}
                 >
                   {t.label}
                 </button>
               ))}
             </div>
-            <div style={styles.tabContent}>
-              {tabContents[activeTab]}
-            </div>
+            <div style={S.tabContent}>{tabContents[activeTab]}</div>
           </div>
         </div>
-        
+
         {/* Action bar */}
-        <div style={styles.actionBar}>
-          <button type="button" style={styles.btnBack} onClick={() => navigate("/processus")}>
+        <div style={S.actionBar}>
+          <button
+            type="button"
+            style={S.btnBack}
+            onClick={() => navigate("/processus")}
+          >
             ← Retour à la liste
           </button>
-          <button 
-            type="button" 
-            style={styles.btnEdit} 
-            onClick={() => navigate(`/processus`)}
+          <button
+            type="button"
+            style={S.btnEdit}
+            onClick={() => navigate(`/processus/${id}/modifier`)}
           >
             ✏️ Modifier le processus
           </button>
