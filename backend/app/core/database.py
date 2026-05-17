@@ -43,18 +43,34 @@ settings = get_settings()
 # ---------------------------------------------------------------------------
 # §1 — Moteur SQLAlchemy
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# §1 — Moteur SQLAlchemy
+# ---------------------------------------------------------------------------
+
+# On s'assure que l'URL utilise bien le nouveau driver "psycopg" (v3)
+# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# §1 — Moteur SQLAlchemy
+# ---------------------------------------------------------------------------
+
+# FORCE L'UTILISATION DE OPENPG DIRECTEMENT POUR CONTOURNER LE BUG DE .ENV
+# Remplace 'newpassword123' par ton VRAI mot de passe pgAdmin si différent
+url_str = "postgresql+psycopg://openpg:newpassword123@localhost:5432/si_smq"
 
 engine = create_engine(
-    settings.DATABASE_URL,
+    url_str,
+    # Paramètres de compatibilité indispensables pour PostgreSQL 12
+    connect_args={
+        "gssencmode": "disable",
+        "channel_binding": "prefer"
+    },
     pool_size=settings.DB_POOL_SIZE,
     max_overflow=settings.DB_MAX_OVERFLOW,
     pool_timeout=settings.DB_POOL_TIMEOUT,
-    pool_pre_ping=True,         # vérifie la connexion avant de la sortir du pool
-    echo=settings.DEBUG,        # log SQL uniquement en mode debug
-    future=True,                # mode SQLAlchemy 2.x
+    pool_pre_ping=True,
+    echo=settings.DEBUG,
+    future=True,
 )
-
-
 # ---------------------------------------------------------------------------
 # §2 — Classe de base déclarative
 # ---------------------------------------------------------------------------

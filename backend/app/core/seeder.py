@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 # §1 — Référentiel ISO 9001:2015
 # ---------------------------------------------------------------------------
 
+
 def seed_clauses_iso(db: Session) -> None:
     """
     Insère les 93 clauses normatives ISO 9001:2015 (sections 4→10, 3 niveaux).
@@ -66,6 +67,7 @@ def seed_clauses_iso(db: Session) -> None:
 # §2 — Parties intéressées
 # ---------------------------------------------------------------------------
 
+
 def seed_parties_interessees(db: Session) -> None:
     """
     Insère les parties intéressées de base (Ministère, ATRST, Direction...).
@@ -84,10 +86,9 @@ def seed_parties_interessees(db: Session) -> None:
     for item in PARTIES_INTERESSEES_SEED:
         partie = PartieInteressee(
             nom=item["nom"],
-            type_partie=item.get("type_partie"),
+            type=item.get("type"),
+            description=item.get("description"),
             exigences=item.get("exigences"),
-            influence=item.get("influence"),
-            interet=item.get("interet"),
         )
         db.add(partie)
 
@@ -101,6 +102,7 @@ def seed_parties_interessees(db: Session) -> None:
 # §3 — Compte administrateur par défaut
 # ---------------------------------------------------------------------------
 
+
 def seed_admin_user(db: Session) -> None:
     """
     Crée le compte admin initial si aucun utilisateur n'existe.
@@ -113,7 +115,8 @@ def seed_admin_user(db: Session) -> None:
         return
 
     import os
-    password_plain = os.getenv("ADMIN_DEFAULT_PASSWORD", "changeme")
+
+    password_plain = "my_password"  # Valeur par défaut pour le développement
 
     admin = Utilisateur(
         email="admin@si-smq.local",
@@ -121,7 +124,7 @@ def seed_admin_user(db: Session) -> None:
         prenom="SI-SMQ",
         role=RoleEnum.admin,
         est_actif=True,
-        mot_de_passe_hash=hash_password(password_plain),
+        hashed_password=hash_password(str(password_plain)[:72]),
     )
     db.add(admin)
     db.commit()
@@ -131,6 +134,7 @@ def seed_admin_user(db: Session) -> None:
 # ---------------------------------------------------------------------------
 # Point d'entrée principal
 # ---------------------------------------------------------------------------
+
 
 def run_all_seeders(db: Session) -> None:
     """

@@ -12,7 +12,7 @@ est_feuille = True  → nœud terminal, reçoit un score de diagnostic
 est_feuille = False → nœud intermédiaire, score agrégé
 """
 
-CLAUSES_ISO_9001_2015 = [
+CLAUSES_ISO_SEED = [
 
     # =========================================================================
     # 4 — CONTEXTE DE L'ORGANISME

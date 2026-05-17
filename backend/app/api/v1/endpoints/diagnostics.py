@@ -23,12 +23,13 @@ from datetime import datetime
 
 from app.core.database import get_db
 from app.core.security import get_current_user
-from app.core.iso_engine import ISOEngine
-from app.models.diagnostic import DiagnosticISO, NiveauConformite, StatutDiagnostic
+import app.core.iso_engine as iso_engine
+from app.models.diagnostic import DiagnosticISO, NiveauMaturite, StatutDiagnostic
 from app.models.utilisateur import Utilisateur, RoleEnum
 from app.models.clause_iso import ClauseISO
 from app.models.processus import Processus
 from app.schemas import diagnostic as schemas_diag
+from app.schemas.diagnostic import RapportMaturiteResponse
 
 router = APIRouter(prefix="/diagnostics", tags=["diagnostics"])
 
@@ -37,7 +38,7 @@ router = APIRouter(prefix="/diagnostics", tags=["diagnostics"])
 # LISTERS LES DIAGNOSTICS (avec filtres)
 # =============================================================================
 
-@router.get("/", response_model=List[schemas_diag.DiagnosticISResponse])
+@router.get("/", response_model=List[schemas_diag.DiagnosticResponse])
 def lister_diagnostics(
     db: Session = Depends(get_db),
     current_user: Utilisateur = Depends(get_current_user),
@@ -73,7 +74,7 @@ def lister_diagnostics(
             )
     if niveau:
         try:
-            query = query.filter(DiagnosticISO.niveau == NiveauConformite(niveau))
+            query = query.filter(DiagnosticISO.niveau == NiveauMaturite(niveau))
         except ValueError:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -88,7 +89,7 @@ def lister_diagnostics(
 # DÉTAIL D'UN DIAGNOSTIC
 # =============================================================================
 
-@router.get("/{diagnostic_id}", response_model=schemas_diag.DiagnosticISResponse)
+@router.get("/{diagnostic_id}", response_model=schemas_diag.DiagnosticResponse)
 def get_diagnostic(
     diagnostic_id: int,
     db: Session = Depends(get_db),
@@ -108,9 +109,9 @@ def get_diagnostic(
 # CRÉER UN DIAGNOSTIC
 # =============================================================================
 
-@router.post("/", response_model=schemas_diag.DiagnosticISResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=schemas_diag.DiagnosticResponse, status_code=status.HTTP_201_CREATED)
 def creer_diagnostic(
-    diagnostic_in: schemas_diag.DiagnosticISCreateUpdate,
+    diagnostic_in: schemas_diag.DiagnosticClauseCreate,
     db: Session = Depends(get_db),
     current_user: Utilisateur = Depends(get_current_user),
 ):
@@ -167,10 +168,10 @@ def creer_diagnostic(
 # MODIFIER UN DIAGNOSTIC
 # =============================================================================
 
-@router.put("/{diagnostic_id}", response_model=schemas_diag.DiagnosticISResponse)
+@router.put("/{diagnostic_id}", response_model=schemas_diag.DiagnosticResponse)
 def modifier_diagnostic(
     diagnostic_id: int,
-    diagnostic_in: schemas_diag.DiagnosticISCreateUpdate,
+    diagnostic_in: schemas_diag.DiagnosticClauseUpdate,
     db: Session = Depends(get_db),
     current_user: Utilisateur = Depends(get_current_user),
 ):
@@ -214,7 +215,7 @@ def modifier_diagnostic(
 # VALIDER UN DIAGNOSTIC
 # =============================================================================
 
-@router.post("/{diagnostic_id}/valider", response_model=schemas_diag.DiagnosticISResponse)
+@router.post("/{diagnostic_id}/valider", response_model=schemas_diag.DiagnosticResponse)
 def valider_diagnostic(
     diagnostic_id: int,
     db: Session = Depends(get_db),
@@ -285,3 +286,104 @@ def syntese_conformite_processus(
 
     synthese = ISOEngine.synthese_conformite_processus(db, processus)
     return synthese
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+from typing import List
+from app.core.database import get_db
+from app.models.diagnostic import DiagnosticISO, DiagnosticClause
+from app.schemas.diagnostic import (
+    DiagnosticCreate, DiagnosticUpdate, DiagnosticResponse,
+    DiagnosticResponseDetail, DiagnosticClauseCreate, DiagnosticClauseUpdate, DiagnosticClauseBase, DiagnosticClauseResponse, 
+)
+
+router = APIRouter()
+
+@router.get("/", response_model=List[DiagnosticResponse])
+def list_diagnostics(db: Session = Depends(get_db)):
+    return db.query(DiagnosticISO).all()
+
+@router.post("/", response_model=DiagnosticResponse)
+def create_diagnostic(data: DiagnosticCreate, db: Session = Depends(get_db)):
+    diagnostic = DiagnosticISO(**data.model_dump())
+    db.add(diagnostic)
+    db.commit()
+    db.refresh(diagnostic)
+    return diagnostic
+
+@router.get("/{id}", response_model=DiagnosticResponseDetail)
+def get_diagnostic(id: int, db: Session = Depends(get_db)):
+    d = db.query(DiagnosticISO).filter(DiagnosticISO.id == id).first()
+    if not d:
+        raise HTTPException(status_code=404, detail="Diagnostic non trouvé")
+    return d
+
+@router.put("/{id}", response_model=DiagnosticResponse)
+def update_diagnostic(id: int, data: DiagnosticUpdate, db: Session = Depends(get_db)):
+    d = db.query(DiagnosticISO).filter(DiagnosticISO.id == id).first()
+    if not d:
+        raise HTTPException(status_code=404, detail="Diagnostic non trouvé")
+    for key, value in data.model_dump(exclude_unset=True).items():
+        setattr(d, key, value)
+    db.commit()
+    db.refresh(d)
+    return d
+
+@router.delete("/{id}")
+def delete_diagnostic(id: int, db: Session = Depends(get_db)):
+    d = db.query(DiagnosticISO).filter(DiagnosticISO.id == id).first()
+    if not d:
+        raise HTTPException(status_code=404, detail="Diagnostic non trouvé")
+    db.delete(d)
+    db.commit()
+    return {"message": "Diagnostic supprimé"}
+
+@router.post("/{id}/soumettre")
+def soumettre_diagnostic(id: int, db: Session = Depends(get_db)):
+    d = db.query(DiagnosticISO).filter(DiagnosticISO.id == id).first()
+    if not d:
+        raise HTTPException(status_code=404, detail="Diagnostic non trouvé")
+    if d.statut != "brouillon":
+        raise HTTPException(status_code=400, detail="Seul un brouillon peut être soumis")
+    d.statut = "soumis"
+    db.commit()
+    return {"message": "Diagnostic soumis"}
+
+@router.post("/{id}/valider")
+def valider_diagnostic(id: int, db: Session = Depends(get_db)):
+    d = db.query(DiagnosticISO).filter(DiagnosticISO.id == id).first()
+    if not d or d.statut != "soumis":
+        raise HTTPException(status_code=400, detail="Le diagnostic doit être soumis pour être validé")
+    d.statut = "valide"
+    db.commit()
+    return {"message": "Diagnostic validé"}
+
+@router.post("/{id}/archiver")
+def archiver_diagnostic(id: int, db: Session = Depends(get_db)):
+    d = db.query(DiagnosticISO).filter(DiagnosticISO.id == id).first()
+    if not d or d.statut != "valide":
+        raise HTTPException(status_code=400, detail="Le diagnostic doit être validé pour être archivé")
+    d.statut = "archive"
+    db.commit()
+    return {"message": "Diagnostic archivé"}
+
+@router.patch("/{id}/clauses/{clause_id}", response_model=DiagnosticClauseResponse)
+def evaluer_clause(id: int, clause_id: int, data: DiagnosticClauseUpdate, db: Session = Depends(get_db)):
+    dc = db.query(DiagnosticClause).filter(
+        DiagnosticClause.diagnostic_id == id,
+        DiagnosticClause.clause_id == clause_id
+    ).first()
+    if not dc:
+        raise HTTPException(status_code=404, detail="Clause non trouvée dans ce diagnostic")
+    for key, value in data.model_dump(exclude_unset=True).items():
+        setattr(dc, key, value)
+    db.commit()
+    db.refresh(dc)
+    return dc
+
+@router.get("/{id}/rapport", response_model=RapportMaturiteResponse)
+def get_rapport(id: int, db: Session = Depends(get_db)):
+    d = db.query(DiagnosticISO).filter(DiagnosticISO.id == id).first()
+    if not d:
+        raise HTTPException(status_code=404, detail="Diagnostic non trouvé")
+    # Le calcul réel sera délégué au diagnostic_service
+    return d

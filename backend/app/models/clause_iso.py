@@ -63,10 +63,10 @@ class ClauseISO(Base):
     )
 
     diagnostics = relationship(
-        "DiagnosticISO",
-        back_populates="clause",
-        cascade="all, delete-orphan",
-    )
+    "DiagnosticClause",          # <-- On pointe vers le modèle enfant de la clause
+    back_populates="clause",
+    cascade="all, delete-orphan",
+)
 
     def __repr__(self) -> str:
         return f"<ClauseISO {self.code} — {self.titre}>"
