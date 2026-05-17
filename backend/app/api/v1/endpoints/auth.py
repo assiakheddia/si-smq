@@ -18,7 +18,7 @@ router = APIRouter()
 @router.post("/login", response_model=TokenResponse)
 def login(data: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(Utilisateur).filter(Utilisateur.email == data.email).first()
-    if not user or not verify_password(data.password, user.mot_de_passe_hash):
+    if not user or not verify_password(data.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Identifiants invalides")
     if not user.est_actif:
         raise HTTPException(status_code=403, detail="Compte désactivé")

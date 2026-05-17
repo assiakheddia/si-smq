@@ -33,8 +33,8 @@ from app.models.utilisateur import Utilisateur
 from app.schemas.diagnostic import (
     DiagnosticCreate,
     DiagnosticUpdate,
-    ClauseCreate,
-    ClauseUpdate,
+    DiagnosticClauseCreate,
+    DiagnosticClauseUpdate,
 )
 
 logger = logging.getLogger(__name__)

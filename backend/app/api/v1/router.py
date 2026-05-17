@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 # Ajout de .v1 dans le chemin d'importation
-from app.api.v1.endpoints import auth, processus, diagnostics, risques, indicateur, documents, audits
+from app.api.v1.endpoints import auth, processus, diagnostics, risques, indicateur, documents
 
 router = APIRouter()
 

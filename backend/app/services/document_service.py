@@ -138,12 +138,17 @@ def _generer_url_presignee(minio_path: str, est_confidentiel: bool) -> str | Non
         return None
 
 
-_TRANSITIONS_VALIDES = {
-    StatutDocument.brouillon: [StatutDocument.valide],
-    StatutDocument.valide:    [StatutDocument.archive],
-    StatutDocument.archive:   [StatutDocument.valide],  # désarchivage admin only
-}
+# ---------------------------------------------------------------------------
+# Cartographie des transitions de statut valides (§7.5.3 ISO 9001)
+# ---------------------------------------------------------------------------
 
+_TRANSITIONS_VALIDES = {
+    StatutDocument.brouillon: [StatutDocument.en_revue],
+    StatutDocument.en_revue:  [StatutDocument.approuve, StatutDocument.brouillon],
+    StatutDocument.approuve:  [StatutDocument.obsolete, StatutDocument.archive],
+    StatutDocument.archive:   [StatutDocument.approuve],  # Désarchivage restreint
+    StatutDocument.obsolete:  [],  # État terminal de rétention historique
+}
 
 # ---------------------------------------------------------------------------
 # §1 — Création (métadonnées uniquement)

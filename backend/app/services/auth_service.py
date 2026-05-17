@@ -38,9 +38,9 @@ from app.core.security import (
 )
 from app.models.utilisateur import Utilisateur
 from app.schemas.auth import (
-    ChangePassword,
+    ChangePasswordRequest,
     LoginRequest,
-    ResetPassword,
+    ResetPasswordRequest,
     TokenResponse,
 )
 

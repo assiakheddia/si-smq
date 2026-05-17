@@ -1,11 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List
+from typing import Annotated, List
+from app.core.security import get_current_user
+from app.models.utilisateur import Utilisateur
 from app.core.database import get_db
 from app.models.processus import Processus
 from app.schemas.processus import ProcessusCreate, ProcessusResponse, ProcessusUpdate
 
 router = APIRouter()
+CurrentUser = Annotated[Utilisateur, Depends(get_current_user)]
+
 
 # Créer un processus
 @router.post("/", response_model=ProcessusResponse)

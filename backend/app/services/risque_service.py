@@ -30,7 +30,7 @@ from app.models.processus import Processus
 from app.models.risque import Risque, StatutRisque
 from app.models.utilisateur import Utilisateur
 from app.schemas.risque import (
-    ChangerStatut,
+    ChangerStatutRisqueRequest,
     RisqueCreate,
     RisqueUpdate,
 )
