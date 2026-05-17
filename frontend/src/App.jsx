@@ -8,51 +8,17 @@ import FicheProcessus from "./pages/FicheProcessus.jsx";
 import AuditsPage from "./pages/AuditsPage.jsx";
 import RapportsPage from "./pages/RapportsPage.jsx";
 import ParametresPage from "./pages/ParametresPage.jsx";
+import DashboardPage from "./pages/DashboardPage.jsx";
+import RisquesPage from "./pages/RisquesPage.jsx";
 
-function AppLayout({ children, active }) {
+function AppLayout({ children }) {
   const [collapsed, setCollapsed] = useState(false);
-  const sidebarWidth = collapsed ? 70 : 245;
+  const sidebarWidth = collapsed ? 64 : 220;
   return (
     <div style={{ minHeight: "100vh", background: "#eaf5eb" }}>
-      <style>{`.app-content { margin-left: ${sidebarWidth}px; transition: margin-left 0.3s cubic-bezier(.4,0,.2,1); } @media (max-width: 768px) { .app-content { margin-left: 0; } }`}</style>
+      <style>{`.app-content { margin-left: ${sidebarWidth}px; transition: margin-left 0.25s ease; } @media (max-width: 768px) { .app-content { margin-left: 0; } }`}</style>
       <Sidebar collapsed={collapsed} setCollapsed={setCollapsed} sidebarWidth={sidebarWidth} />
       <main className="app-content">{children}</main>
-    </div>
-  );
-}
-
-// NEW: Layout for FicheProcessus
-function FicheProcessusLayout() {
-  const [collapsed, setCollapsed] = useState(false);
-  const [activeNav, setActiveNav] = useState("processus");
-  const sidebarWidth = collapsed ? 70 : 245;
-
-  return (
-    <div style={{ minHeight: "100vh", background: "#eaf5eb" }}>
-      <style>{`
-        .app-content {
-          margin-left: ${sidebarWidth}px;
-          transition: margin-left 0.3s cubic-bezier(.4,0,.2,1);
-        }
-
-        @media (max-width: 768px) {
-          .app-content {
-            margin-left: 0;
-          }
-        }
-      `}</style>
-
-      <Sidebar
-        collapsed={collapsed}
-        setCollapsed={setCollapsed}
-        activeNav={activeNav}
-        setActiveNav={setActiveNav}
-        sidebarWidth={sidebarWidth}
-      />
-
-      <main className="app-content">
-        <FicheProcessus />
-      </main>
     </div>
   );
 }
@@ -63,16 +29,16 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<Login />} />
-        <Route path="/processus" element={<AppLayout active="processus"><MainContent /></AppLayout>} />
-        <Route path="/processus/new" element={<AppLayout active="processus"><ProcessFormPage /></AppLayout>} />
-        <Route path="/processus/:id" element={<AppLayout active="processus"><ProcessFormPage /></AppLayout>} />
-        <Route path="/fiche-processus/:id" element={<AppLayout active="processus"><FicheProcessus /></AppLayout>} />
-        <Route path="/audits" element={<AppLayout active="audits"><AuditsPage /></AppLayout>} />
-        <Route path="/rapports" element={<AppLayout active="rapports"><RapportsPage /></AppLayout>} />
-        <Route path="/parametres" element={<AppLayout active="parametres"><ParametresPage /></AppLayout>} />
-        <Route path="/dashboard" element={<Navigate to="/processus" replace />} />
+        <Route path="/dashboard" element={<AppLayout><DashboardPage /></AppLayout>} />
+        <Route path="/processus" element={<AppLayout><MainContent /></AppLayout>} />
+        <Route path="/processus/new" element={<AppLayout><ProcessFormPage /></AppLayout>} />
+        <Route path="/processus/:id" element={<AppLayout><ProcessFormPage /></AppLayout>} />
+        <Route path="/fiche-processus/:id" element={<AppLayout><FicheProcessus /></AppLayout>} />
+        <Route path="/risques" element={<AppLayout><RisquesPage /></AppLayout>} />
+        <Route path="/audits" element={<AppLayout><AuditsPage /></AppLayout>} />
+        <Route path="/rapports" element={<AppLayout><RapportsPage /></AppLayout>} />
+        <Route path="/parametres" element={<AppLayout><ParametresPage /></AppLayout>} />
         <Route path="*" element={<Navigate to="/login" replace />} />
-        <Route path="/fiche-processus/:id" element={<FicheProcessusLayout />} /> {/* UPDATED */}
       </Routes>
     </BrowserRouter>
   );

@@ -1,18 +1,17 @@
-import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 
 const NAV = [
   {
     id: "dashboard",
-    path: "/processus",
+    path: "/dashboard",
     label: "Tableau de bord",
     sub: "Vue d'ensemble",
     icon: (
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="3" y="3" width="7" height="7" rx="1.5" />
-        <rect x="14" y="3" width="7" height="7" rx="1.5" />
-        <rect x="3" y="14" width="7" height="7" rx="1.5" />
-        <rect x="14" y="14" width="7" height="7" rx="1.5" />
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="3" width="7" height="7" rx="1" />
+        <rect x="14" y="3" width="7" height="7" rx="1" />
+        <rect x="3" y="14" width="7" height="7" rx="1" />
+        <rect x="14" y="14" width="7" height="7" rx="1" />
       </svg>
     ),
   },
@@ -22,7 +21,7 @@ const NAV = [
     label: "Processus",
     sub: "Fiches & gestion",
     icon: (
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
         <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2" />
         <rect x="9" y="3" width="6" height="4" rx="1" />
         <path d="M9 12h6M9 16h4" />
@@ -35,9 +34,22 @@ const NAV = [
     label: "Audits",
     sub: "Contrôle qualité",
     icon: (
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
         <path d="M9 11l3 3L22 4" />
         <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" />
+      </svg>
+    ),
+  },
+  {
+    id: "risques",
+    path: "/risques",
+    label: "Risques",
+    sub: "ISO 9001 § 6.1",
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+        <line x1="12" y1="9" x2="12" y2="13" />
+        <line x1="12" y1="17" x2="12.01" y2="17" />
       </svg>
     ),
   },
@@ -47,7 +59,7 @@ const NAV = [
     label: "Rapports",
     sub: "Analyses & exports",
     icon: (
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
         <path d="M3 3v18h18" />
         <path d="M7 16l4-5 4 3 4-6" />
       </svg>
@@ -59,7 +71,7 @@ const NAV = [
     label: "Paramètres",
     sub: "Configuration",
     icon: (
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
         <circle cx="12" cy="12" r="3" />
         <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
       </svg>
@@ -70,276 +82,279 @@ const NAV = [
 export default function Sidebar({ collapsed, setCollapsed, sidebarWidth }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const [hoveredId, setHoveredId] = useState(null);
-  const [mounted, setMounted] = useState(false);
 
-  useEffect(() => { setTimeout(() => setMounted(true), 50); }, []);
-
-  const activeId = NAV.find((n) => location.pathname.startsWith(n.path) && n.path !== "/processus"
-    ? true
-    : location.pathname === n.path || (n.id === "processus" && location.pathname.startsWith("/processus"))
-  )?.id || "processus";
-
-  const handleNav = (item) => {
-    navigate(item.path);
-    setMobileOpen(false);
-  };
-
-  const NavItem = ({ item, style = {} }) => {
-    const isActive = activeId === item.id;
-    const isHovered = hoveredId === item.id;
-    return (
-      <div
-        className={`sb-nav-item ${isActive ? "active" : ""}`}
-        onClick={() => handleNav(item)}
-        onMouseEnter={() => setHoveredId(item.id)}
-        onMouseLeave={() => setHoveredId(null)}
-        style={{
-          padding: collapsed ? "10px 0" : "9px 10px",
-          gap: collapsed ? 0 : 10,
-          justifyContent: collapsed ? "center" : "flex-start",
-          background: isHovered && !isActive ? "rgba(94,207,122,0.09)" : "transparent",
-          animation: mounted ? `slideInNav 0.25s ease both` : "none",
-          ...style,
-        }}
-      >
-        <span style={{ color: isActive ? "#5ecf7a" : isHovered ? "#a8e6b8" : "rgba(240,255,244,0.4)", flexShrink: 0, transition: "color 0.18s" }}>
-          {item.icon}
-        </span>
-        {!collapsed && (
-          <div style={{ overflow: "hidden", minWidth: 0 }}>
-            <div style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: "clamp(11.5px,1.05vw,13px)", fontWeight: 600, lineHeight: 1.25, whiteSpace: "nowrap", color: isActive ? "#f0fff4" : isHovered ? "#d4f0da" : "rgba(240,255,244,0.65)", transition: "color 0.18s" }}>
-              {item.label}
-            </div>
-            <div style={{ fontSize: "clamp(9px,0.85vw,10px)", color: "rgba(240,255,244,0.28)", marginTop: 1 }}>
-              {item.sub}
-            </div>
-          </div>
-        )}
-        {collapsed && isHovered && <span className="sb-tooltip">{item.label}</span>}
-      </div>
-    );
-  };
-
-  const Profile = ({ mini }) => (
-    <div
-      style={{
-        display: "flex", alignItems: "center",
-        gap: mini || collapsed ? 0 : 9,
-        justifyContent: collapsed ? "center" : "flex-start",
-        padding: collapsed ? "4px 0" : "6px 4px",
-        borderRadius: 10, cursor: "pointer",
-        transition: "background 0.15s",
-      }}
-      onClick={() => navigate("/parametres")}
-      title="Voir mon profil"
-    >
-      <div style={{
-        width: 34, height: 34, borderRadius: 9, flexShrink: 0,
-        background: "linear-gradient(135deg, #5ecf7a, #2d9e5f)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        fontFamily: "'Outfit',sans-serif", fontWeight: 900,
-        fontSize: "clamp(10px,0.9vw,12px)", color: "#152b21",
-      }}>
-        AZ
-      </div>
-      {!collapsed && (
-        <div style={{ overflow: "hidden", flex: 1, minWidth: 0 }}>
-          <div style={{ fontFamily: "'Plus Jakarta Sans',sans-serif", fontWeight: 700, fontSize: "clamp(11px,1vw,12.5px)", color: "#f0fff4", whiteSpace: "nowrap" }}>
-            Atir Zineb
-          </div>
-          <div style={{ fontSize: "clamp(8.5px,0.8vw,10px)", color: "rgba(240,255,244,0.35)" }}>
-            Admin Système
-          </div>
-        </div>
-      )}
-      {!collapsed && (
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(240,255,244,0.3)" strokeWidth="2" strokeLinecap="round">
-          <path d="M9 18l6-6-6-6" />
-        </svg>
-      )}
-    </div>
-  );
+  const activeId =
+    NAV.find((n) => {
+      if (n.id === "processus") {
+        return (
+          location.pathname === "/processus" ||
+          location.pathname.startsWith("/processus/") ||
+          location.pathname.startsWith("/fiche-processus/")
+        );
+      }
+      return location.pathname === n.path;
+    })?.id ?? "dashboard";
 
   return (
     <>
       <style>{`
-        @keyframes slideInNav {
-          from { opacity: 0; transform: translateX(-12px); }
-          to   { opacity: 1; transform: translateX(0); }
-        }
-        @keyframes pulseGlow {
-          0%, 100% { box-shadow: 0 0 0 0 rgba(94,207,122,0.3); }
-          50%       { box-shadow: 0 0 0 6px rgba(94,207,122,0); }
-        }
-        .sb-nav-item {
-          display: flex; align-items: center; border-radius: 12px;
-          cursor: pointer; position: relative; overflow: hidden;
-          border: 1.5px solid transparent;
-          transition: background 0.18s, border-color 0.18s, transform 0.15s;
-        }
-        .sb-nav-item:hover { transform: translateX(3px); }
-        .sb-nav-item.active {
-          background: rgba(94,207,122,0.18) !important;
-          border-color: rgba(94,207,122,0.35) !important;
-        }
-        .sb-nav-item.active::before {
-          content: '';
-          position: absolute; left: 0; top: 18%; bottom: 18%;
-          width: 3px; border-radius: 0 3px 3px 0;
-          background: linear-gradient(180deg, #5ecf7a, #3dab6a);
-        }
-        .sb-desktop-outer {
+        .sb-outer {
           position: fixed; top: 0; left: 0; bottom: 0;
           width: ${sidebarWidth}px;
-          overflow: visible;
           z-index: 100;
-          transition: width 0.3s cubic-bezier(.4,0,.2,1);
+          transition: width 0.25s ease;
         }
-        .sb-desktop-inner {
+        .sb-inner {
           position: absolute; inset: 0;
-          background: linear-gradient(170deg, #152b21 0%, #1e3d2f 40%, #152b21 100%);
+          background: #162b22;
           display: flex; flex-direction: column;
-          overflow-y: auto; overflow-x: visible;
-          padding: ${collapsed ? "22px 8px" : "22px 12px"};
-          transition: padding 0.3s;
+          padding: ${collapsed ? "20px 8px" : "20px 10px"};
+          overflow-y: auto; overflow-x: hidden;
+          transition: padding 0.25s ease;
         }
-        .sb-desktop-inner::-webkit-scrollbar { width: 3px; }
-        .sb-desktop-inner::-webkit-scrollbar-thumb { background: rgba(94,207,122,0.2); border-radius: 10px; }
+        .sb-inner::-webkit-scrollbar { width: 0; }
         .sb-collapse-btn {
-          position: absolute; top: 26px; right: -11px;
-          width: 22px; height: 22px; border-radius: 50%;
-          border: 1.5px solid rgba(94,207,122,0.4);
+          position: absolute; top: 24px; right: -10px;
+          width: 20px; height: 20px; border-radius: 50%;
+          border: 1px solid rgba(94,207,122,0.3);
           background: #1e3d2f;
           display: flex; align-items: center; justify-content: center;
           cursor: pointer; z-index: 200;
-          transition: background 0.16s, transform 0.16s, border-color 0.16s;
-          box-shadow: 0 2px 10px rgba(0,0,0,0.4), 0 0 0 1px rgba(94,207,122,0.15);
+          transition: background 0.15s;
         }
-        .sb-collapse-btn:hover { background: #2d5a42; border-color: rgba(94,207,122,0.7); transform: scale(1.12); }
+        .sb-collapse-btn:hover { background: #2a5240; }
+        .sb-item {
+          display: flex; align-items: center;
+          border-radius: 10px; cursor: pointer;
+          padding: ${collapsed ? "9px 0" : "8px 10px"};
+          gap: ${collapsed ? "0" : "10px"};
+          justify-content: ${collapsed ? "center" : "flex-start"};
+          border: 1px solid transparent;
+          transition: background 0.15s, border-color 0.15s;
+          position: relative;
+        }
+        .sb-item:hover { background: rgba(94,207,122,0.08); }
+        .sb-item.active {
+          background: rgba(94,207,122,0.14);
+          border-color: rgba(94,207,122,0.28);
+        }
+        .sb-item.active::before {
+          content: '';
+          position: absolute; left: 0; top: 20%; bottom: 20%;
+          width: 3px; border-radius: 0 2px 2px 0;
+          background: #5ecf7a;
+        }
+        .sb-item-icon { color: rgba(240,255,244,0.38); flex-shrink: 0; transition: color 0.15s; }
+        .sb-item.active .sb-item-icon { color: #5ecf7a; }
+        .sb-item:hover .sb-item-icon { color: rgba(240,255,244,0.7); }
+        .sb-item-label {
+          font-family: 'Plus Jakarta Sans', sans-serif;
+          font-size: 12.5px; font-weight: 600; line-height: 1.2;
+          color: rgba(240,255,244,0.5); white-space: nowrap;
+          transition: color 0.15s;
+        }
+        .sb-item.active .sb-item-label { color: #f0fff4; }
+        .sb-item:hover .sb-item-label { color: rgba(240,255,244,0.85); }
+        .sb-item-sub {
+          font-size: 10px; color: rgba(240,255,244,0.22); margin-top: 1px;
+          font-family: 'Plus Jakarta Sans', sans-serif;
+        }
         .sb-tooltip {
-          position: absolute; left: 110%; top: 50%; transform: translateY(-50%);
+          position: absolute; left: calc(100% + 10px); top: 50%;
+          transform: translateY(-50%);
           background: #1a3628; color: #e8f5e1;
-          font-size: clamp(10px,0.9vw,12px); font-weight: 600;
-          padding: 5px 10px; border-radius: 8px; white-space: nowrap;
+          font-size: 11.5px; font-weight: 600;
+          padding: 5px 10px; border-radius: 7px; white-space: nowrap;
           border: 1px solid rgba(94,207,122,0.2);
           pointer-events: none; z-index: 1000;
           font-family: 'Plus Jakarta Sans', sans-serif;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.3);
         }
-        .mob-toggle {
-          position: fixed; top: 14px; left: 14px; z-index: 500;
-          width: 40px; height: 40px; border-radius: 10px; border: none;
-          background: #1a3628; cursor: pointer;
-          display: none; align-items: center; justify-content: center;
-          box-shadow: 0 4px 14px rgba(0,0,0,0.25);
-        }
-        @media (max-width: 900px) { .sb-collapse-btn { display: none !important; } }
-        @media (max-width: 768px) {
-          .sb-desktop-outer { display: none !important; }
-          .mob-toggle { display: flex !important; }
-        }
+        @media (max-width: 768px) { .sb-outer { display: none; } }
       `}</style>
 
-      {/* ── DESKTOP SIDEBAR ── */}
-      <div className="sb-desktop-outer">
-        <div className="sb-collapse-btn" onClick={() => setCollapsed(!collapsed)}>
-          <svg width="9" height="9" viewBox="0 0 9 9" fill="none">
-            <path d={collapsed ? "M2 1.5l4 3-4 3" : "M7 1.5L3 4.5l4 3"} stroke="rgba(240,255,244,0.9)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <div className="sb-outer">
+        <div
+          className="sb-collapse-btn"
+          onClick={() => setCollapsed(!collapsed)}
+        >
+          <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
+            <path
+              d={collapsed ? "M2 1.5l3.5 2.5L2 6.5" : "M6 1.5L2.5 4 6 6.5"}
+              stroke="rgba(240,255,244,0.8)"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
           </svg>
         </div>
 
-        <div className="sb-desktop-inner">
+        <div className="sb-inner">
           {/* Logo */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 32, justifyContent: collapsed ? "center" : "flex-start", paddingLeft: collapsed ? 0 : 2 }}>
-            <div style={{ width: 38, height: 38, borderRadius: 10, flexShrink: 0, background: "linear-gradient(135deg, #5ecf7a, #2d9e5f)", display: "flex", alignItems: "center", justifyContent: "center", animation: "pulseGlow 3s ease-in-out infinite" }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                <path d="M12 2L4 7v10l8 5 8-5V7L12 2z" stroke="white" strokeWidth="1.8" strokeLinejoin="round" fill="rgba(255,255,255,0.15)" />
-                <circle cx="12" cy="12" r="2.5" fill="white" />
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              marginBottom: 28,
+              justifyContent: collapsed ? "center" : "flex-start",
+              paddingLeft: collapsed ? 0 : 2,
+            }}
+          >
+            <div
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 9,
+                flexShrink: 0,
+                background: "linear-gradient(135deg, #5ecf7a, #2d9e5f)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <path
+                  d="M12 2L4 7v10l8 5 8-5V7L12 2z"
+                  stroke="white"
+                  strokeWidth="1.8"
+                  strokeLinejoin="round"
+                  fill="rgba(255,255,255,0.12)"
+                />
+                <circle cx="12" cy="12" r="2" fill="white" />
               </svg>
             </div>
             {!collapsed && (
-              <div style={{ overflow: "hidden", animation: mounted ? "slideInNav 0.25s ease" : "none" }}>
-                <div style={{ fontFamily: "'Outfit',sans-serif", fontWeight: 900, fontSize: "clamp(13px,1.2vw,15px)", color: "#f0fff4", letterSpacing: 2.5, lineHeight: 1 }}>VERIDIA</div>
-                <div style={{ fontSize: "clamp(8px,0.75vw,9.5px)", color: "rgba(240,255,244,0.38)", marginTop: 3 }}>Qualité & Processus</div>
+              <div>
+                <div
+                  style={{
+                    fontFamily: "'Outfit', sans-serif",
+                    fontWeight: 900,
+                    fontSize: 14,
+                    color: "#f0fff4",
+                    letterSpacing: 2,
+                    lineHeight: 1,
+                  }}
+                >
+                  AQIPP
+                </div>
+                <div
+                  style={{
+                    fontSize: 9,
+                    color: "rgba(240,255,244,0.32)",
+                    marginTop: 3,
+                    fontFamily: "'Plus Jakarta Sans', sans-serif",
+                  }}
+                >
+                  Système Qualité
+                </div>
               </div>
             )}
           </div>
 
           {!collapsed && (
-            <div style={{ fontSize: "clamp(7.5px,0.7vw,9px)", fontWeight: 700, color: "rgba(240,255,244,0.22)", letterSpacing: 2.8, textTransform: "uppercase", marginBottom: 10, paddingLeft: 10, fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
-              Navigation
+            <div
+              style={{
+                fontSize: 9,
+                fontWeight: 700,
+                color: "rgba(240,255,244,0.2)",
+                letterSpacing: 2.5,
+                textTransform: "uppercase",
+                marginBottom: 8,
+                paddingLeft: 10,
+                fontFamily: "'Plus Jakarta Sans', sans-serif",
+              }}
+            >
+              Menu
             </div>
           )}
 
-          <nav style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
-            {NAV.map((item, i) => (
-              <NavItem key={item.id} item={item} style={{ animationDelay: `${i * 0.05}s` }} />
-            ))}
+          <nav style={{ flex: 1, display: "flex", flexDirection: "column", gap: 1 }}>
+            {NAV.map((item) => {
+              const isActive = activeId === item.id;
+              return (
+                <div
+                  key={item.id}
+                  className={`sb-item${isActive ? " active" : ""}`}
+                  onClick={() => navigate(item.path)}
+                >
+                  <span className="sb-item-icon">{item.icon}</span>
+                  {!collapsed && (
+                    <div style={{ overflow: "hidden", minWidth: 0 }}>
+                      <div className="sb-item-label">{item.label}</div>
+                      <div className="sb-item-sub">{item.sub}</div>
+                    </div>
+                  )}
+                  {collapsed && (
+                    <span className="sb-tooltip">{item.label}</span>
+                  )}
+                </div>
+              );
+            })}
           </nav>
 
-          <div style={{ height: 1, background: "rgba(94,207,122,0.1)", margin: "14px 0" }} />
-          <Profile />
-        </div>
-      </div>
+          <div
+            style={{
+              height: 1,
+              background: "rgba(94,207,122,0.08)",
+              margin: "12px 0",
+            }}
+          />
 
-      {/* ── MOBILE toggle ── */}
-      <button className="mob-toggle" onClick={() => setMobileOpen(true)}>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round">
-          <path d="M3 6h18M3 12h18M3 18h18" />
-        </svg>
-      </button>
-
-      {mobileOpen && (
-        <div onClick={() => setMobileOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 400, backdropFilter: "blur(2px)" }} />
-      )}
-
-      {/* Mobile drawer */}
-      <div style={{ position: "fixed", top: 0, left: mobileOpen ? 0 : "-260px", bottom: 0, width: 240, background: "linear-gradient(170deg, #152b21 0%, #1e3d2f 40%, #152b21 100%)", zIndex: 410, transition: "left 0.28s cubic-bezier(.4,0,.2,1)", padding: "22px 14px", display: "flex", flexDirection: "column", overflowY: "auto" }}>
-        <button onClick={() => setMobileOpen(false)} style={{ alignSelf: "flex-end", background: "rgba(94,207,122,0.12)", border: "none", borderRadius: 8, width: 30, height: 30, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 20 }}>
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="rgba(240,255,244,0.7)" strokeWidth="2" strokeLinecap="round">
-            <path d="M1 1l12 12M13 1L1 13" />
-          </svg>
-        </button>
-
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 28 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 9, background: "linear-gradient(135deg,#5ecf7a,#2d9e5f)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-              <path d="M12 2L4 7v10l8 5 8-5V7L12 2z" stroke="white" strokeWidth="1.8" strokeLinejoin="round" fill="rgba(255,255,255,0.15)" />
-              <circle cx="12" cy="12" r="2.5" fill="white" />
-            </svg>
-          </div>
-          <div>
-            <div style={{ fontFamily: "'Outfit',sans-serif", fontWeight: 900, fontSize: 14, color: "#f0fff4", letterSpacing: 2 }}>VERIDIA</div>
-            <div style={{ fontSize: 9, color: "rgba(240,255,244,0.38)" }}>Qualité & Processus</div>
-          </div>
-        </div>
-
-        <nav style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
-          {NAV.map((item) => (
+          {/* Profile */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: collapsed ? 0 : 9,
+              justifyContent: collapsed ? "center" : "flex-start",
+              padding: collapsed ? "4px 0" : "5px 4px",
+              borderRadius: 9,
+              cursor: "pointer",
+            }}
+            onClick={() => navigate("/parametres")}
+          >
             <div
-              key={item.id}
-              className={`sb-nav-item ${activeId === item.id ? "active" : ""}`}
-              onClick={() => handleNav(item)}
-              style={{ padding: "10px 11px", gap: 10 }}
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 8,
+                flexShrink: 0,
+                background: "linear-gradient(135deg, #5ecf7a, #2d9e5f)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontFamily: "'Outfit', sans-serif",
+                fontWeight: 900,
+                fontSize: 11,
+                color: "#152b21",
+              }}
             >
-              <span style={{ color: activeId === item.id ? "#5ecf7a" : "rgba(240,255,244,0.45)", flexShrink: 0 }}>{item.icon}</span>
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: activeId === item.id ? "#f0fff4" : "rgba(240,255,244,0.7)", fontFamily: "'Plus Jakarta Sans',sans-serif" }}>{item.label}</div>
-                <div style={{ fontSize: 9.5, color: "rgba(240,255,244,0.3)" }}>{item.sub}</div>
+              AZ
+            </div>
+            {!collapsed && (
+              <div style={{ overflow: "hidden", flex: 1, minWidth: 0 }}>
+                <div
+                  style={{
+                    fontFamily: "'Plus Jakarta Sans', sans-serif",
+                    fontWeight: 700,
+                    fontSize: 12,
+                    color: "#f0fff4",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  Atir Zineb
+                </div>
+                <div
+                  style={{
+                    fontSize: 9.5,
+                    color: "rgba(240,255,244,0.3)",
+                  }}
+                >
+                  Admin Système
+                </div>
               </div>
-            </div>
-          ))}
-        </nav>
-
-        <div style={{ borderTop: "1px solid rgba(94,207,122,0.1)", paddingTop: 14 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 9, cursor: "pointer" }} onClick={() => { navigate("/parametres"); setMobileOpen(false); }}>
-            <div style={{ width: 32, height: 32, borderRadius: 8, background: "linear-gradient(135deg,#5ecf7a,#2d9e5f)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Outfit',sans-serif", fontWeight: 900, fontSize: 11, color: "#152b21" }}>AZ</div>
-            <div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: "#f0fff4", fontFamily: "'Plus Jakarta Sans',sans-serif" }}>Atir Zineb</div>
-              <div style={{ fontSize: 9.5, color: "rgba(240,255,244,0.35)" }}>Admin Système</div>
-            </div>
+            )}
           </div>
         </div>
       </div>
