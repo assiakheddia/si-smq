@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import NotificationsPanel, { getUnreadCount } from "./NotificationsPanel.jsx";
 
 const ALL_DATA = [
   {
@@ -380,10 +381,21 @@ function ConfirmModal({ nom, onConfirm, onCancel }) {
 
 export default function MainContent({ collapsed }) {
   const navigate = useNavigate();
-  const [data, setData] = useState(ALL_DATA);
+  const [data, setData] = useState(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem("smq_processes") || "[]");
+      const existingIds = new Set(ALL_DATA.map((d) => d.id));
+      const newOnes = stored.filter((s) => !existingIds.has(s.id));
+      return [...ALL_DATA, ...newOnes];
+    } catch {
+      return ALL_DATA;
+    }
+  });
   
   const [search, setSearch] = useState("");
   const [deptFilter, setDeptFilter] = useState("Tous");
+  const [showNotifs, setShowNotifs] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(() => getUnreadCount());
   const [sortField, setSortField] = useState(null);
   const [sortAsc, setSortAsc] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -451,6 +463,7 @@ export default function MainContent({ collapsed }) {
 
   return (
     <>
+      {showNotifs && <NotificationsPanel onClose={() => setShowNotifs(false)} />}
       <style>{`
         @keyframes fadeUp {
           from { opacity: 0; transform: translateY(12px); }
@@ -659,22 +672,14 @@ export default function MainContent({ collapsed }) {
                 FR
               </span>
             </div>
-            <div className="icon-btn">
-              <svg
-                width="15"
-                height="15"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="#555"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-              >
+            <div className="icon-btn" onClick={() => { setShowNotifs((v) => !v); setUnreadCount(0); }} style={{ cursor: "pointer" }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="1.8" strokeLinecap="round">
                 <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" />
                 <path d="M13.73 21a2 2 0 01-3.46 0" />
               </svg>
-              <span className="n-dot" />
+              {unreadCount > 0 && <span className="n-dot" />}
             </div>
-            <div className="u-chip">
+            <div className="u-chip" onClick={() => navigate("/parametres")} style={{ cursor: "pointer" }}>
               <div className="u-av">AZ</div>
               <div>
                 <div
@@ -1082,12 +1087,11 @@ export default function MainContent({ collapsed }) {
                               onChange={() => toggleRow(row.id)}
                             />
                           </td>
-                          <td className="nom-cell"
-                            style={{cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset:'1px'}}
+                          <td
+                            className="nom-cell"
+                            style={{ cursor: "pointer", textDecoration: "underline", textUnderlineOffset: "2px" }}
                             onClick={() => navigate(`/fiche-processus/${row.id}`)}
-                          >
-                            {row.nom}
-                          </td>
+                          >{row.nom}</td>
                           <td>{row.responsable}</td>
                           <td style={{ color: "#6b7280" }}>{row.tel}</td>
                           <td>
