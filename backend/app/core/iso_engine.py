@@ -1,603 +1,1493 @@
 """
-backend/app/core/iso_engine.py
+iso_engine.py — Noyau ISO 9001:2015 Intelligent v2
+===================================================
 
-Noyau ISO 9001 — règles métier pures, sans accès DB direct.
-Toutes les fonctions sont stateless et testables unitairement.
+Architecture de raisonnement en 4 niveaux :
 
-Responsabilités :
-  1. score_to_niveau()         → Float → NiveauMaturite
-  2. score_to_type_ecart()     → Float → TypeEcart
-  3. get_recommandation_auto() → (code_clause, score) → str
-  4. calcul_score_global()     → [DiagnosticClause] → Float
-  5. valider_processus_iso()   → vérifie les prérequis ISO avant diagnostic
+  Niveau 1 — Statique      : règles déterministes pures (RPN, transitions, seuils)
+  Niveau 2 — Intent        : comprendre l'INTENTION derrière chaque exigence ISO,
+                             pas sa lettre — "rapport mensuel" = surveillance régulière,
+                             donc hebdomadaire est CONFORME voire supérieur
+  Niveau 3 — Cross-clause  : mémoire inter-clauses — un KPI sans objectif = §6.2
+                             non conforme même si §9.1 semble OK
+  Niveau 4 — Calibrage     : distinguer lettre/intention, absence/inadéquation,
+                             supérieur/équivalent/insuffisant
 
-Le DiagnosticService appelle ces fonctions — l'engine ne touche jamais
-à la session SQLAlchemy directement.
+Philosophie : ISO 9001 est basé sur des PRINCIPES, pas des règles rigides.
+Le moteur raisonne comme un auditeur humain expérimenté.
 """
 
-from app.models.diagnostic import NiveauMaturite, TypeEcart
+from __future__ import annotations
+
+import json
+import logging
+from dataclasses import dataclass, field
+from enum import Enum
+from functools import lru_cache
+from typing import Any
+import os
+from urllib import response
+import httpx
+
+logger = logging.getLogger(__name__)
 
 
-# =============================================================================
-# 1. SCORE → NIVEAU DE MATURITÉ
-# =============================================================================
+# ---------------------------------------------------------------------------
+# 1. RÉFÉRENTIEL ISO 9001:2015 — intention explicite pour chaque exigence
+# ---------------------------------------------------------------------------
+# Chaque exigence porte :
+#   - "lettre"       : ce que le texte dit littéralement
+#   - "intention"    : POURQUOI cette exigence existe
+#   - "satisfait_si" : exemples de pratiques équivalentes ou supérieures
+#   - "insuffisant_si" : pratiques qui semblent conformes mais ne le sont pas
+#
+# C'est ce mapping lettre<->intention qui rend le moteur intelligent.
 
-# Seuils ISO — modifiables ici uniquement (source de vérité unique)
-_SEUILS_NIVEAU = [
-    (75.0, NiveauMaturite.conforme),
-    (50.0, NiveauMaturite.avance),
-    (25.0, NiveauMaturite.partiel),
-    (0.0,  NiveauMaturite.non_conforme),
-]
-
-
-def score_to_niveau(score: float) -> NiveauMaturite:
-    """
-    Convertit un score numérique (0–100) en niveau de maturité ISO.
-
-    >>> score_to_niveau(80)  → NiveauMaturite.conforme
-    >>> score_to_niveau(60)  → NiveauMaturite.avance
-    >>> score_to_niveau(35)  → NiveauMaturite.partiel
-    >>> score_to_niveau(10)  → NiveauMaturite.non_conforme
-    """
-    score = max(0.0, min(100.0, score))  # Clamp 0–100
-    for seuil, niveau in _SEUILS_NIVEAU:
-        if score >= seuil:
-            return niveau
-    return NiveauMaturite.non_conforme
-
-
-# =============================================================================
-# 2. SCORE → TYPE D'ÉCART
-# =============================================================================
-
-def score_to_type_ecart(score: float) -> TypeEcart:
-    """
-    Classifie automatiquement l'écart selon le score.
-    Correspond à la classification 'majeur/mineur/observation' du diagramme conceptuel.
-
-    - 0  – 25  → majeur      (blocant certification)
-    - 25 – 50  → mineur      (à corriger, non blocant)
-    - 50 – 75  → observation (point de vigilance)
-    - 75 – 100 → conforme    (aucun écart)
-    """
-    score = max(0.0, min(100.0, score))
-    if score >= 75.0:
-        return TypeEcart.conforme
-    elif score >= 50.0:
-        return TypeEcart.observation
-    elif score >= 25.0:
-        return TypeEcart.mineur
-    else:
-        return TypeEcart.majeur
-
-
-# =============================================================================
-# 3. RECOMMANDATION AUTOMATIQUE PAR CLAUSE
-# =============================================================================
-
-# Bibliothèque de recommandations par préfixe de clause + niveau d'écart
-# Structure : { "code_clause_prefix": { TypeEcart: "recommandation" } }
-_RECOMMANDATIONS: dict[str, dict[TypeEcart, str]] = {
-
-    # ---- Section 4 — Contexte -----------------------------------------------
+ISO_CLAUSES: dict[str, dict] = {
     "4.1": {
-        TypeEcart.majeur:      "Réaliser une analyse SWOT documentée pour identifier les enjeux internes et externes. Valider en revue de direction.",
-        TypeEcart.mineur:      "Formaliser et mettre à jour l'analyse du contexte. S'assurer qu'elle est revue à chaque changement majeur.",
-        TypeEcart.observation: "Enrichir l'analyse contextuelle avec des données quantitatives (indicateurs sectoriels, benchmarks).",
-        TypeEcart.conforme:    "Maintenir la mise à jour régulière de l'analyse de contexte (au moins annuelle).",
+        "titre": "Compréhension de l'organisme et de son contexte",
+        "section": 4,
+        "intention_globale": (
+            "S'assurer que l'organisme connaît son environnement et que cette connaissance "
+            "est VIVANTE — pas un document produit une fois et oublié. "
+            "L'auditeur cherche des preuves que l'analyse est régulièrement revue ET qu'elle influence les décisions."
+        ),
+        "exigences": [
+            {
+                "id": "4.1.a",
+                "lettre": "Identifier les enjeux internes et externes pertinents",
+                "intention": (
+                    "L'organisme doit CONNAÎTRE son environnement : concurrence, réglementation, culture interne. "
+                    "L'objectif est de ne pas être surpris par des facteurs prévisibles. "
+                    "N'importe quel outil d'analyse satisfait cette intention."
+                ),
+                "satisfait_si": [
+                    "SWOT formalisé et daté, même simple",
+                    "PESTEL ou équivalent mis à jour annuellement",
+                    "Compte-rendu de séminaire de direction couvrant ces enjeux",
+                ],
+                "insuffisant_si": [
+                    "Document SWOT produit pour l'audit et jamais utilisé depuis",
+                    "Analyse copiée d'un exercice précédent sans révision",
+                ],
+                "bloquant_si_absent": True,
+            },
+            {
+                "id": "4.1.b",
+                "lettre": "Surveiller et revoir ces informations",
+                "intention": (
+                    "La surveillance n'implique pas une fréquence fixe. Mensuel, trimestriel, annuel — "
+                    "tout est acceptable SI la fréquence est justifiée. "
+                    "Une startup en croissance devrait revoir plus souvent qu'une administration stable."
+                ),
+                "satisfait_si": [
+                    "Revue annuelle documentée dans un PV de direction",
+                    "Revue déclenchée par événement (changement réglementaire)",
+                ],
+                "insuffisant_si": [
+                    "Aucune preuve de révision depuis la création du document",
+                ],
+                "bloquant_si_absent": False,
+            },
+        ],
+        "preuves_attendues": ["Analyse SWOT/PESTEL ou équivalent", "PV de revue mentionnant le contexte"],
+        "poids": 0.8,
+        "clauses_liees": ["4.2", "6.1", "9.3"],
     },
     "4.2": {
-        TypeEcart.majeur:      "Identifier et documenter toutes les parties intéressées pertinentes et leurs exigences (clients, tutelles, régulateurs).",
-        TypeEcart.mineur:      "Compléter la liste des parties intéressées et vérifier la prise en compte de leurs exigences dans les processus.",
-        TypeEcart.observation: "Prévoir une revue périodique des attentes des parties intéressées.",
-        TypeEcart.conforme:    "Continuer à surveiller l'évolution des attentes des parties intéressées.",
-    },
-    "4.3": {
-        TypeEcart.majeur:      "Définir et documenter le domaine d'application du SMQ avec les exclusions justifiées.",
-        TypeEcart.mineur:      "Préciser les limites du SMQ et documenter formellement les exclusions de clauses.",
-        TypeEcart.observation: "Vérifier que le domaine d'application est communiqué à toutes les parties concernées.",
-        TypeEcart.conforme:    "Maintenir le domaine d'application à jour lors de chaque évolution organisationnelle.",
+        "titre": "Compréhension des besoins et attentes des parties intéressées",
+        "section": 4,
+        "intention_globale": (
+            "L'organisme doit savoir QUI peut affecter ou être affecté par ses activités qualité, "
+            "et ce que ces parties attendent. L'exhaustivité n'est pas requise — la PERTINENCE oui. "
+            "10 parties bien analysées valent mieux que 50 listées superficiellement."
+        ),
+        "exigences": [
+            {
+                "id": "4.2.a",
+                "lettre": "Identifier les parties intéressées pertinentes",
+                "intention": (
+                    "Identifier signifie nommer ET justifier la pertinence. "
+                    "Un client évident non listé est un écart. Une entité listée sans lien avec la qualité "
+                    "n'est pas un problème — c'est superflu mais pas non-conforme."
+                ),
+                "satisfait_si": [
+                    "Registre des PI avec nom, type, niveau d'influence",
+                    "Matrice des PI intégrée au plan qualité",
+                ],
+                "insuffisant_si": [
+                    "Clients et fournisseurs absents de la liste",
+                    "Liste générée sans analyse réelle",
+                ],
+                "bloquant_si_absent": True,
+            },
+            {
+                "id": "4.2.b",
+                "lettre": "Déterminer leurs exigences pertinentes",
+                "intention": (
+                    "Connaître ce que chaque partie intéressée ATTEND en matière de qualité. "
+                    "Une enquête client annuelle satisfait cette exigence pour les clients."
+                ),
+                "satisfait_si": [
+                    "Matrice besoins/attentes par PI documentée",
+                    "Contrats clients analysés pour extraction des exigences",
+                    "Veille réglementaire formalisée",
+                ],
+                "insuffisant_si": [
+                    "Exigences listées sans source identifiable",
+                    "Aucune exigence réglementaire malgré secteur réglementé",
+                ],
+                "bloquant_si_absent": True,
+            },
+        ],
+        "preuves_attendues": ["Registre des parties intéressées", "Matrice besoins/attentes"],
+        "poids": 0.8,
+        "clauses_liees": ["4.1", "6.1", "8.2"],
     },
     "4.4": {
-        TypeEcart.majeur:      "Cartographier tous les processus du SMQ, définir leurs interactions, pilotes et indicateurs de performance.",
-        TypeEcart.mineur:      "Compléter la cartographie des processus et formaliser les interactions entre processus.",
-        TypeEcart.observation: "Améliorer la documentation des interactions entre processus.",
-        TypeEcart.conforme:    "Maintenir la cartographie des processus à jour.",
+        "titre": "Système de management de la qualité et ses processus",
+        "section": 4,
+        "intention_globale": (
+            "L'organisme doit PILOTER ses processus — pas seulement les décrire. "
+            "Une cartographie belle mais sans pilotes, sans indicateurs, sans interactions définies "
+            "est un document mort. L'auditeur cherche des preuves d'utilisation opérationnelle."
+        ),
+        "exigences": [
+            {
+                "id": "4.4.a",
+                "lettre": "Déterminer les processus nécessaires et leurs interactions",
+                "intention": (
+                    "La cartographie doit refléter la RÉALITÉ opérationnelle. "
+                    "Format libre : BPMN, schéma maison — ce qui compte c'est que les équipes "
+                    "s'y reconnaissent et qu'on voit les flux entre processus."
+                ),
+                "satisfait_si": [
+                    "Cartographie des processus avec interactions matérialisées",
+                    "Fiches processus individuelles avec entrées/sorties",
+                ],
+                "insuffisant_si": [
+                    "Cartographie sans interactions entre processus",
+                    "Cartographie non reconnue par les équipes terrain",
+                ],
+                "bloquant_si_absent": True,
+            },
+            {
+                "id": "4.4.b",
+                "lettre": "Attribuer les responsabilités et autorités pour ces processus",
+                "intention": (
+                    "Chaque processus doit avoir UN pilote identifiable — "
+                    "quelqu'un qui répond de la performance du processus devant la direction."
+                ),
+                "satisfait_si": [
+                    "Fiche processus avec nom du pilote",
+                    "RACI formalisé mentionnant un responsable par processus",
+                ],
+                "insuffisant_si": [
+                    "Processus sans pilote nommé",
+                    "Pilote nommé mais sans autorité réelle",
+                ],
+                "bloquant_si_absent": True,
+            },
+            {
+                "id": "4.4.c",
+                "lettre": "Gérer les risques et opportunités affectant les processus",
+                "intention": (
+                    "Cette exigence est LIÉE à §6.1. Si §6.1 est satisfait et les risques sont tracés "
+                    "par processus, cette sous-exigence est couverte automatiquement."
+                ),
+                "satisfait_si": [
+                    "Registre des risques organisé par processus",
+                    "Fiches processus incluant section risques/opportunités",
+                ],
+                "insuffisant_si": [
+                    "Registre des risques global sans lien avec les processus",
+                ],
+                "bloquant_si_absent": False,
+            },
+        ],
+        "preuves_attendues": ["Cartographie des processus", "Fiches processus avec pilotes", "KPIs par processus"],
+        "poids": 1.0,
+        "clauses_liees": ["5.3", "6.1", "9.1"],
     },
-
-    # ---- Section 5 — Leadership ---------------------------------------------
     "5.1": {
-        TypeEcart.majeur:      "La direction doit s'impliquer formellement dans le SMQ : signer la politique qualité, allouer des ressources dédiées, participer aux revues.",
-        TypeEcart.mineur:      "Renforcer la visibilité de l'engagement de la direction via des communications régulières sur la qualité.",
-        TypeEcart.observation: "Documenter les preuves de l'engagement de la direction (comptes-rendus de revue, allocations budgétaires).",
-        TypeEcart.conforme:    "Maintenir et renforcer la culture qualité portée par la direction.",
+        "titre": "Leadership et engagement de la direction",
+        "section": 5,
+        "intention_globale": (
+            "La direction doit MONTRER son engagement — pas le déclarer. "
+            "L'auditeur cherche des actes concrets : temps consacré, décisions prises, ressources allouées. "
+            "Un beau discours sans budget qualité ni participation aux revues = non-conforme."
+        ),
+        "exigences": [
+            {
+                "id": "5.1.a",
+                "lettre": "Démontrer le leadership et l'engagement envers le SMQ",
+                "intention": (
+                    "Preuves comportementales de la direction : présence aux revues, "
+                    "signature des objectifs, communication active sur la qualité. "
+                    "Délégation totale à un responsable qualité sans implication direction = écart majeur."
+                ),
+                "satisfait_si": [
+                    "Direction présente aux revues de direction (PV attestant présence)",
+                    "Politique qualité signée par le dirigeant",
+                    "Budget qualité approuvé par la direction",
+                ],
+                "insuffisant_si": [
+                    "Responsable qualité seul signataire de tous les documents",
+                    "Direction absente des revues de direction",
+                ],
+                "bloquant_si_absent": True,
+            },
+        ],
+        "preuves_attendues": ["PV de revue de direction avec présence direction", "Politique qualité signée direction"],
+        "poids": 0.9,
+        "clauses_liees": ["5.2", "9.3"],
     },
     "5.2": {
-        TypeEcart.majeur:      "Rédiger, approuver et diffuser une politique qualité formelle alignée sur le contexte et les objectifs stratégiques.",
-        TypeEcart.mineur:      "Réviser la politique qualité pour l'aligner sur le contexte actuel et la rediffuser.",
-        TypeEcart.observation: "Vérifier que la politique qualité est comprise et appliquée à tous les niveaux.",
-        TypeEcart.conforme:    "Réviser la politique qualité lors de chaque revue de direction.",
+        "titre": "Politique qualité",
+        "section": 5,
+        "intention_globale": (
+            "La politique qualité doit être UN ENGAGEMENT RÉEL de la direction, "
+            "compris par tous et visible dans les pratiques. "
+            "Un document affiché dans le couloir mais inconnu des employés = insuffisant."
+        ),
+        "exigences": [
+            {
+                "id": "5.2.a",
+                "lettre": "Établir une politique qualité cohérente avec le contexte et la stratégie",
+                "intention": (
+                    "La politique doit être DATÉE, SIGNÉE, et refléter réellement la stratégie actuelle. "
+                    "Si le contexte a changé (fusion, nouveau marché) et la politique n'a pas été revue = écart."
+                ),
+                "satisfait_si": [
+                    "Politique datée et signée, cohérente avec les objectifs stratégiques actuels",
+                    "Politique revue lors du dernier changement stratégique majeur",
+                ],
+                "insuffisant_si": [
+                    "Politique générique sans lien avec le secteur",
+                    "Copie conforme d'une politique d'un autre organisme",
+                ],
+                "bloquant_si_absent": True,
+            },
+            {
+                "id": "5.2.b",
+                "lettre": "Communiquée, comprise et appliquée au sein de l'organisme",
+                "intention": (
+                    "La communication n'exige pas que chaque employé récite la politique mot pour mot. "
+                    "Elle exige que chacun comprenne SON rôle dans la qualité."
+                ),
+                "satisfait_si": [
+                    "Formation initiale incluant la politique qualité",
+                    "Employés capables d'expliquer comment leur travail contribue à la qualité",
+                ],
+                "insuffisant_si": [
+                    "Employés incapables d'identifier la politique qualité",
+                    "Communication uniquement à la hiérarchie sans descente terrain",
+                ],
+                "bloquant_si_absent": True,
+            },
+        ],
+        "preuves_attendues": ["Politique qualité datée et signée", "Preuves de communication"],
+        "poids": 0.8,
+        "clauses_liees": ["5.1", "6.2"],
     },
     "5.3": {
-        TypeEcart.majeur:      "Définir et documenter les rôles, responsabilités et autorités pour tous les postes clés du SMQ.",
-        TypeEcart.mineur:      "Mettre à jour les fiches de poste et l'organigramme qualité.",
-        TypeEcart.observation: "S'assurer que les responsabilités qualité sont communiquées et comprises.",
-        TypeEcart.conforme:    "Revoir les responsabilités à chaque changement organisationnel.",
+        "titre": "Rôles, responsabilités et autorités",
+        "section": 5,
+        "intention_globale": (
+            "Chaque personne doit savoir CE QU'ELLE DOIT FAIRE pour la qualité. "
+            "L'auditeur vérifie que la responsabilité qualité est connue des intéressés, "
+            "pas seulement écrite dans un document RH."
+        ),
+        "exigences": [
+            {
+                "id": "5.3.a",
+                "lettre": "Attribuer et communiquer les responsabilités et autorités",
+                "intention": (
+                    "Format libre : fiches de poste, RACI, organigramme annoté. "
+                    "Ce qui compte : la personne connaît ses responsabilités qualité "
+                    "ET dispose de l'AUTORITÉ pour les exercer."
+                ),
+                "satisfait_si": [
+                    "Fiches de poste incluant responsabilités qualité",
+                    "RACI formalisé et connu des acteurs",
+                ],
+                "insuffisant_si": [
+                    "RACI existant mais non connu des équipes",
+                    "Responsabilité attribuée sans autorité correspondante",
+                ],
+                "bloquant_si_absent": True,
+            },
+        ],
+        "preuves_attendues": ["Organigramme", "Fiches de poste avec responsabilités qualité", "RACI"],
+        "poids": 0.8,
+        "clauses_liees": ["4.4", "5.1"],
     },
-
-    # ---- Section 6 — Planification ------------------------------------------
     "6.1": {
-        TypeEcart.majeur:      "Mettre en place un registre des risques et opportunités avec évaluation probabilité × gravité et plans d'action associés.",
-        TypeEcart.mineur:      "Compléter l'analyse des risques pour tous les processus et planifier les actions de traitement.",
-        TypeEcart.observation: "Réviser et mettre à jour le registre des risques au moins semestriellement.",
-        TypeEcart.conforme:    "Maintenir le suivi des risques et intégrer les résultats dans les revues de direction.",
+        "titre": "Actions face aux risques et opportunités",
+        "section": 6,
+        "intention_globale": (
+            "La 'pensée basée sur les risques' est le CŒUR de ISO 9001:2015. "
+            "L'organisme doit ANTICIPER, pas seulement réagir. "
+            "Un registre des risques statique jamais utilisé = écart majeur. "
+            "Un tableau Excel simple mais mis à jour régulièrement = parfaitement conforme."
+        ),
+        "exigences": [
+            {
+                "id": "6.1.a",
+                "lettre": "Identifier les risques et opportunités",
+                "intention": (
+                    "Les risques doivent couvrir les processus, les objectifs qualité ET le contexte. "
+                    "Les opportunités sont souvent oubliées — absence = écart mineur seulement. "
+                    "Outil libre : AMDEC, matrice, tableau, brainstorming documenté."
+                ),
+                "satisfait_si": [
+                    "Registre des risques avec les risques majeurs identifiés",
+                    "AMDEC processus réalisée",
+                    "Plan de continuité couvrant les risques majeurs",
+                ],
+                "insuffisant_si": [
+                    "Registre vide ou avec un seul risque générique",
+                    "Risques identifiés sans lien avec les processus qualité",
+                ],
+                "bloquant_si_absent": True,
+            },
+            {
+                "id": "6.1.b",
+                "lettre": "Planifier des actions et en évaluer l'efficacité",
+                "intention": (
+                    "Chaque risque significatif doit avoir UNE ACTION planifiée "
+                    "avec un responsable et une échéance. "
+                    "L'évaluation d'efficacité peut être simple : le risque s'est-il matérialisé ?"
+                ),
+                "satisfait_si": [
+                    "Plan d'actions lié au registre des risques avec responsable et délai",
+                    "Suivi de l'efficacité dans les revues de direction",
+                ],
+                "insuffisant_si": [
+                    "Risques identifiés sans aucune action planifiée",
+                    "Actions planifiées mais jamais suivies",
+                ],
+                "bloquant_si_absent": True,
+            },
+        ],
+        "preuves_attendues": ["Registre des risques et opportunités", "Plan d'actions associé"],
+        "poids": 1.0,
+        "clauses_liees": ["4.1", "4.2", "6.2", "9.1", "10.2"],
     },
     "6.2": {
-        TypeEcart.majeur:      "Définir des objectifs qualité SMART pour chaque processus, avec indicateurs de mesure et responsables.",
-        TypeEcart.mineur:      "Rendre les objectifs qualité mesurables et planifier les actions pour les atteindre.",
-        TypeEcart.observation: "Renforcer le suivi de l'atteinte des objectifs qualité.",
-        TypeEcart.conforme:    "Revoir et ajuster les objectifs qualité lors de chaque revue de direction.",
+        "titre": "Objectifs qualité et planification",
+        "section": 6,
+        "intention_globale": (
+            "Les objectifs qualité doivent être MESURABLES et SUIVIS — pas des vœux pieux. "
+            "Un objectif 'améliorer la satisfaction client' sans indicateur = non-conforme. "
+            "'Atteindre 90% de satisfaction client au T3' = conforme."
+        ),
+        "exigences": [
+            {
+                "id": "6.2.a",
+                "lettre": "Établir des objectifs qualité mesurables cohérents avec la politique",
+                "intention": (
+                    "MESURABLE = il existe un chiffre, un taux, un délai. "
+                    "3 objectifs bien suivis valent mieux que 20 oubliés."
+                ),
+                "satisfait_si": [
+                    "Objectifs SMART documentés avec indicateur chiffré",
+                    "Tableau de bord avec cibles et résultats actuels",
+                ],
+                "insuffisant_si": [
+                    "Objectifs qualitatifs sans indicateur associé",
+                    "Objectifs définis mais sans aucune mesure réalisée",
+                ],
+                "bloquant_si_absent": True,
+            },
+            {
+                "id": "6.2.b",
+                "lettre": "Planifier comment atteindre les objectifs",
+                "intention": "Responsable + échéance = minimum requis pour chaque objectif.",
+                "satisfait_si": [
+                    "Plan d'objectifs avec colonnes responsable et échéance",
+                ],
+                "insuffisant_si": [
+                    "Objectifs sans responsable ni échéance",
+                ],
+                "bloquant_si_absent": False,
+            },
+        ],
+        "preuves_attendues": ["Tableau de bord des objectifs qualité chiffrés", "Plan d'atteinte des objectifs"],
+        "poids": 0.9,
+        "clauses_liees": ["5.2", "6.1", "9.1"],
     },
-    "6.3": {
-        TypeEcart.majeur:      "Établir une procédure de gestion des modifications du SMQ avec analyse d'impact avant tout changement.",
-        TypeEcart.mineur:      "Documenter les modifications apportées au SMQ et en évaluer l'impact.",
-        TypeEcart.observation: "Renforcer la traçabilité des modifications du SMQ.",
-        TypeEcart.conforme:    "Maintenir le processus de gestion des modifications à jour.",
-    },
-
-    # ---- Section 7 — Support ------------------------------------------------
     "7.1": {
-        TypeEcart.majeur:      "Identifier et documenter toutes les ressources nécessaires au SMQ (humaines, infrastructures, équipements, financières).",
-        TypeEcart.mineur:      "Compléter le plan de ressources et s'assurer de l'adéquation avec les besoins des processus.",
-        TypeEcart.observation: "Anticiper les besoins en ressources dans la planification annuelle.",
-        TypeEcart.conforme:    "Réviser le plan de ressources à chaque cycle de planification.",
+        "titre": "Ressources",
+        "section": 7,
+        "intention_globale": (
+            "L'organisme doit avoir les moyens de ses ambitions qualité. "
+            "Infrastructures défaillantes documentées mais non traitées = écart. "
+            "Savoir-faire critique porté par une seule personne sans documentation = risque §6.1."
+        ),
+        "exigences": [
+            {
+                "id": "7.1.a",
+                "lettre": "Fournir les ressources humaines, infrastructure, environnement nécessaires",
+                "intention": "Ressources identifiées, pourvues, et maintenues opérationnelles.",
+                "satisfait_si": [
+                    "Plan de ressources annuel documenté",
+                    "Registre des équipements avec plan de maintenance",
+                ],
+                "insuffisant_si": [
+                    "Équipements critiques sans maintenance planifiée",
+                ],
+                "bloquant_si_absent": False,
+            },
+            {
+                "id": "7.1.b",
+                "lettre": "Gérer les connaissances organisationnelles",
+                "intention": (
+                    "Capitaliser sur ce que l'organisme sait faire pour ne pas le perdre. "
+                    "Format très libre : procédures, tutorats, base documentaire, wiki."
+                ),
+                "satisfait_si": [
+                    "Procédures documentées pour les activités critiques",
+                    "Plan de tutorat/succession pour postes clés",
+                ],
+                "insuffisant_si": [
+                    "Savoir-faire critique porté par une seule personne sans documentation",
+                ],
+                "bloquant_si_absent": False,
+            },
+        ],
+        "preuves_attendues": ["Plan de ressources", "Registre des équipements", "Base documentaire"],
+        "poids": 0.8,
+        "clauses_liees": ["7.2", "6.1"],
     },
     "7.2": {
-        TypeEcart.majeur:      "Définir les compétences requises pour chaque poste, évaluer les écarts et mettre en place un plan de formation.",
-        TypeEcart.mineur:      "Mettre à jour les matrices de compétences et planifier les formations manquantes.",
-        TypeEcart.observation: "Renforcer le suivi des compétences et l'évaluation de l'efficacité des formations.",
-        TypeEcart.conforme:    "Maintenir la matrice de compétences à jour et revoir le plan de formation annuellement.",
-    },
-    "7.3": {
-        TypeEcart.majeur:      "Mettre en place un programme de sensibilisation à la politique qualité, aux objectifs et à l'importance de la contribution de chacun.",
-        TypeEcart.mineur:      "Renforcer la communication interne sur les objectifs qualité et les résultats obtenus.",
-        TypeEcart.observation: "Varier les supports de sensibilisation pour maintenir l'engagement.",
-        TypeEcart.conforme:    "Maintenir la sensibilisation continue à la culture qualité.",
-    },
-    "7.4": {
-        TypeEcart.majeur:      "Établir un plan de communication interne et externe couvrant : quoi, quand, à qui, comment communiquer sur le SMQ.",
-        TypeEcart.mineur:      "Formaliser les canaux et fréquences de communication sur la qualité.",
-        TypeEcart.observation: "Évaluer l'efficacité des communications et ajuster les canaux si nécessaire.",
-        TypeEcart.conforme:    "Maintenir le plan de communication à jour.",
+        "titre": "Compétences",
+        "section": 7,
+        "intention_globale": (
+            "Les personnes affectant la qualité doivent être COMPÉTENTES — "
+            "pas seulement diplômées. L'expérience, la formation interne, le compagnonnage "
+            "sont des preuves de compétence valables."
+        ),
+        "exigences": [
+            {
+                "id": "7.2.a",
+                "lettre": "Déterminer les compétences nécessaires et s'assurer que les personnes les possèdent",
+                "intention": (
+                    "Pour chaque poste impactant la qualité : liste des compétences requises + évaluation. "
+                    "Compétence = savoir + savoir-faire + savoir-être démontré."
+                ),
+                "satisfait_si": [
+                    "Matrice de compétences avec niveau requis vs niveau actuel",
+                    "Habilitations/certifications pour postes réglementés",
+                ],
+                "insuffisant_si": [
+                    "Compétences listées mais jamais évaluées",
+                    "Postes critiques occupés sans vérification des compétences",
+                ],
+                "bloquant_si_absent": True,
+            },
+            {
+                "id": "7.2.b",
+                "lettre": "Prendre des actions pour acquérir les compétences manquantes et vérifier l'efficacité",
+                "intention": (
+                    "Former ET vérifier que la formation a été efficace. "
+                    "L'évaluation post-formation peut être simple : quiz, observation, résultat mesurable."
+                ),
+                "satisfait_si": [
+                    "Plan de formation lié aux écarts identifiés",
+                    "Évaluation post-formation documentée",
+                ],
+                "insuffisant_si": [
+                    "Formations réalisées sans évaluation d'efficacité",
+                ],
+                "bloquant_si_absent": False,
+            },
+        ],
+        "preuves_attendues": ["Matrice de compétences", "Plan de formation", "Évaluations post-formation"],
+        "poids": 0.8,
+        "clauses_liees": ["7.1", "7.3"],
     },
     "7.5": {
-        TypeEcart.majeur:      "Mettre en place une gestion documentaire complète : identification, création, approbation, diffusion, archivage et contrôle d'accès.",
-        TypeEcart.mineur:      "Renforcer la maîtrise des documents : versioning, droits d'accès et procédure de mise à jour.",
-        TypeEcart.observation: "Améliorer la traçabilité des modifications documentaires.",
-        TypeEcart.conforme:    "Maintenir le système de gestion documentaire et former les nouveaux arrivants.",
+        "titre": "Informations documentées",
+        "section": 7,
+        "intention_globale": (
+            "ISO 9001:2015 n'impose pas une liste fixe de documents — c'est intentionnel. "
+            "L'organisme documente CE QUI EST NÉCESSAIRE pour ses processus. "
+            "Trop documenter peut aussi être un écart (charge inutile qui décourage l'utilisation)."
+        ),
+        "exigences": [
+            {
+                "id": "7.5.a",
+                "lettre": "Créer, mettre à jour et maîtriser les informations documentées",
+                "intention": (
+                    "Maîtriser = contrôler qui peut modifier, où c'est stocké, quelle version est en vigueur. "
+                    "Format libre : SharePoint, Drive, dossier partagé. "
+                    "Ce qui compte : la version applicable est accessible et les obsolètes sont retirées."
+                ),
+                "satisfait_si": [
+                    "Système de gestion documentaire avec contrôle de version",
+                    "Index des documents avec date de révision",
+                ],
+                "insuffisant_si": [
+                    "Plusieurs versions d'un même document en circulation simultanée",
+                    "Documents critiques sans date de révision",
+                ],
+                "bloquant_si_absent": True,
+            },
+        ],
+        "preuves_attendues": ["Règle de maîtrise documentaire", "Liste des documents avec versions"],
+        "poids": 0.9,
+        "clauses_liees": ["4.4", "8.1"],
     },
-
-    # ---- Section 8 — Réalisation opérationnelle -----------------------------
     "8.1": {
-        TypeEcart.majeur:      "Planifier et documenter la maîtrise de tous les processus opérationnels avec critères d'acceptation et indicateurs de contrôle.",
-        TypeEcart.mineur:      "Renforcer la documentation des processus opérationnels et leurs critères de maîtrise.",
-        TypeEcart.observation: "Améliorer la traçabilité des contrôles opérationnels.",
-        TypeEcart.conforme:    "Maintenir et améliorer en continu la maîtrise opérationnelle.",
+        "titre": "Planification et maîtrise opérationnelles",
+        "section": 8,
+        "intention_globale": (
+            "Les activités qui produisent le produit/service doivent être MAÎTRISÉES — "
+            "c'est-à-dire réalisées de façon à obtenir un résultat prévisible et conforme. "
+            "La maîtrise peut être une procédure, un mode opératoire, une check-list, "
+            "ou même un professionnel expérimenté dont la compétence est démontrée (§7.2)."
+        ),
+        "exigences": [
+            {
+                "id": "8.1.a",
+                "lettre": "Planifier et maîtriser les processus avec des critères définis",
+                "intention": (
+                    "Chaque processus opérationnel doit avoir des CRITÈRES définis : "
+                    "comment sait-on que le résultat est acceptable ?"
+                ),
+                "satisfait_si": [
+                    "Procédures opérationnelles avec critères d'acceptation",
+                    "Plans qualité projet avec jalons de contrôle",
+                    "Check-lists utilisées en pratique",
+                ],
+                "insuffisant_si": [
+                    "Aucun critère d'acceptation défini pour les processus critiques",
+                    "Procédures existantes mais non utilisées sur le terrain",
+                ],
+                "bloquant_si_absent": True,
+            },
+        ],
+        "preuves_attendues": ["Procédures opérationnelles", "Critères d'acceptation", "Plans qualité"],
+        "poids": 0.9,
+        "clauses_liees": ["4.4", "8.5", "8.6"],
     },
-    "8.2": {
-        TypeEcart.majeur:      "Documenter les exigences clients et réglementaires, et établir une procédure de revue avant engagement.",
-        TypeEcart.mineur:      "Renforcer la revue des exigences et la communication avec les clients.",
-        TypeEcart.observation: "Améliorer le suivi des modifications d'exigences clients.",
-        TypeEcart.conforme:    "Maintenir la veille sur les exigences réglementaires applicables.",
-    },
-    "8.4": {
-        TypeEcart.majeur:      "Établir un processus de qualification et de surveillance des prestataires externes avec critères d'évaluation documentés.",
-        TypeEcart.mineur:      "Renforcer la maîtrise des prestataires externes : évaluation périodique et exigences contractuelles.",
-        TypeEcart.observation: "Améliorer le suivi des performances des prestataires.",
-        TypeEcart.conforme:    "Maintenir la liste des prestataires qualifiés et revoir les évaluations annuellement.",
-    },
-    "8.5": {
-        TypeEcart.majeur:      "Documenter et mettre en œuvre des conditions de maîtrise pour tous les processus de réalisation (procédures, modes opératoires, contrôles).",
-        TypeEcart.mineur:      "Renforcer la traçabilité et la maîtrise des processus de réalisation.",
-        TypeEcart.observation: "Améliorer la documentation des contrôles en cours de réalisation.",
-        TypeEcart.conforme:    "Maintenir les conditions de maîtrise opérationnelle à jour.",
-    },
-    "8.7": {
-        TypeEcart.majeur:      "Mettre en place une procédure de traitement des non-conformités : identification, isolation, traitement, enregistrement.",
-        TypeEcart.mineur:      "Renforcer la systématisation du traitement et de l'enregistrement des non-conformités.",
-        TypeEcart.observation: "Améliorer l'analyse des tendances des non-conformités.",
-        TypeEcart.conforme:    "Maintenir le système de traitement des non-conformités et analyser les tendances.",
-    },
-
-    # ---- Section 9 — Évaluation des performances ----------------------------
     "9.1": {
-        TypeEcart.majeur:      "Définir les indicateurs de performance pour chaque processus, mettre en place la collecte et l'analyse des données.",
-        TypeEcart.mineur:      "Renforcer le suivi des indicateurs et l'analyse des résultats pour orienter les décisions.",
-        TypeEcart.observation: "Améliorer la fréquence et la profondeur de l'analyse des performances.",
-        TypeEcart.conforme:    "Maintenir le tableau de bord des performances et l'intégrer aux revues de direction.",
+        "titre": "Surveillance, mesure, analyse et évaluation",
+        "section": 9,
+        "intention_globale": (
+            "Sans mesure, pas d'amélioration possible. L'organisme doit avoir des DONNÉES "
+            "sur la performance de ses processus et la satisfaction de ses clients. "
+            "La fréquence de mesure doit être cohérente avec le rythme des activités : "
+            "hebdomadaire pour une chaîne de production, annuelle pour une activité saisonnière — les deux sont conformes."
+        ),
+        "exigences": [
+            {
+                "id": "9.1.a",
+                "lettre": "Déterminer quoi surveiller, quand, comment analyser",
+                "intention": (
+                    "L'organisme choisit SES indicateurs — ISO ne prescrit pas lesquels. "
+                    "Mais chaque processus clé doit avoir AU MOINS UN indicateur mesuré."
+                ),
+                "satisfait_si": [
+                    "Tableau de bord avec indicateurs mesurés à fréquence définie",
+                    "KPIs par processus avec cibles et résultats actuels",
+                ],
+                "insuffisant_si": [
+                    "Indicateurs définis mais non mesurés",
+                    "Mesures sans analyse (chiffres sans interprétation)",
+                ],
+                "bloquant_si_absent": True,
+            },
+            {
+                "id": "9.1.b",
+                "lettre": "Surveiller la perception des clients",
+                "intention": (
+                    "Savoir CE QUE LES CLIENTS PENSENT — pas ce que l'organisme suppose. "
+                    "Format libre : enquête, interviews, analyse des réclamations, NPS. "
+                    "Une mesure par cycle de revue de direction minimum."
+                ),
+                "satisfait_si": [
+                    "Enquête satisfaction client avec analyse",
+                    "Taux de réclamations suivi et analysé",
+                    "Analyse des avis si pertinent pour le secteur",
+                ],
+                "insuffisant_si": [
+                    "Aucune mesure de satisfaction depuis plus d'un an",
+                    "Réclamations reçues mais non analysées",
+                ],
+                "bloquant_si_absent": True,
+            },
+        ],
+        "preuves_attendues": ["Tableau de bord KPI", "Résultats satisfaction client", "Analyses de tendances"],
+        "poids": 1.0,
+        "clauses_liees": ["6.2", "9.3", "10.1"],
     },
     "9.2": {
-        TypeEcart.majeur:      "Établir et mettre en œuvre un programme d'audit interne annuel couvrant tous les processus du SMQ.",
-        TypeEcart.mineur:      "Régulariser la réalisation des audits internes selon le programme planifié.",
-        TypeEcart.observation: "Améliorer la qualité des rapports d'audit et le suivi des actions correctives.",
-        TypeEcart.conforme:    "Maintenir le programme d'audit et former de nouveaux auditeurs internes.",
+        "titre": "Audit interne",
+        "section": 9,
+        "intention_globale": (
+            "Les audits internes sont l'outil d'auto-évaluation de l'organisme. "
+            "Ils doivent être OBJECTIFS (auditeur différent du responsable du domaine) "
+            "et COUVRIR l'ensemble du SMQ sur un cycle raisonnable."
+        ),
+        "exigences": [
+            {
+                "id": "9.2.a",
+                "lettre": "Réaliser des audits internes à intervalles planifiés",
+                "intention": (
+                    "PLANIFIÉS = programme d'audit existant AVANT les audits. "
+                    "La fréquence dépend de la criticité des processus — pas de minimum ISO."
+                ),
+                "satisfait_si": [
+                    "Programme d'audit annuel couvrant tous les processus",
+                    "Audits réalisés selon le programme avec rapports",
+                ],
+                "insuffisant_si": [
+                    "Aucun programme (audits uniquement réactifs)",
+                    "Auditeur auditant son propre domaine",
+                ],
+                "bloquant_si_absent": True,
+            },
+            {
+                "id": "9.2.b",
+                "lettre": "Prendre des actions correctives sans délai injustifié",
+                "intention": (
+                    "Les écarts d'audit doivent déboucher sur des ACTIONS. "
+                    "Un écart majeur non traité 6 mois après = écart majeur en lui-même."
+                ),
+                "satisfait_si": [
+                    "Plan d'actions correctives lié aux rapports d'audit",
+                    "Suivi de clôture avec vérification d'efficacité",
+                ],
+                "insuffisant_si": [
+                    "Rapports d'audit sans plan d'actions",
+                    "Actions définies mais jamais clôturées",
+                ],
+                "bloquant_si_absent": True,
+            },
+        ],
+        "preuves_attendues": ["Programme d'audit", "Rapports d'audit", "Plans d'actions post-audit"],
+        "poids": 0.9,
+        "clauses_liees": ["10.2", "9.3"],
     },
     "9.3": {
-        TypeEcart.majeur:      "Organiser des revues de direction formelles à intervalles planifiés avec tous les éléments d'entrée requis par la norme.",
-        TypeEcart.mineur:      "Renforcer le contenu et la fréquence des revues de direction.",
-        TypeEcart.observation: "Améliorer le suivi des décisions prises en revue de direction.",
-        TypeEcart.conforme:    "Maintenir la rigueur et la traçabilité des revues de direction.",
-    },
-
-    # ---- Section 10 — Amélioration ------------------------------------------
-    "10.1": {
-        TypeEcart.majeur:      "Identifier systématiquement les opportunités d'amélioration à partir des données de surveillance et des retours d'expérience.",
-        TypeEcart.mineur:      "Formaliser le processus d'identification et de sélection des opportunités d'amélioration.",
-        TypeEcart.observation: "Renforcer la culture de l'amélioration continue.",
-        TypeEcart.conforme:    "Maintenir l'élan d'amélioration continue.",
+        "titre": "Revue de direction",
+        "section": 9,
+        "intention_globale": (
+            "La revue de direction est LA réunion où la direction évalue si le SMQ fonctionne "
+            "et décide des améliorations. Elle doit couvrir les éléments d'entrée requis "
+            "et produire des DÉCISIONS concrètes. Une réunion sans décisions documentées = revue incomplète."
+        ),
+        "exigences": [
+            {
+                "id": "9.3.a",
+                "lettre": "Réaliser des revues couvrant tous les éléments d'entrée requis",
+                "intention": (
+                    "Éléments obligatoires : état des actions précédentes, performance qualité (KPIs, réclamations), "
+                    "résultats audits, satisfaction client, risques/opportunités. "
+                    "Un PV montrant que TOUS ces points ont été abordés = conforme."
+                ),
+                "satisfait_si": [
+                    "PV de revue avec ordre du jour couvrant tous les éléments requis",
+                    "Tableau de bord présenté en revue",
+                ],
+                "insuffisant_si": [
+                    "Revue sans présentation des résultats KPIs",
+                    "PV signé uniquement par le responsable qualité sans présence direction",
+                ],
+                "bloquant_si_absent": True,
+            },
+            {
+                "id": "9.3.b",
+                "lettre": "Produire des décisions et actions comme éléments de sortie",
+                "intention": (
+                    "La revue doit déboucher sur DES DÉCISIONS documentées. "
+                    "Une revue sans aucune action décidée = organisme en pilotage automatique = écart."
+                ),
+                "satisfait_si": [
+                    "Actions décidées en revue, tracées dans un plan d'actions",
+                    "Suivi des actions de la revue précédente en début de revue",
+                ],
+                "insuffisant_si": [
+                    "PV de revue sans aucune action décidée",
+                    "Actions décidées mais non tracées ni suivies",
+                ],
+                "bloquant_si_absent": True,
+            },
+        ],
+        "preuves_attendues": ["PV de revue de direction complet", "Tableau de bord présenté", "Plan d'actions issu de la revue"],
+        "poids": 0.9,
+        "clauses_liees": ["5.1", "9.1", "10.3"],
     },
     "10.2": {
-        TypeEcart.majeur:      "Mettre en place un système formel de traitement des non-conformités et d'actions correctives avec analyse des causes racines.",
-        TypeEcart.mineur:      "Renforcer l'analyse des causes et le suivi de l'efficacité des actions correctives.",
-        TypeEcart.observation: "Améliorer la capitalisation des retours d'expérience sur les actions correctives.",
-        TypeEcart.conforme:    "Maintenir le système d'actions correctives et mesurer leur efficacité.",
+        "titre": "Non-conformité et action corrective",
+        "section": 10,
+        "intention_globale": (
+            "Quand quelque chose ne va pas, l'organisme doit RÉAGIR et APPRENDRE. "
+            "ISO 9001 demande d'aller à la CAUSE RACINE — pas juste corriger le symptôme. "
+            "Un organisme qui traite les NC rapidement mais toujours les mêmes = cause racine non traitée = écart."
+        ),
+        "exigences": [
+            {
+                "id": "10.2.a",
+                "lettre": "Réagir, analyser les causes racines, mettre en œuvre des actions correctives",
+                "intention": (
+                    "3 niveaux obligatoires : (1) correction immédiate, "
+                    "(2) analyse causale (POURQUOI), "
+                    "(3) action corrective pour éviter la récurrence."
+                ),
+                "satisfait_si": [
+                    "Fiche NC avec correction + analyse causale + action corrective",
+                    "Méthode causale appliquée (5M, 5 pourquoi, etc.)",
+                ],
+                "insuffisant_si": [
+                    "NC traitées sans analyse causale (symptôme uniquement)",
+                    "Mêmes NC récurrentes sans traitement de la cause racine",
+                ],
+                "bloquant_si_absent": True,
+            },
+            {
+                "id": "10.2.b",
+                "lettre": "Vérifier l'efficacité des actions correctives",
+                "intention": (
+                    "APRÈS mise en œuvre : vérifier que le problème ne s'est pas reproduit. "
+                    "La vérification peut être un suivi indicateur, un re-audit, ou une observation terrain."
+                ),
+                "satisfait_si": [
+                    "Critères d'efficacité définis dans la fiche NC",
+                    "Taux de récurrence des NC mesuré et en diminution",
+                ],
+                "insuffisant_si": [
+                    "Aucune vérification d'efficacité réalisée",
+                ],
+                "bloquant_si_absent": False,
+            },
+        ],
+        "preuves_attendues": ["Registre des non-conformités", "Fiches NC avec analyse causale"],
+        "poids": 1.0,
+        "clauses_liees": ["8.7", "9.2", "10.3"],
     },
     "10.3": {
-        TypeEcart.majeur:      "Intégrer l'amélioration continue comme démarche structurée (PDCA) avec objectifs, mesures et revue régulière.",
-        TypeEcart.mineur:      "Renforcer le cycle PDCA et documenter les améliorations réalisées.",
-        TypeEcart.observation: "Capitaliser les succès d'amélioration pour diffuser les bonnes pratiques.",
-        TypeEcart.conforme:    "Maintenir la dynamique d'amélioration continue et la valoriser en revue de direction.",
+        "titre": "Amélioration continue",
+        "section": 10,
+        "intention_globale": (
+            "L'amélioration continue est l'ADN de ISO 9001. "
+            "L'auditeur cherche une DYNAMIQUE — est-ce que les choses s'améliorent vraiment ? "
+            "Des indicateurs en progression, des NC en diminution = preuve vivante. "
+            "Un plan d'amélioration sur papier sans résultats = insuffisant."
+        ),
+        "exigences": [
+            {
+                "id": "10.3.a",
+                "lettre": "Améliorer en permanence la pertinence, l'adéquation et l'efficacité du SMQ",
+                "intention": (
+                    "PERMANENCE = pas un projet ponctuel, une culture. "
+                    "Les preuves sont dans les tendances des indicateurs, les actions réalisées."
+                ),
+                "satisfait_si": [
+                    "Indicateurs de performance en progression sur 2+ cycles",
+                    "Actions d'amélioration réalisées et bénéfices mesurés",
+                ],
+                "insuffisant_si": [
+                    "Indicateurs stagnants ou dégradés sans plan de correction",
+                    "SMQ figé depuis sa mise en place sans évolution",
+                ],
+                "bloquant_si_absent": False,
+            },
+        ],
+        "preuves_attendues": ["Tendances KPIs sur 2+ périodes", "Bilan des actions d'amélioration"],
+        "poids": 0.8,
+        "clauses_liees": ["9.1", "9.3", "10.2"],
     },
 }
 
-# Recommandation générique par niveau (fallback si clause non couverte)
-_RECOMMANDATIONS_GENERIQUES: dict[TypeEcart, str] = {
-    TypeEcart.majeur:      "Écart majeur identifié. Mettre en place des actions correctives prioritaires et documenter les preuves de conformité.",
-    TypeEcart.mineur:      "Écart mineur identifié. Planifier les actions correctives dans les prochains cycles.",
-    TypeEcart.observation: "Point de vigilance. Surveiller l'évolution et anticiper les actions préventives.",
-    TypeEcart.conforme:    "Clause conforme. Maintenir les pratiques en place et les documenter.",
+
+# ---------------------------------------------------------------------------
+# 2. ENUMS & DATACLASSES
+# ---------------------------------------------------------------------------
+
+class NiveauMaturite(str, Enum):
+    INEXISTANT    = "inexistant"
+    INITIAL       = "initial"
+    REPRODUCTIBLE = "reproductible"
+    DEFINI        = "defini"
+    GERE          = "gere"
+    OPTIMISE      = "optimise"
+
+
+class TypeEcart(str, Enum):
+    MAJEUR      = "majeur"
+    MINEUR      = "mineur"
+    OBSERVATION = "observation"
+    CONFORME    = "conforme"
+    SUPERIEUR   = "superieur"   # Pratique dépasse l'exigence
+
+
+class CriticiteRisque(str, Enum):
+    CRITIQUE = "critique"
+    ELEVE    = "eleve"
+    MODERE   = "modere"
+    FAIBLE   = "faible"
+
+
+@dataclass
+class EvaluationClause:
+    clause_id: str
+    score: float
+    niveau: NiveauMaturite
+    type_ecart: TypeEcart
+    ecarts_identifies: list[str]
+    recommandations: list[str]
+    preuves_manquantes: list[str]
+    # Raisonnement explicite en 4 étapes — traçabilité de la décision IA
+    intention_comprise: str = ""    # Étape 1 : ce que l'auditeur a compris de l'intention
+    analyse_pratiques: str = ""     # Étape 2 : comment les pratiques réelles satisfont l'intention
+    impacts_croises: str = ""       # Étape 3 : incohérences inter-clauses détectées
+    verdict_justifie: str = ""      # Étape 4 : pourquoi ce score précisément
+    confiance_ia: float = 1.0
+    clauses_impactees: list[str] = field(default_factory=list)
+
+
+@dataclass
+class RapportConformite:
+    score_global: float
+    niveau_global: NiveauMaturite
+    scores_par_section: dict[str, float]
+    clauses_bloquantes: list[str]
+    pret_certification: bool
+    synthese: str = ""
+    recommandations_prioritaires: list[str] = field(default_factory=list)
+    points_forts: list[str] = field(default_factory=list)
+    alertes_croisees: list[str] = field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# 3. MOTEUR STATIQUE — déterministe, sans IA
+# ---------------------------------------------------------------------------
+
+def score_to_niveau(score: float) -> NiveauMaturite:
+    if score < 0.10: return NiveauMaturite.INEXISTANT
+    if score < 0.30: return NiveauMaturite.INITIAL
+    if score < 0.55: return NiveauMaturite.REPRODUCTIBLE
+    if score < 0.75: return NiveauMaturite.DEFINI
+    if score < 1: return NiveauMaturite.GERE
+    return NiveauMaturite.OPTIMISE
+
+
+def score_to_type_ecart(score: float) -> TypeEcart:
+    if score < 0.40: return TypeEcart.MAJEUR
+    if score < 0.70: return TypeEcart.MINEUR
+    if score < 0.90: return TypeEcart.OBSERVATION
+    return TypeEcart.CONFORME
+
+
+def calcul_rpn(probabilite: int, gravite: int, detectabilite: int) -> int:
+    if not all(1 <= v <= 10 for v in (probabilite, gravite, detectabilite)):
+        raise ValueError("Chaque dimension RPN doit être entre 1 et 10")
+    return probabilite * gravite * detectabilite
+
+
+def rpn_to_criticite(rpn: int) -> CriticiteRisque:
+    if rpn >= 200: return CriticiteRisque.CRITIQUE
+    if rpn >= 100: return CriticiteRisque.ELEVE
+    if rpn >= 50:  return CriticiteRisque.MODERE
+    return CriticiteRisque.FAIBLE
+
+
+def risque_necessite_action(rpn: int) -> bool:
+    return rpn >= 50
+
+
+_TRANSITIONS_ACTION: dict[str, list[str]] = {
+    "planifiee":  ["en_cours", "annulee"],
+    "en_cours":   ["terminee", "en_attente", "annulee"],
+    "en_attente": ["en_cours", "annulee"],
+    "terminee":   ["efficace", "inefficace"],
+    "efficace":   [],
+    "inefficace": ["planifiee"],
+    "annulee":    [],
 }
-
-
-def get_recommandation_auto(code_clause: str, score: float) -> str:
-    """
-    Retourne la recommandation automatique pour une clause et un score donnés.
-
-    Recherche par préfixe décroissant :
-      "7.1.5.2" → essaie "7.1.5.2", "7.1.5", "7.1", "7" → premier match
-    Cela permet de couvrir les sous-clauses détaillées avec la règle de leur parent.
-    """
-    type_ecart = score_to_type_ecart(score)
-
-    # Recherche par préfixe décroissant
-    parts = code_clause.split(".")
-    for i in range(len(parts), 0, -1):
-        prefix = ".".join(parts[:i])
-        if prefix in _RECOMMANDATIONS:
-            return _RECOMMANDATIONS[prefix].get(
-                type_ecart,
-                _RECOMMANDATIONS_GENERIQUES[type_ecart],
-            )
-
-    return _RECOMMANDATIONS_GENERIQUES[type_ecart]
-
-
-# =============================================================================
-# 4. CALCUL DU SCORE GLOBAL (agrégation pondérée)
-# =============================================================================
-
-def calcul_score_global(clauses_evaluees: list) -> float:
-    """
-    Calcule le score global d'un DiagnosticISO depuis ses DiagnosticClause.
-
-    Formule : Σ(score_i × poids_i) / Σ(poids_i)
-    Seules les clauses applicables (est_applicable=True) sont incluses.
-
-    Retourne 0.0 si aucune clause applicable n'est évaluée.
-
-    Paramètre : liste de DiagnosticClause (ou tout objet avec .score, .poids, .est_applicable)
-    """
-    applicables = [c for c in clauses_evaluees if c.est_applicable]
-
-    if not applicables:
-        return 0.0
-
-    total_pondere = sum(c.score * c.poids for c in applicables)
-    total_poids   = sum(c.poids for c in applicables)
-
-    if total_poids == 0:
-        return 0.0
-
-    return round(total_pondere / total_poids, 2)
-
-
-# =============================================================================
-# 5. VALIDATION DES PRÉREQUIS ISO AVANT DIAGNOSTIC
-# =============================================================================
-
-# =============================================================================
-# 6. CALCUL RPN ET CRITICITÉ (AMDEC)
-# =============================================================================
-
-# Seuils RPN → NiveauCriticite (source de vérité unique)
-# RPN max théorique = 5 × 5 × 5 = 125
-_SEUILS_RPN = [
-    (81.0,  "critique"),   # Traitement urgent obligatoire
-    (51.0,  "eleve"),      # Plan d'atténuation requis
-    (21.0,  "modere"),     # Surveillance renforcée
-    (1.0,   "faible"),     # Acceptable, surveillance standard
-]
-
-
-def calcul_rpn(probabilite: int, gravite: int, detectabilite: int) -> float:
-    """
-    Calcule le RPN (Risk Priority Number) style AMDEC.
-
-    Paramètres : chacun sur une échelle 1–5.
-      probabilite   : vraisemblance d'occurrence
-      gravite       : impact sur la qualité / certification
-      detectabilite : difficulté de détection (1=facile, 5=difficile)
-
-    Retourne un float entre 1.0 et 125.0.
-
-    >>> calcul_rpn(5, 5, 5) → 125.0   (risque critique maximal)
-    >>> calcul_rpn(1, 1, 1) → 1.0     (risque négligeable)
-    >>> calcul_rpn(3, 4, 2) → 24.0    (risque modéré)
-    """
-    # Clamp chaque dimension entre 1 et 5
-    p = max(1, min(5, probabilite))
-    g = max(1, min(5, gravite))
-    d = max(1, min(5, detectabilite))
-    return float(p * g * d)
-
-
-def rpn_to_criticite(rpn: float) -> str:
-    """
-    Convertit un RPN en niveau de criticité.
-
-    Seuils :
-      81 – 125 → critique   (blocant, traitement immédiat)
-      51 –  80 → eleve      (plan d'atténuation obligatoire)
-      21 –  50 → modere     (surveillance renforcée)
-       1 –  20 → faible     (acceptable, surveillance standard)
-    """
-    for seuil, niveau in _SEUILS_RPN:
-        if rpn >= seuil:
-            return niveau
-    return "faible"
-
-
-def evaluer_risque(probabilite: int, gravite: int, detectabilite: int) -> dict:
-    """
-    Évalue un risque complet : RPN + criticité en un seul appel.
-    Utilisé par le RisqueService avant chaque sauvegarde.
-
-    Retourne :
-      {
-        "rpn": 24.0,
-        "criticite": "modere",
-        "prioritaire": False   # True si critique ou eleve
-      }
-    """
-    rpn = calcul_rpn(probabilite, gravite, detectabilite)
-    criticite = rpn_to_criticite(rpn)
-    return {
-        "rpn": rpn,
-        "criticite": criticite,
-        "prioritaire": criticite in ("critique", "eleve"),
-    }
-
-
-def risque_necessite_action(rpn: float) -> bool:
-    """
-    Retourne True si le RPN exige la création d'une Action corrective.
-    Seuil : RPN ≥ 21 (modéré ou au-dessus).
-    Utilisé par DiagnosticService pour la création automatique d'actions.
-    """
-    return rpn >= 21.0
-
-
-def valider_processus_iso(processus) -> list[str]:
-    """
-    Vérifie que les prérequis ISO 9001 sont satisfaits avant de créer un diagnostic.
-    Retourne une liste d'avertissements (vide = tout est OK).
-
-    Prérequis vérifiés :
-      - Processus a un pilote assigné           (§ 5.3)
-      - Processus a un objectif documenté       (§ 4.4)
-      - Processus a des entrées/sorties définies (§ 4.4)
-      - Processus a un code de référence        (traçabilité)
-    """
-    avertissements = []
-
-    if not processus.pilote_id:
-        avertissements.append(
-            f"[§5.3] Le processus '{processus.nom}' n'a pas de pilote assigné. "
-            "Un responsable est requis avant le diagnostic."
-        )
-
-    if not processus.objectif:
-        avertissements.append(
-            f"[§4.4] Le processus '{processus.nom}' n'a pas d'objectif documenté."
-        )
-
-    if not processus.entrees or not processus.sorties:
-        avertissements.append(
-            f"[§4.4] Le processus '{processus.nom}' n'a pas d'entrées/sorties définies."
-        )
-
-    if not processus.code:
-        avertissements.append(
-            f"Le processus '{processus.nom}' n'a pas de code de référence (traçabilité)."
-        )
-
-    return avertissements
-
-
-# =============================================================================
-# 7. ÉVALUATION DES ALERTES KPI
-# =============================================================================
-
-def evaluer_alerte_kpi(
-    valeur: float,
-    seuil_attention: float | None,
-    seuil_alerte: float | None,
-    sens: str,
-) -> str:
-    """
-    Calcule le statut d'alerte d'une mesure KPI selon ses seuils et son sens.
-
-    Sens "hausse"  (ex: taux conformité — plus c'est haut, mieux c'est) :
-      valeur < seuil_alerte    → alerte    (rouge)
-      valeur < seuil_attention → attention (orange)
-      sinon                    → normal    (vert)
-
-    Sens "baisse"  (ex: nb risques critiques — plus c'est bas, mieux c'est) :
-      valeur > seuil_alerte    → alerte
-      valeur > seuil_attention → attention
-      sinon                    → normal
-
-    Sens "cible"   (ex: délai moyen — doit rester proche d'une valeur cible) :
-      Utilise seuil_alerte comme écart maximal absolu acceptable.
-      |valeur - seuil_attention| > seuil_alerte → alerte
-      |valeur - seuil_attention| > 0            → attention
-      (seuil_attention = valeur cible dans ce mode)
-
-    Retourne : "normal" | "attention" | "alerte"
-    """
-    if sens == "hausse":
-        if seuil_alerte is not None and valeur < seuil_alerte:
-            return "alerte"
-        if seuil_attention is not None and valeur < seuil_attention:
-            return "attention"
-
-    elif sens == "baisse":
-        if seuil_alerte is not None and valeur > seuil_alerte:
-            return "alerte"
-        if seuil_attention is not None and valeur > seuil_attention:
-            return "attention"
-
-    elif sens == "cible":
-        if seuil_attention is not None and seuil_alerte is not None:
-            ecart = abs(valeur - seuil_attention)
-            if ecart > seuil_alerte:
-                return "alerte"
-            if ecart > 0:
-                return "attention"
-
-    return "normal"
-
-
-def calcul_evolution(
-    valeur: float,
-    valeur_precedente: float | None,
-) -> dict:
-    """
-    Calcule l'évolution entre deux mesures consécutives.
-    Appelé par kpi_service.enregistrer_mesure() avant chaque sauvegarde.
-
-    Retourne :
-      {
-        "valeur_precedente": 72.5,
-        "evolution":         5.5,     # valeur - valeur_precedente
-        "evolution_pct":     7.59,    # % d'évolution (arrondi 2 décimales)
-      }
-    Tous les champs sont None si valeur_precedente est None (première mesure).
-    """
-    if valeur_precedente is None:
-        return {
-            "valeur_precedente": None,
-            "evolution": None,
-            "evolution_pct": None,
-        }
-
-    evolution = round(valeur - valeur_precedente, 4)
-
-    if valeur_precedente == 0:
-        evolution_pct = None  # Division par zéro — indéfini
-    else:
-        evolution_pct = round((evolution / abs(valeur_precedente)) * 100, 2)
-
-    return {
-        "valeur_precedente": valeur_precedente,
-        "evolution": evolution,
-        "evolution_pct": evolution_pct,
-    }
-
-
-def kpi_est_en_bonne_sante(statut_alerte: str) -> bool:
-    """Retourne True si le KPI est dans la zone verte."""
-    return statut_alerte == "normal"
-
-
-# =============================================================================
-# 8. WORKFLOW DES ACTIONS CORRECTIVES
-# =============================================================================
-
-# Transitions valides : statut_actuel → {statuts_suivants autorisés}
-_TRANSITIONS_ACTION: dict[str, set[str]] = {
-    "planifiee":       {"en_cours", "annulee"},
-    "en_cours":        {"en_verification", "annulee"},
-    "en_verification": {"close", "en_cours"},   # Retour si vérification échoue
-    "close":           set(),                    # Terminal
-    "annulee":         set(),                    # Terminal
-}
-
-# Avancement forcé par statut (None = libre)
-_AVANCEMENT_FORCE: dict[str, int | None] = {
-    "planifiee":       0,
-    "en_cours":        None,
-    "en_verification": 100,
-    "close":           100,
-    "annulee":         None,
-}
-
 
 def transition_action_valide(statut_actuel: str, nouveau_statut: str) -> bool:
-    """
-    Vérifie si la transition de statut est autorisée.
-
-    >>> transition_action_valide("planifiee", "en_cours")  → True
-    >>> transition_action_valide("planifiee", "close")     → False
-    >>> transition_action_valide("close", "en_cours")      → False
-    """
-    return nouveau_statut in _TRANSITIONS_ACTION.get(statut_actuel, set())
+    return nouveau_statut in _TRANSITIONS_ACTION.get(statut_actuel, [])
 
 
-def get_avancement_force(nouveau_statut: str) -> int | None:
-    """
-    Retourne l'avancement forcé pour un statut.
-    None = avancement libre (1–99 pour en_cours).
-
-    >>> get_avancement_force("planifiee")       → 0
-    >>> get_avancement_force("en_verification") → 100
-    >>> get_avancement_force("en_cours")        → None
-    """
-    return _AVANCEMENT_FORCE.get(nouveau_statut)
+def get_clause(clause_id: str) -> dict:
+    clause = ISO_CLAUSES.get(clause_id)
+    if not clause:
+        raise ValueError(f"Clause ISO inconnue : {clause_id}")
+    return clause
 
 
-def priorite_depuis_criticite(criticite: str) -> str:
+def get_clauses_section(section: int) -> dict[str, dict]:
+    return {cid: c for cid, c in ISO_CLAUSES.items() if c["section"] == section}
+
+
+def score_global_pondere(scores: dict[str, float]) -> float:
+    total_poids, total_score = 0.0, 0.0
+    for clause_id, score in scores.items():
+        clause = ISO_CLAUSES.get(clause_id)
+        if clause:
+            poids = clause["poids"]
+            total_score += score * poids
+            total_poids += poids
+    return round(total_score / total_poids, 3) if total_poids else 0.0
+
+
+# ---------------------------------------------------------------------------
+# 4. CLIENT IA — système prompt d'auditeur avec philosophie explicite
+# ---------------------------------------------------------------------------
+
+_SYSTEM_PROMPT_AUDITEUR = """Tu es un auditeur ISO 9001:2015 expert avec 20 ans d'expérience en certification.
+
+Ta philosophie d'audit — règles absolues de raisonnement :
+
+RÈGLE 1 — INTENTION > LETTRE
+ISO 9001:2015 est basé sur des principes, pas des règles rigides. Tu évalues si l'INTENTION
+est satisfaite, pas si la lettre est respectée à la virgule.
+Exemple : "rapport mensuel exigé, rapports hebdomadaires fournis" → CONFORME voire SUPÉRIEUR.
+La fréquence plus élevée satisfait mieux l'intention de surveillance régulière.
+
+RÈGLE 2 — PRATIQUE SUPÉRIEURE = SCORE MAXIMUM
+Si une pratique DÉPASSE l'exigence, le score est 1.0 et le type est "superieur".
+Tu ne pénalises jamais une organisation qui fait mieux que ce qui est demandé.
+
+RÈGLE 3 — FORME ≠ FOND
+Un document qui existe mais n'est pas utilisé = NON CONFORME.
+Une pratique informelle mais systématique et prouvable = CONFORME.
+Tu cherches des preuves de réalité opérationnelle, pas de conformité documentaire superficielle.
+
+RÈGLE 4 — RAISONNEMENT EXPLICITE OBLIGATOIRE
+Tu dois expliquer POURQUOI tu donnes ce score, en montrant ton raisonnement étape par étape.
+Un auditeur qui ne justifie pas = auditeur non crédible.
+
+RÈGLE 5 — CALIBRAGE DES ÉCARTS
+- MAJEUR uniquement si l'exigence est absente OU la pratique est sans rapport avec l'intention.
+- MINEUR si l'intention est partiellement satisfaite avec des lacunes significatives.
+- OBSERVATION si l'intention est satisfaite mais des améliorations sont possibles.
+- Ne pas "surclasser" les écarts pour paraître sévère.
+
+Règle de réponse : UNIQUEMENT du JSON valide. Aucun texte avant ou après. Langue : français professionnel."""
+
+
+async def _appel_gemini(prompt: str, max_tokens: int = 8192) -> dict:
+    """Appelle l'API de Groq (remplace Gemini pour éviter le blocage de région)."""
+    
+    # 🚨 1. VA SUR console.groq.com POUR CRÉER UNE CLÉ
+    # 🚨 2. COLLE TA CLÉ GROQ ICI (elle doit commencer par "gsk_")
+    api_key = "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"
+    
+    if not api_key or api_key.startswith("AIza"):
+        print("🚨 ATTENTION: Tu as laissé la clé Google ! Il faut une clé Groq (gsk_...)")
+        return {"error": "Clé API invalide"}
+
+    # L'URL et les headers spécifiques à Groq (format OpenAI)
+    url = "https://api.groq.com/openai/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+
+    # Le payload adapté pour Groq
+    # Le payload adapté pour Groq
+    payload = {
+        "model": "llama-3.3-70b-versatile",  # <--- MODIFIE JUSTE CETTE LIGNE
+        "messages": [
+            {
+                "role": "system", 
+                "content": "Tu es un auditeur expert ISO 9001. Tu dois obligatoirement répondre avec un objet JSON valide."
+            },
+            {"role": "user", "content": prompt}
+        ],
+        "response_format": {"type": "json_object"},
+        "temperature": 0.1,
+        "max_tokens": max_tokens
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(url, headers=headers, json=payload)
+            
+            # Affichage pour t'aider à débugger
+            print(f"🚀 Status code Groq : {response.status_code}")
+            
+            response.raise_for_status()
+            res_json = response.json()
+
+            # L'extraction du texte est un peu différente avec Groq/OpenAI
+            texte = res_json["choices"][0]["message"]["content"].strip()
+
+            # Nettoyage markdown de sécurité
+            if texte.startswith("```"):
+                texte = texte.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+
+            return json.loads(texte)
+
+    except json.JSONDecodeError as e:
+        print(f"\n🚨 ERREUR JSON : Le modèle n'a pas renvoyé un JSON valide ({e})\n")
+        return {"error": f"JSON invalide : {e}"}
+        
+    except httpx.HTTPStatusError as e:
+        print(f"\n🚨 ERREUR API GROQ : {e.response.status_code} - {e.response.text}\n")
+        return {"error": f"Erreur API Groq: {e.response.status_code}"}
+        
+    except Exception as e:
+        print(f"\n🚨 AUTRE ERREUR : {str(e)}\n")
+        return {"error": str(e)}
+    
+    
+class ISOEngineError(Exception):
+    pass
+
+
+# ---------------------------------------------------------------------------
+# 5. ANALYSE INTELLIGENTE — raisonnement en 4 étapes
+# ---------------------------------------------------------------------------
+
+async def analyser_conformite_clause(
+    clause_id: str,
+    observations: str,
+    preuves_fournies: list[str],
+    contexte_processus: dict | None = None,
+    scores_autres_clauses: dict[str, float] | None = None,
+) -> EvaluationClause:
     """
-    Déduit la priorité d'une action depuis la criticité de son risque source.
-    Appelé par risque_service lors de la création automatique d'actions.
+    Analyse une clause ISO 9001 avec raisonnement en 4 étapes :
+
+    Étape 1 — INTENTION  : Quelle est la vraie intention de cette clause ?
+    Étape 2 — PRATIQUES  : Les pratiques observées satisfont-elles cette intention ?
+                           (pratique différente mais équivalente/supérieure = conforme)
+    Étape 3 — CROSS      : Y a-t-il des impacts sur les clauses liées ?
+    Étape 4 — VERDICT    : Score calibré avec justification explicite
+
+    Le moteur ne pénalise JAMAIS une pratique qui dépasse l'exigence.
     """
+    clause = get_clause(clause_id)
+    liees = clause.get("clauses_liees", [])
+
+    # Contexte cross-clause
+    contexte_croises = {}
+    if scores_autres_clauses:
+        for cid in liees:
+            if cid in scores_autres_clauses:
+                c = ISO_CLAUSES.get(cid, {})
+                contexte_croises[cid] = {
+                    "titre": c.get("titre", ""),
+                    "score": scores_autres_clauses[cid],
+                    "niveau": score_to_niveau(scores_autres_clauses[cid]).value,
+                }
+
+    prompt = f"""Analyse la conformité à la clause ISO 9001:2015 {clause_id} — {clause['titre']}.
+
+═══════════════════════════════════════════
+RÉFÉRENTIEL DE LA CLAUSE
+═══════════════════════════════════════════
+
+INTENTION GLOBALE (ce que cette clause cherche vraiment à garantir) :
+{clause['intention_globale']}
+
+EXIGENCES DÉTAILLÉES (lettre ET intention de chaque sous-exigence, avec exemples concrets) :
+{json.dumps(clause['exigences'], ensure_ascii=False, indent=2)}
+
+═══════════════════════════════════════════
+RÉALITÉ DE L'ORGANISME
+═══════════════════════════════════════════
+
+OBSERVATIONS TERRAIN :
+{observations}
+
+PREUVES DOCUMENTAIRES FOURNIES :
+{json.dumps(preuves_fournies, ensure_ascii=False, indent=2)}
+
+CONTEXTE DU PROCESSUS AUDITÉ :
+{json.dumps(contexte_processus or {{}}, ensure_ascii=False, indent=2)}
+
+═══════════════════════════════════════════
+CONTEXTE INTER-CLAUSES
+═══════════════════════════════════════════
+
+Scores des clauses directement liées à {clause_id} :
+{json.dumps(contexte_croises, ensure_ascii=False, indent=2) if contexte_croises else "Non disponibles."}
+
+═══════════════════════════════════════════
+RAISONNEMENT OBLIGATOIRE EN 4 ÉTAPES
+═══════════════════════════════════════════
+
+ÉTAPE 1 — INTENTION : Reformule dans tes propres mots ce que cette clause cherche VRAIMENT
+à garantir. Pas la lettre — l'objectif final pour la qualité de l'organisme.
+
+ÉTAPE 2 — ANALYSE DES PRATIQUES : Pour chaque sous-exigence de la clause, analyse si la
+pratique observée satisfait l'INTENTION (même si le format est différent de ce qui est écrit).
+Applique IMPÉRATIVEMENT ces règles :
+• Si la pratique observée DÉPASSE l'exigence (ex: fréquence plus élevée, documentation plus
+  complète, contrôles plus nombreux) → score élevé, type "superieur", aucun écart.
+• Si la pratique est ÉQUIVALENTE à l'exigence dans un format différent → conforme.
+• Si la pratique traite le SYMPTÔME mais pas l'intention → non-conforme malgré l'apparence.
+• Si la pratique est ABSENTE → écart majeur si la sous-exigence est bloquante.
+
+ÉTAPE 3 — IMPACTS CROISÉS : En regardant les scores des clauses liées, y a-t-il des
+incohérences ? (Ex: §6.2 conforme mais §9.1 insuffisant → les objectifs définis ne sont pas
+mesurés → cela affaiblit §6.2 aussi). Signale uniquement les incohérences réelles.
+
+ÉTAPE 4 — VERDICT CALIBRÉ : Donne un score entre 0.0 et 1.0 et justifie-le en 2 phrases.
+Barème de calibrage :
+• 0.00–0.39 : exigence absente OU pratique sans lien avec l'intention → MAJEUR
+• 0.40–0.69 : intention partiellement satisfaite, lacunes significatives → MINEUR
+• 0.70–0.89 : intention satisfaite, des améliorations sont possibles → OBSERVATION
+• 0.90–0.99 : intention pleinement satisfaite → CONFORME
+• 1.00       : pratique dépasse l'exigence → SUPERIEUR
+
+Réponds avec ce JSON exact, sans texte autour :
+{{
+  "etape1_intention": "<reformulation de l'intention réelle — 2 phrases max>",
+  "etape2_analyse": "<analyse pratique vs intention pour chaque sous-exigence — sois précis>",
+  "etape3_impacts_croises": "<alertes inter-clauses OU 'Aucune incohérence détectée'>",
+  "etape4_verdict": "<justification du score en 2 phrases>",
+  "score": <float 0.0-1.0>,
+  "type_ecart": "<majeur|mineur|observation|conforme|superieur>",
+  "ecarts_identifies": [
+    "<écart précis — commencer par un verbe: Absence de / Non-documentation de / Insuffisance de ...>"
+  ],
+  "recommandations": [
+    "<action concrète — format: VERBE + OBJET + DÉLAI + RESPONSABLE SUGGÉRÉ>"
+  ],
+  "preuves_manquantes": [
+    "<preuve spécifique dont l'absence justifie un écart>"
+  ],
+  "clauses_impactees": ["<clause_id si impact réel détecté>"],
+  "confiance": <float 0.0-1.0>
+}}"""
+
+    try:
+        result = await _appel_gemini(prompt, max_tokens=2000)
+        score = float(result.get("score", 0.5))
+
+        return EvaluationClause(
+            clause_id=clause_id,
+            score=score,
+            niveau=score_to_niveau(score),
+            type_ecart=TypeEcart(result.get("type_ecart", "mineur")),
+            ecarts_identifies=result.get("ecarts_identifies", []),
+            recommandations=result.get("recommandations", []),
+            preuves_manquantes=result.get("preuves_manquantes", []),
+            intention_comprise=result.get("etape1_intention", ""),
+            analyse_pratiques=result.get("etape2_analyse", ""),
+            impacts_croises=result.get("etape3_impacts_croises", ""),
+            verdict_justifie=result.get("etape4_verdict", ""),
+            confiance_ia=float(result.get("confiance", 1.0)),
+            clauses_impactees=result.get("clauses_impactees", []),
+        )
+
+    except ISOEngineError:
+        # Fallback déterministe si l'IA est indisponible
+        return EvaluationClause(
+            clause_id=clause_id,
+            score=0.5,
+            niveau=NiveauMaturite.REPRODUCTIBLE,
+            type_ecart=TypeEcart.MINEUR,
+            ecarts_identifies=["Analyse IA indisponible — évaluation manuelle requise"],
+            recommandations=["Relancer l'analyse quand le service IA est disponible"],
+            preuves_manquantes=[],
+            verdict_justifie="Score par défaut 0.5 — analyse IA non disponible",
+            confiance_ia=0.0,
+        )
+
+
+async def generer_rapport_conformite(
+    scores_par_clause: dict[str, float],
+    evaluations_detail: list[EvaluationClause],
+    contexte_organisme: dict,
+) -> RapportConformite:
+    """
+    Rapport de conformité global avec :
+    - Score global pondéré (déterministe)
+    - Détection des incohérences inter-clauses (IA)
+    - Points forts — ce que l'organisme fait bien (IA)
+    - Top 5 recommandations prioritaires calibrées (IA)
+    """
+    score_global = score_global_pondere(scores_par_clause)
+    niveau_global = score_to_niveau(score_global)
+
+    scores_par_section: dict[str, float] = {}
+    for section_num in range(4, 11):
+        clauses_section = get_clauses_section(section_num)
+        scores_section = {cid: scores_par_clause.get(cid, 0.0) for cid in clauses_section}
+        if scores_section:
+            scores_par_section[f"§{section_num}"] = round(
+                sum(scores_section.values()) / len(scores_section), 3
+            )
+
+    clauses_bloquantes = [
+        cid for cid, score in scores_par_clause.items()
+        if score_to_type_ecart(score) == TypeEcart.MAJEUR
+    ]
+    clauses_superieures = [
+        cid for cid, score in scores_par_clause.items()
+        if score >= 1.0
+    ]
+    pret_certification = len(clauses_bloquantes) == 0 and score_global >= 0.75
+
+    resume_evaluations = [
+        {
+            "clause": e.clause_id,
+            "score": e.score,
+            "type_ecart": e.type_ecart.value,
+            "ecarts": e.ecarts_identifies[:2],
+            "clauses_impactees": e.clauses_impactees,
+            "verdict": e.verdict_justifie,
+        }
+        for e in evaluations_detail
+    ]
+
+    prompt = f"""Produis la synthèse d'un rapport d'audit ISO 9001:2015.
+
+RÉSULTATS :
+- Score global pondéré : {score_global:.1%}
+- Niveau de maturité : {niveau_global.value}
+- Prêt pour certification : {"OUI" if pret_certification else "NON"}
+- Clauses bloquantes : {clauses_bloquantes or "Aucune"}
+- Clauses avec pratiques supérieures aux exigences : {clauses_superieures or "Aucune"}
+
+SCORES PAR SECTION :
+{json.dumps(scores_par_section, ensure_ascii=False, indent=2)}
+
+DÉTAIL DES ÉVALUATIONS :
+{json.dumps(resume_evaluations, ensure_ascii=False, indent=2)}
+
+CONTEXTE DE L'ORGANISME :
+{json.dumps(contexte_organisme, ensure_ascii=False, indent=2)}
+
+Important : mentionne explicitement les pratiques supérieures comme points forts.
+Identifie les incohérences inter-clauses (ex: objectifs définis mais non mesurés).
+
+Réponds avec ce JSON exact :
+{{
+  "synthese": "<4-5 phrases : bilan global, points saillants, posture de certification>",
+  "points_forts": [
+    "<point fort concret — ce que l'organisme fait bien ou dépasse l'exigence>",
+    "<point fort 2>",
+    "<point fort 3>"
+  ],
+  "recommandations_prioritaires": [
+    "<action 1 la plus critique — VERBE + OBJET + DÉLAI>",
+    "<action 2>",
+    "<action 3>",
+    "<action 4>",
+    "<action 5>"
+  ],
+  "alertes_croisees": [
+    "<incohérence inter-clauses détectée — ex: §6.2 conforme mais §9.1 insuffisant>"
+  ]
+}}"""
+
+    try:
+        result = await _appel_gemini(prompt, max_tokens=1200)
+        synthese = result.get("synthese", "")
+        points_forts = result.get("points_forts", [])
+        recommandations = result.get("recommandations_prioritaires", [])
+        alertes = result.get("alertes_croisees", [])
+    except ISOEngineError:
+        synthese = (
+            f"Score global : {score_global:.1%} — niveau {niveau_global.value}. "
+            f"{len(clauses_bloquantes)} clause(s) bloquante(s). "
+            f"Certification {'envisageable' if pret_certification else 'non recommandée à ce stade'}."
+        )
+        points_forts = []
+        recommandations = [f"Traiter en priorité la clause {cid}" for cid in clauses_bloquantes[:5]]
+        alertes = []
+
+    return RapportConformite(
+        score_global=score_global,
+        niveau_global=niveau_global,
+        scores_par_section=scores_par_section,
+        clauses_bloquantes=clauses_bloquantes,
+        pret_certification=pret_certification,
+        synthese=synthese,
+        recommandations_prioritaires=recommandations,
+        points_forts=points_forts,
+        alertes_croisees=alertes,
+    )
+
+
+# ---------------------------------------------------------------------------
+# 6. FONCTIONS ADDITIONNELLES
+# ---------------------------------------------------------------------------
+
+async def evaluer_risque_intelligent(
+    description_risque: str,
+    contexte_processus: dict,
+    probabilite: int,
+    gravite: int,
+    detectabilite: int,
+) -> dict:
+    rpn = calcul_rpn(probabilite, gravite, detectabilite)
+    criticite = rpn_to_criticite(rpn)
+
+    prompt = f"""Analyse ce risque qualité dans le cadre ISO 9001:2015 §6.1.
+
+DESCRIPTION : {description_risque}
+PROCESSUS : {json.dumps(contexte_processus, ensure_ascii=False)}
+RPN : {rpn} (P={probabilite} × G={gravite} × D={detectabilite}) → Criticité : {criticite.value}
+
+Réponds avec ce JSON exact :
+{{
+  "plan_traitement": "<plan recommandé — 2 phrases avec actions concrètes>",
+  "clauses_iso_concernees": ["<clause_id>"],
+  "action_immediate_requise": <true|false>,
+  "mesures_prevention": ["<mesure concrète et actionnable>"],
+  "indicateur_suivi": "<KPI à mesurer pour surveiller ce risque>",
+  "opportunite_associee": "<opportunité que ce risque révèle, si applicable>"
+}}"""
+
+    try:
+        result = await _appel_gemini(prompt, max_tokens=600)
+    except ISOEngineError:
+        result = {
+            "plan_traitement": "Analyser les causes racines et mettre en place des actions correctives.",
+            "clauses_iso_concernees": ["6.1", "10.2"],
+            "action_immediate_requise": criticite in (CriticiteRisque.CRITIQUE, CriticiteRisque.ELEVE),
+            "mesures_prevention": [],
+            "indicateur_suivi": "Taux d'occurrence du risque",
+            "opportunite_associee": "",
+        }
+
+    return {"rpn": rpn, "criticite": criticite.value, "necessite_action": risque_necessite_action(rpn), **result}
+
+
+async def analyser_action_corrective(
+    description_nc: str,
+    cause_racine: str,
+    action_proposee: str,
+) -> dict:
+    """
+    Vérifie si l'action corrective traite la cause racine ou seulement le symptôme.
+    Erreur classique §10.2 que le moteur doit détecter.
+    """
+    prompt = f"""Évalue cette action corrective selon ISO 9001:2015 §10.2.
+
+NON-CONFORMITÉ : {description_nc}
+CAUSE RACINE IDENTIFIÉE : {cause_racine}
+ACTION CORRECTIVE PROPOSÉE : {action_proposee}
+
+Raisonne ainsi :
+1. L'action s'attaque-t-elle à la CAUSE RACINE ou au symptôme visible ?
+2. Si cette action est mise en œuvre, le problème peut-il se reproduire ? Pourquoi ?
+3. Quels critères permettront de vérifier l'efficacité ?
+
+Réponds avec ce JSON exact :
+{{
+  "traite_cause_racine": <true|false>,
+  "risque_recurrence": "<faible|modere|eleve>",
+  "raisonnement": "<explication en 2-3 phrases>",
+  "ameliorations_suggerees": ["<amélioration si l'action est insuffisante>"],
+  "criteres_efficacite": ["<critère mesurable — ex: taux NC < 5% sur 3 mois>"],
+  "delai_verification_jours": <entier>
+}}"""
+
+    try:
+        return await _appel_gemini(prompt, max_tokens=700)
+    except ISOEngineError:
+        return {
+            "traite_cause_racine": True,
+            "risque_recurrence": "modere",
+            "raisonnement": "Analyse IA indisponible.",
+            "ameliorations_suggerees": [],
+            "criteres_efficacite": [],
+            "delai_verification_jours": 30,
+        }
+
+
+async def suggerer_kpi_processus(
+    nom_processus: str,
+    description: str,
+    clauses_applicables: list[str],
+    kpis_existants: list[dict],
+) -> list[dict]:
+    prompt = f"""Propose des KPIs manquants pour ce processus ISO 9001.
+
+PROCESSUS : {nom_processus} — {description}
+CLAUSES ISO APPLICABLES : {clauses_applicables}
+KPIs DÉJÀ DÉFINIS : {json.dumps(kpis_existants, ensure_ascii=False)}
+
+Propose 3 à 5 KPIs non encore couverts, chacun lié à une exigence ISO précise.
+
+Réponds avec ce JSON exact :
+{{
+  "kpis": [
+    {{
+      "nom": "<nom court>",
+      "description": "<ce que ça mesure et pourquoi>",
+      "formule": "<formule précise>",
+      "unite": "<%, nombre, jours, ratio>",
+      "frequence": "<mensuel|trimestriel|annuel>",
+      "cible": "<valeur cible recommandée>",
+      "seuil_alerte": "<valeur déclenchant une alerte>",
+      "clause_iso": "<clause principale couverte>",
+      "donnees_source": "<où trouver les données>"
+    }}
+  ]
+}}"""
+
+    try:
+        result = await _appel_gemini(prompt, max_tokens=1200)
+        return result.get("kpis", [])
+    except ISOEngineError:
+        return []
+
+
+# ---------------------------------------------------------------------------
+# 7. UTILITAIRES
+# ---------------------------------------------------------------------------
+
+def clauses_applicables_par_type_processus(type_processus: str) -> list[str]:
+    mapping = {
+        "management":   ["4.1", "4.2", "5.1", "5.2", "5.3", "6.1", "6.2", "9.3", "10.1"],
+        "realisation":  ["8.1", "10.2"],
+        "support":      ["7.1", "7.2", "7.5"],
+        "mesure":       ["9.1", "9.2", "6.2"],
+        "amelioration": ["10.2", "10.3", "9.1"],
+    }
+    return mapping.get(type_processus, list(ISO_CLAUSES.keys()))
+
+
+def verifier_completude_diagnostic(evaluations: list[dict]) -> dict:
+    clauses_evaluees = {e["clause_id"] for e in evaluations}
+    toutes_clauses   = set(ISO_CLAUSES.keys())
+    manquantes       = toutes_clauses - clauses_evaluees
     return {
-        "critique": "critique",
-        "eleve":    "haute",
-        "modere":   "normale",
-        "faible":   "faible",
-    }.get(criticite, "normale")
+        "taux_completude": round(len(clauses_evaluees) / len(toutes_clauses), 3),
+        "clauses_manquantes": sorted(manquantes),
+        "complet": len(manquantes) == 0,
+    }
 
 
-def priorite_depuis_ecart(type_ecart: str) -> str:
-    """
-    Déduit la priorité d'une action depuis le type d'écart ISO source.
-    Appelé par diagnostic_service lors de la création automatique d'actions.
-    """
+def calculer_alertes_kpi(
+    valeur_actuelle: float,
+    valeur_cible: float,
+    seuil_alerte: float,
+    sens: str = "superieur",
+) -> dict:
+    ecart_pct = (
+        ((valeur_actuelle - valeur_cible) / valeur_cible * 100)
+        if valeur_cible != 0 else 0.0
+    )
+    en_alerte = (
+        valeur_actuelle < seuil_alerte if sens == "superieur"
+        else valeur_actuelle > seuil_alerte
+    )
     return {
-        "majeur":      "critique",
-        "mineur":      "haute",
-        "observation": "normale",
-        "conforme":    "faible",
-    }.get(type_ecart, "normale")
+        "en_alerte": en_alerte,
+        "ecart_cible_pct": round(ecart_pct, 2),
+        "statut": "alerte" if en_alerte else ("objectif_atteint" if ecart_pct >= 0 else "en_dessous"),
+    }
+
+
+@lru_cache(maxsize=256)
+def get_intention_clause(clause_id: str) -> str:
+    return get_clause(clause_id).get("intention_globale", "")
+
+
+@lru_cache(maxsize=256)
+def get_exigences_clause(clause_id: str) -> tuple:
+    return tuple(e["id"] for e in get_clause(clause_id).get("exigences", []))

@@ -441,3 +441,29 @@ def get_score_maturite(db: Session, processus_id: int) -> dict:
         "prerequis_iso_valides": validation.get("valide", False),
         "prerequis_manquants": validation.get("manquants", []),
     }
+    
+    
+# def evaluer_clause_diagnostic(db: Session, diag_clause_id: int, constat_utilisateur: str):
+#     # 1. On récupère la ligne de diagnostic de la clause
+#     diag_clause = db.query(DiagnosticClause).filter(DiagnosticClause.id == diag_clause_id).first()
+#     processus_id = diag_clause.diagnostic.processus_id
+    
+#     # 2. On extrait la fiche processus complète depuis la BDD via le service dédié
+#     fiche_contexte = extraire_fiche_processus_contexte(db, processus_id)
+    
+#     # 3. L'ISO Engine tourne de manière dynamique
+#     analyse_ia = iso_engine.analyser_conformite_fiche(
+#         clause_code=diag_clause.clause.code,
+#         clause_texte=diag_clause.clause.texte,
+#         fiche_processus=fiche_contexte,
+#         constat_terrain=constat_utilisateur
+#     )
+    
+#     # 4. On enregistre le résultat analytique en BDD
+#     diag_clause.constat = constat_utilisateur
+#     diag_clause.type_ecart = analyse_ia.type_ecart # "Aucun", "Mineur", "Majeur"
+#     diag_clause.recommandation = analyse_ia.recommandation
+#     diag_clause.conforme = analyse_ia.conforme
+    
+#     db.commit()
+#     return diag_clause
