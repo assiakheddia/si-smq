@@ -457,6 +457,52 @@ const TABS = [
 const REQUIRED_FIELDS = ["designation", "pilote", "email", "sousDept", "objectif"];
 
 /* ═══════════════════════════════════════════════════════════════════
+   AUDIT MODAL COMPONENT
+═══════════════════════════════════════════════════════════════════ */
+function DiagnosticOverlay() {
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 9100, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 20 }}>
+      <div style={{ fontSize: 52 }}>🔬</div>
+      <div style={{ fontSize: 20, fontWeight: 700, color: "#fff" }}>Diagnostic SMQ en cours…</div>
+      <div style={{ fontSize: 13, color: "rgba(255,255,255,0.7)" }}>Analyse de la conformité ISO 9001</div>
+    </div>
+  );
+}
+
+function AuditModal({ onClose, onSend }) {
+  const [email, setEmail] = useState("");
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 9000, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ background: "#fff", borderRadius: 16, padding: "32px 36px", width: 420, boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+        <div style={{ fontSize: 18, fontWeight: 700, color: "#1a2e22", marginBottom: 8 }}>📧 Envoyer à un auditeur externe</div>
+        <div style={{ fontSize: 13, color: "#6b8c75", marginBottom: 20 }}>
+          Saisissez l'adresse e-mail de l'auditeur. Il recevra la fiche processus et ses dysfonctionnements.
+        </div>
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="auditeur@exemple.com"
+          style={{ width: "100%", padding: "10px 14px", borderRadius: 10, border: "1.5px solid #d4e9d7", fontSize: 14, outline: "none", marginBottom: 20, boxSizing: "border-box" }}
+        />
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+          <button type="button" onClick={onClose} style={{ padding: "10px 20px", borderRadius: 10, border: "1.5px solid #d4e9d7", background: "transparent", color: "#6b8c75", fontWeight: 600, cursor: "pointer" }}>
+            Annuler
+          </button>
+          <button
+            type="button"
+            onClick={() => { if (email.trim()) onSend(email.trim()); }}
+            style={{ padding: "10px 24px", borderRadius: 10, border: "none", background: "#2D604F", color: "#fff", fontWeight: 700, cursor: "pointer" }}
+          >
+            Envoyer
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════
    MAIN COMPONENT
 ═══════════════════════════════════════════════════════════════════ */
 export default function ProcessFormPage() {
@@ -470,6 +516,16 @@ export default function ProcessFormPage() {
   const [toast, setToast]       = useState(null);
   const [dirty, setDirty]       = useState(false);
   const [saving, setSaving]     = useState(false);
+  const [published, setPublished]           = useState(false);
+  const [diagDone, setDiagDone]             = useState(false);
+  const [auditSent, setAuditSent]           = useState(false);
+  const [auditEmail, setAuditEmail]         = useState("");
+  const [showAuditModal, setShowAuditModal] = useState(false);
+  const [hiddenFields, setHiddenFields]     = useState({});
+  const [fieldEditMode, setFieldEditMode]   = useState(false);
+  const [showNotifs, setShowNotifs]         = useState(false);
+  const [unreadCount, setUnreadCount]       = useState(() => getUnreadCount());
+  const [diagRunning, setDiagRunning]       = useState(false);
 
   /* ── Load existing processus in edit mode ── */
   useEffect(() => {
@@ -491,6 +547,7 @@ export default function ProcessFormPage() {
           telephone:   p.pilote?.telephone || "",
           sousDept:    p.pilote?.departement || "",
         }));
+        setPublished(p.statut && p.statut !== "non_demarre");
         setDirty(false);
       })
       .catch((err) => showToast(`Chargement échoué : ${err.message}`, "error"));
@@ -611,6 +668,7 @@ export default function ProcessFormPage() {
       }
 
       showToast("Processus publié avec succès !");
+      setPublished(true);
       setDirty(false);
       setTimeout(() => navigate("/processus"), 1500);
     } catch (err) {
@@ -618,6 +676,37 @@ export default function ProcessFormPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleDiagnostic = () => {
+    setDiagRunning(true);
+    setTimeout(() => {
+    const dysfs = [];
+    if (form.kpis.length === 0)
+      dysfs.push({ ...makeDysf(), titre: "Absence d'indicateurs KPI", description: "Aucun KPI défini pour ce processus.", gravite: "Majeur" });
+    if (form.risques.length === 0)
+      dysfs.push({ ...makeDysf(), titre: "Absence d'analyse des risques", description: "Aucun risque identifié.", gravite: "Majeur" });
+    if (form.documents.length === 0)
+      dysfs.push({ ...makeDysf(), titre: "Documentation manquante", description: "Aucun document associé au processus.", gravite: "Mineur" });
+    if (form.etapes.length === 0)
+      dysfs.push({ ...makeDysf(), titre: "Déroulement non défini", description: "Aucune étape de processus renseignée.", gravite: "Majeur" });
+    if (!form.objectif?.trim())
+      dysfs.push({ ...makeDysf(), titre: "Objectif non défini", description: "L'objectif du processus est absent.", gravite: "Critique" });
+    if (dysfs.length === 0)
+      dysfs.push({ ...makeDysf(), titre: "Conformité satisfaisante", description: "Aucun écart majeur détecté. Fiche conforme ISO 9001.", gravite: "Mineur" });
+    set("dysfonctionnements", dysfs);
+    setDiagDone(true);
+    setDiagRunning(false);
+    pushNotification("diagnostic", "Diagnostic SMQ terminé", `${dysfs.length} dysfonctionnement(s) identifié(s)`);
+    }, 1200);
+  };
+
+  const handleSendToAuditor = (email) => {
+    setAuditEmail(email);
+    setAuditSent(true);
+    setShowAuditModal(false);
+    pushNotification("audit", "Envoi auditeur", `Fiche envoyée à ${email}`);
+    showToast(`Fiche envoyée à ${email} ✓`);
   };
 
   /* ═══════════════════════════════════════════════════════════════
@@ -1121,7 +1210,7 @@ export default function ProcessFormPage() {
     </div>
   );
 
-  const tabContents = [Tab1(), Tab2(), Tab3(), Tab4(), Tab5(), Tab6()];
+  const tabRenderers = [renderTab1, renderTab2, renderTab3, renderTab4, renderTab5, renderTab6];
 
   /* ═══════════════════════════════════════════════════════════════
      RENDER
