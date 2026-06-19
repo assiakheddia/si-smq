@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, createContext, useContext } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../lib/api";
 import NotificationsPanel, { pushNotification, getUnreadCount } from "../components/NotificationsPanel.jsx";
@@ -321,103 +321,96 @@ function SectionHeader({ num, title, sub }) {
 /* ═══════════════════════════════════════════════════════════════════
    RACI MATRIX COMPONENT  (defined OUTSIDE main)
 ═══════════════════════════════════════════════════════════════════ */
-const INIT = {
-  // Tab 1
-  identifiant: "PROC-008",
-  designation: "",
-  pilote: "",
-  email: "",
-  telephone: "",
-  sousDept: "",
-  typeProcessus: "",
-  objectif: "",
-  structures: [],
-  raci: { responsable: "", approbateur: "", consulte: "", informe: "" },
-  // Tab 2
-  periode: "",
-  objectifStrategique: "",
-  fluxEntrees: [""],
-  fluxSorties: [""],
-  clients: "",
-  effectifs: "",
-  competences: [],
-  ressourcesMat: [],
-  ressourcesLog: [],
-  kpis: [],
-  // Tab 3
-  processusAmont: [""],
-  processusAval: [""],
-  enjeuxStrategiques: "",
-  moyensAlloues: [],
-  contraintes: [""],
-  risques: [],
-  // Tab 4
-  documents: [],
-  preuves: [],
-  // Tab 5
-  dysfonctionnements: [],
-  // Tab 6
-  etapes: [],
-  bpmnFile: null,
-};
+function RaciMatrix({ raci, onChange }) {
+  const CYCLE = ["", "R", "A", "C", "I"];
+  const cellColor = { R: "#2D604F", A: "#f59e0b", C: "#3b82f6", I: "#9ca3af" };
 
-function makeKpi() {
-  return {
-    nom: "",
-    unite: "",
-    valeurCible: "",
-    seuilAlerte: "",
-    frequence: "",
-    responsable: "",
+  const cycleCell = (key) => {
+    const cur = raci.cells[key] || "";
+    const next = CYCLE[(CYCLE.indexOf(cur) + 1) % CYCLE.length];
+    onChange({ ...raci, cells: { ...raci.cells, [key]: next } });
   };
-}
-function makeRisque() {
-  return {
-    description: "",
-    probabilite: "1",
-    gravite: "1",
-    detectabilite: "1",
-    mesure: "",
-    responsable: "",
+  const updateRole = (i, v) => {
+    const roles = [...raci.roles]; roles[i] = v;
+    onChange({ ...raci, roles });
   };
-}
-function makeDoc() {
-  return {
-    id: "",
-    titre: "",
-    format: "PDF",
-    version: "1.0",
-    revue: "",
-    statut: "Brouillon",
+  const addRole = () => onChange({ ...raci, roles: [...raci.roles, "Nouveau rôle"] });
+  const removeRole = (i) => {
+    const roles = raci.roles.filter((_, idx) => idx !== i);
+    const cells = Object.fromEntries(
+      Object.entries(raci.cells)
+        .filter(([k]) => +k.split("-")[1] !== i)
+        .map(([k, v]) => { const [r, c] = k.split("-").map(Number); return [`${r}-${c > i ? c - 1 : c}`, v]; })
+    );
+    onChange({ ...raci, roles, cells });
   };
-}
-function makePreuve() {
-  return { titre: "", type: "", date: "", responsable: "" };
-}
-function makeDysf() {
-  return {
-    titre: "",
-    description: "",
-    consequences: "",
-    causes: "",
-    gravite: "Mineur",
-    ameliorations: "",
-    responsable: "",
-    echeance: "",
-    statut: "Ouvert",
+  const updateActivity = (i, v) => {
+    const activities = [...raci.activities]; activities[i] = v;
+    onChange({ ...raci, activities });
   };
-}
-function makeEtape(num) {
-  return {
-    numero: num,
-    nom: "",
-    acteur: "",
-    description: "",
-    entree: "",
-    sortie: "",
-    duree: "",
-    document: "",
+  const addActivity = () => onChange({ ...raci, activities: [...raci.activities, "Nouvelle activité"] });
+  const removeActivity = (i) => {
+    const activities = raci.activities.filter((_, idx) => idx !== i);
+    const cells = Object.fromEntries(
+      Object.entries(raci.cells)
+        .filter(([k]) => +k.split("-")[0] !== i)
+        .map(([k, v]) => { const [r, c] = k.split("-").map(Number); return [`${r > i ? r - 1 : r}-${c}`, v]; })
+    );
+    onChange({ ...raci, activities, cells });
   };
+
+  return (
+    <div style={styles.raciTableWrap}>
+      <table style={styles.raciTable}>
+        <thead>
+          <tr>
+            <th style={styles.raciThFirst}>Activité / Rôle</th>
+            {raci.roles.map((role, ci) => (
+              <th key={ci} style={styles.raciTh}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <input value={role} onChange={(e) => updateRole(ci, e.target.value)} style={styles.raciRoleInput} />
+                  {raci.roles.length > 1 && (
+                    <button type="button" style={styles.raciRemoveBtn} onClick={() => removeRole(ci)}>✕</button>
+                  )}
+                </div>
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {raci.activities.map((activity, ri) => (
+            <tr key={ri}>
+              <td style={styles.raciActivityCell}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <input value={activity} onChange={(e) => updateActivity(ri, e.target.value)} style={styles.raciInput} />
+                  {raci.activities.length > 1 && (
+                    <button type="button" style={{ ...styles.raciRemoveBtn, background: "rgba(200,50,50,0.12)", color: C.danger }} onClick={() => removeActivity(ri)}>✕</button>
+                  )}
+                </div>
+              </td>
+              {raci.roles.map((_, ci) => {
+                const key = `${ri}-${ci}`;
+                const val = raci.cells[key] || "";
+                return (
+                  <td
+                    key={ci}
+                    style={{ ...styles.raciCell, background: val ? cellColor[val] + "22" : undefined, color: cellColor[val] || C.muted }}
+                    onClick={() => cycleCell(key)}
+                  >
+                    {val || "—"}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div style={{ display: "flex", gap: 8, padding: 12 }}>
+        <button type="button" style={styles.raciAddBtn} onClick={addActivity}>＋ Activité</button>
+        <button type="button" style={styles.raciAddBtn} onClick={addRole}>＋ Rôle</button>
+      </div>
+    </div>
+  );
 }
 
 /* ═══════════════════════════════════════════════════════════════════

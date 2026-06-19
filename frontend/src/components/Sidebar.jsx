@@ -88,6 +88,10 @@ export default function Sidebar({
   setActiveNav,
   sidebarWidth,
 }) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const activeId = NAV.find((n) => location.pathname.startsWith(n.path))?.id ?? null;
+
   const [mobileOpen, setMobileOpen] = useState(false);
   const [hoveredId, setHoveredId]   = useState(null);
   const [mounted, setMounted]       = useState(false);

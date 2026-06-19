@@ -351,6 +351,8 @@ export default function MainContent({ collapsed }) {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [selectedRows, setSelectedRows] = useState([]);
   const [viewMode, setViewMode]       = useState("table");
+  const [showNotifs, setShowNotifs]   = useState(false);
+  const [unreadCount, setUnreadCount] = useState(() => getUnreadCount());
 
   /* Fetch on mount */
   useEffect(() => {
