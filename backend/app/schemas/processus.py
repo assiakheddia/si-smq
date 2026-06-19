@@ -66,12 +66,13 @@ class PiloteResume(_Base):
     Représentation minimale d'un Utilisateur dans ProcessusResponse.
     Évite d'importer le schema Utilisateur complet (dépendance circulaire).
     """
-    id:         int
-    nom:        str
-    prenom:     str
-    email:      str
-    poste:      str | None = None
+    id:          int
+    nom:         str
+    prenom:      str
+    email:       str
+    poste:       str | None = None
     departement: str | None = None
+    telephone:   str | None = None
 
 
 # =============================================================================

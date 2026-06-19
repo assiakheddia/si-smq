@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { getCurrentUser } from "../lib/api";
 
 const NAV = [
   {
@@ -110,8 +111,18 @@ export default function Sidebar({
   sidebarWidth,
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [hoveredId, setHoveredId] = useState(null);
-  const [mounted, setMounted] = useState(false);
+  const [hoveredId, setHoveredId]   = useState(null);
+  const [mounted, setMounted]       = useState(false);
+
+  const currentUser = getCurrentUser();
+  const userDisplayName = currentUser?.nom_complet || "Utilisateur";
+  const userRole        = currentUser?.role        || "—";
+  const userInitials    = userDisplayName
+    .split(" ")
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
 
   useEffect(() => {
     setTimeout(() => setMounted(true), 50);
@@ -438,7 +449,7 @@ export default function Sidebar({
                 color: "#152b21",
               }}
             >
-              RF
+              {userInitials}
             </div>
             {!collapsed && (
               <div style={{ overflow: "hidden" }}>
@@ -451,7 +462,7 @@ export default function Sidebar({
                     whiteSpace: "nowrap",
                   }}
                 >
-                  Ryma Felkir
+                  {userDisplayName}
                 </div>
                 <div
                   style={{
@@ -459,7 +470,7 @@ export default function Sidebar({
                     color: "rgba(240,255,244,0.35)",
                   }}
                 >
-                  Admin Système
+                  {userRole}
                 </div>
               </div>
             )}

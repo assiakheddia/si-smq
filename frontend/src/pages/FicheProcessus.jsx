@@ -1,5 +1,57 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useState, useRef, useEffect, useCallback } from "react";
+import { api } from "../lib/api";
+
+const TYPE_TO_FORM = {
+  strategique:  "Management",
+  operationnel: "Réalisation",
+  support:      "Soutien",
+};
+
+/* ── Map backend ProcessusResponse → shape expected by the UI tabs ── */
+function normalizeProcessus(p) {
+  return {
+    identifiant:         p.code || `PROC-${p.id}`,
+    designation:         p.nom  || "",
+    pilote:              p.pilote ? `${p.pilote.prenom} ${p.pilote.nom}` : "—",
+    email:               p.pilote?.email      || "—",
+    telephone:           p.pilote?.telephone  || "—",
+    sousDept:            p.pilote?.departement || "—",
+    typeProcessus:       TYPE_TO_FORM[p.type] || p.type || "—",
+    objectif:            p.objectif    || "",
+    structures:          p.parties_interessees?.map((pi) => pi.nom) || [],
+    raci:                { responsable: "", approbateur: "", consulte: "", informe: "" },
+    periode:             p.frequence_cycle || "",
+    coutEstime:          "",
+    objectifStrategique: p.description || "",
+    fluxEntrees:         p.entrees ? p.entrees.split("\n").filter(Boolean) : [],
+    fluxSorties:         p.sorties ? p.sorties.split("\n").filter(Boolean) : [],
+    clients:             [],
+    effectifs:           [],
+    competences:         [],
+    ressourcesMat:       p.ressources_cles ? p.ressources_cles.split("\n").filter(Boolean) : [],
+    ressourcesLog:       [],
+    kpis:                [],
+    processusAmont:      [],
+    processusAval:       [],
+    enjeuxStrategiques:  p.description || "",
+    moyensAlloues:       p.ressources_cles ? p.ressources_cles.split("\n").filter(Boolean) : [],
+    contraintes:         [],
+    risques:             [],
+    documentsDescription: "",
+    documents:           [],
+    preuves:             [],
+    dysfonctionnementsDescription: "",
+    dysfonctionnements:  [],
+    etapes:              [],
+    /* raw counts for header badges */
+    nb_diagnostics:      p.nb_diagnostics      || 0,
+    nb_risques_actifs:   p.nb_risques_actifs   || 0,
+    nb_actions_ouvertes: p.nb_actions_ouvertes || 0,
+    score_maturite:      p.score_maturite      || 0,
+    statut:              p.statut,
+  };
+}
 /* ═══════════════════════════════════════════════════════════════════
    DESIGN TOKENS
 ═══════════════════════════════════════════════════════════════════ */
@@ -1567,7 +1619,29 @@ export default function FicheProcessus() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState(0);
-  const processus = PROCESSUS_DATA[id] || PROCESSUS_DATA[1];
+  const [processus, setProcessus] = useState(null);
+  const [loadError, setLoadError] = useState(null);
+
+  useEffect(() => {
+    api.get(`/processus/${id}`)
+      .then((p) => setProcessus(normalizeProcessus(p)))
+      .catch((err) => setLoadError(err.message));
+  }, [id]);
+
+  if (loadError) {
+    return (
+      <div style={{ padding: 40, color: "#ef4444", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+        Impossible de charger le processus : {loadError}
+      </div>
+    );
+  }
+  if (!processus) {
+    return (
+      <div style={{ padding: 40, color: "#6b7280", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+        Chargement…
+      </div>
+    );
+  }
 
   /* ══════════════════════════════════════════════════════════════
      TAB 1 — Informations et historique
@@ -3102,9 +3176,9 @@ export default function FicheProcessus() {
                 </div>
                 <div style={S.kpiRow}>
                   {[
-                    { num: processus.kpis.length, lbl: "KPIs" },
-                    { num: processus.etapes.length, lbl: "Tâches" },
-                    { num: processus.risques.length, lbl: "Risques" },
+                    { num: processus.kpis.length,           lbl: "KPIs" },
+                    { num: processus.nb_diagnostics,        lbl: "Diagnostics" },
+                    { num: processus.nb_risques_actifs,     lbl: "Risques" },
                   ].map((k) => (
                     <div key={k.lbl} style={S.kpiBox}>
                       <span style={S.kpiNum}>{k.num}</span>

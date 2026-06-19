@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import logo from "../assets/Vector.svg";
+import { api, setTokens } from "../lib/api";
 
 
 const LogoPlaceholder = () => (
@@ -86,11 +87,7 @@ export default function Login() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // ── Fausse authentification ──────────────────────────────────────
-  // Remplacez cette logique par votre vrai appel API le moment venu.
-  const FAKE_CREDENTIALS = { email: "admin@veridia.dz", password: "Veridia2025!" };
-
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
 
@@ -100,22 +97,23 @@ export default function Login() {
     }
 
     setLoading(true);
-    setTimeout(() => {
-      if (
-        email === FAKE_CREDENTIALS.email &&
-        password === FAKE_CREDENTIALS.password
-      ) {
-        navigate("/dashboard");
-      } else {
-        setError("Identifiants incorrects. Vérifiez votre email et mot de passe.");
-        setLoading(false);
-      }
-    }, 900);
+    try {
+      const data = await api.post("/auth/login", { email, password });
+      setTokens(data.access_token, data.refresh_token, {
+        id: data.utilisateur_id,
+        nom_complet: data.nom_complet,
+        email: data.email,
+        role: data.role,
+      });
+      navigate("/dashboard");
+    } catch (err) {
+      setError(err.message || "Identifiants incorrects. Vérifiez votre email et mot de passe.");
+      setLoading(false);
+    }
   };
 
   const handleGoogle = () => {
-    setLoading(true);
-    setTimeout(() => navigate("/dashboard"), 1200);
+    setError("Connexion Google non disponible pour le moment.");
   };
 
   return (

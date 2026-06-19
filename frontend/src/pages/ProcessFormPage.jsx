@@ -1,5 +1,18 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { api } from "../lib/api";
+
+/* ── Mapping: form label ↔ backend TypeProcessus enum ── */
+const FORM_TO_TYPE = {
+  "Management":  "strategique",
+  "Réalisation": "operationnel",
+  "Soutien":     "support",
+};
+const TYPE_TO_FORM = {
+  strategique:  "Management",
+  operationnel: "Réalisation",
+  support:      "Soutien",
+};
 
 /* ═══════════════════════════════════════════════════════════════════
    DESIGN TOKENS
@@ -884,6 +897,7 @@ function makeRisque() {
     description: "",
     probabilite: "1",
     gravite: "1",
+    detectabilite: "1",
     mesure: "",
     responsable: "",
   };
@@ -955,11 +969,37 @@ export default function ProcessFormPage() {
   const { id } = useParams();
   const isEdit = Boolean(id);
 
-  const [form, setForm] = useState(INIT);
+  const [form, setForm]         = useState(INIT);
   const [activeTab, setActiveTab] = useState(0);
-  const [errors, setErrors] = useState({});
-  const [toast, setToast] = useState(null);
-  const [dirty, setDirty] = useState(false);
+  const [errors, setErrors]     = useState({});
+  const [toast, setToast]       = useState(null);
+  const [dirty, setDirty]       = useState(false);
+  const [saving, setSaving]     = useState(false);
+
+  /* ── Load existing processus in edit mode ── */
+  useEffect(() => {
+    if (!isEdit) return;
+    api.get(`/processus/${id}`)
+      .then((p) => {
+        setForm((prev) => ({
+          ...prev,
+          identifiant:     p.code || prev.identifiant,
+          designation:     p.nom  || "",
+          typeProcessus:   TYPE_TO_FORM[p.type] || "",
+          objectif:        p.objectif    || "",
+          fluxEntrees:     p.entrees     ? p.entrees.split("\n").filter(Boolean) : [""],
+          fluxSorties:     p.sorties     ? p.sorties.split("\n").filter(Boolean) : [""],
+          ressourcesMat:   p.ressources_cles ? p.ressources_cles.split("\n").filter(Boolean).slice(0, 5) : [],
+          enjeuxStrategiques: p.description || "",
+          pilote:      p.pilote ? `${p.pilote.prenom} ${p.pilote.nom}` : "",
+          email:       p.pilote?.email     || "",
+          telephone:   p.pilote?.telephone || "",
+          sousDept:    p.pilote?.departement || "",
+        }));
+        setDirty(false);
+      })
+      .catch((err) => showToast(`Chargement échoué : ${err.message}`, "error"));
+  }, [id, isEdit]);
 
   /* ── Helpers ── */
   const set = useCallback(
@@ -1032,20 +1072,85 @@ export default function ProcessFormPage() {
     }
   };
 
-  const handleDraft = () => {
-    showToast("Brouillon enregistré avec succès ✓");
-    setDirty(false);
+  const buildPayload = (statut) => ({
+    nom:             form.designation.trim(),
+    code:            form.identifiant !== "PROC-008" ? form.identifiant : undefined,
+    type:            FORM_TO_TYPE[form.typeProcessus] || null,
+    objectif:        form.objectif     || null,
+    description:     form.enjeuxStrategiques || null,
+    entrees:         form.fluxEntrees.filter(Boolean).join("\n") || null,
+    sorties:         form.fluxSorties.filter(Boolean).join("\n") || null,
+    ressources_cles: [...form.ressourcesMat, ...form.ressourcesLog].filter(Boolean).join("\n") || null,
+    statut,
+  });
+
+  const handleDraft = async () => {
+    if (!form.designation.trim()) {
+      showToast("La désignation est obligatoire.", "error");
+      return;
+    }
+    setSaving(true);
+    try {
+      const payload = buildPayload("non_demarre");
+      if (isEdit) {
+        await api.put(`/processus/${id}`, payload);
+        showToast("Brouillon enregistré ✓");
+      } else {
+        const created = await api.post("/processus", payload);
+        showToast("Brouillon enregistré ✓");
+        navigate(`/processus/${created.id}`, { replace: true });
+      }
+      setDirty(false);
+    } catch (err) {
+      showToast(err.message, "error");
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handlePublish = () => {
+  const handlePublish = async () => {
     if (!validate()) {
       showToast("Veuillez remplir tous les champs obligatoires.", "error");
       setActiveTab(0);
       return;
     }
-    showToast("Processus publié avec succès 🎉");
-    setDirty(false);
-    setTimeout(() => navigate("/processus"), 1800);
+    setSaving(true);
+    try {
+      const payload = buildPayload("en_cours");
+      let processusId = id ? parseInt(id) : null;
+      if (isEdit) {
+        await api.put(`/processus/${id}`, payload);
+      } else {
+        const created = await api.post("/processus", payload);
+        processusId = created.id;
+      }
+
+      /* Create risques that have a description (only when we have a processus ID) */
+      if (processusId) {
+        const risquesACreer = form.risques.filter((r) => r.description.trim());
+        await Promise.allSettled(
+          risquesACreer.map((r) =>
+            api.post("/risques", {
+              titre:            r.description.trim(),
+              description:      r.description.trim(),
+              probabilite:      parseInt(r.probabilite    || 1),
+              gravite:          parseInt(r.gravite        || 1),
+              detectabilite:    parseInt(r.detectabilite  || 1),
+              plan_attenuation: r.mesure || null,
+              processus_id:     processusId,
+            })
+          )
+        );
+      }
+
+      showToast("Processus publié avec succès !");
+      setDirty(false);
+      setTimeout(() => navigate("/processus"), 1500);
+    } catch (err) {
+      showToast(err.message, "error");
+    } finally {
+      setSaving(false);
+    }
   };
 
   /* ══════════════════════════════════════════════════════════════
@@ -1492,9 +1597,13 @@ export default function ProcessFormPage() {
       />
 
       {form.risques.map((r, i) => {
-        const crit = parseInt(r.probabilite || 1) * parseInt(r.gravite || 1);
-        const critColor =
-          crit >= 9 ? "#e53935" : crit >= 4 ? C.warn : "#4caf50";
+        const P = parseInt(r.probabilite || 1);
+        const G = parseInt(r.gravite || 1);
+        const D = parseInt(r.detectabilite || 1);
+        const rpn = P * G * D;
+        /* ISO AMDEC criticality thresholds: RPN 1-20 faible, 21-50 modéré, 51-80 élevé, 81+ critique */
+        const critColor = rpn >= 81 ? "#9b1c1c" : rpn >= 51 ? "#e53935" : rpn >= 21 ? C.warn : "#4caf50";
+        const critLabel = rpn >= 81 ? "Critique" : rpn >= 51 ? "Élevé" : rpn >= 21 ? "Modéré" : "Faible";
         return (
           <div key={i} style={styles.riskCard}>
             <div style={styles.kpiCardHeader}>
@@ -1507,7 +1616,7 @@ export default function ProcessFormPage() {
                     color: critColor,
                   }}
                 >
-                  Criticité : {crit}
+                  RPN {rpn} — {critLabel}
                 </span>
               </span>
               <button
@@ -1537,7 +1646,7 @@ export default function ProcessFormPage() {
                   />
                 </Field>
               </div>
-              <Field label="Probabilité (1–3)">
+              <Field label="Probabilité (1–5)">
                 <Select
                   value={r.probabilite}
                   onChange={(e) => {
@@ -1546,13 +1655,15 @@ export default function ProcessFormPage() {
                     set("risques", u);
                   }}
                   options={[
-                    { value: "1", label: "1 – Faible" },
-                    { value: "2", label: "2 – Moyenne" },
-                    { value: "3", label: "3 – Élevée" },
+                    { value: "1", label: "1 – Très faible" },
+                    { value: "2", label: "2 – Faible" },
+                    { value: "3", label: "3 – Moyen" },
+                    { value: "4", label: "4 – Élevée" },
+                    { value: "5", label: "5 – Très élevée" },
                   ]}
                 />
               </Field>
-              <Field label="Gravité (1–3)">
+              <Field label="Gravité (1–5)">
                 <Select
                   value={r.gravite}
                   onChange={(e) => {
@@ -1561,9 +1672,28 @@ export default function ProcessFormPage() {
                     set("risques", u);
                   }}
                   options={[
-                    { value: "1", label: "1 – Mineure" },
-                    { value: "2", label: "2 – Modérée" },
-                    { value: "3", label: "3 – Sévère" },
+                    { value: "1", label: "1 – Négligeable" },
+                    { value: "2", label: "2 – Mineure" },
+                    { value: "3", label: "3 – Modérée" },
+                    { value: "4", label: "4 – Sévère" },
+                    { value: "5", label: "5 – Catastrophique" },
+                  ]}
+                />
+              </Field>
+              <Field label="Détectabilité (1–5)">
+                <Select
+                  value={r.detectabilite}
+                  onChange={(e) => {
+                    const u = [...form.risques];
+                    u[i] = { ...u[i], detectabilite: e.target.value };
+                    set("risques", u);
+                  }}
+                  options={[
+                    { value: "1", label: "1 – Détection certaine" },
+                    { value: "2", label: "2 – Probable" },
+                    { value: "3", label: "3 – Possible" },
+                    { value: "4", label: "4 – Peu probable" },
+                    { value: "5", label: "5 – Indétectable" },
                   ]}
                 />
               </Field>
@@ -2167,14 +2297,7 @@ export default function ProcessFormPage() {
     </div>
   );
 
-  const tabContents = [
-    <Tab1 />,
-    <Tab2 />,
-    <Tab3 />,
-    <Tab4 />,
-    <Tab5 />,
-    <Tab6 />,
-  ];
+  const tabContents = [Tab1(), Tab2(), Tab3(), Tab4(), Tab5(), Tab6()];
 
   /* ══════════════════════════════════════════════════════════════
      RENDER
@@ -2329,26 +2452,28 @@ export default function ProcessFormPage() {
 
         {/* ── Action bar ── */}
         <div style={styles.actionBar}>
-          <button type="button" style={styles.btnCancel} onClick={handleCancel}>
+          <button type="button" style={styles.btnCancel} onClick={handleCancel} disabled={saving}>
             ← Annuler
           </button>
           <div style={{ display: "flex", gap: 10 }}>
-            <button type="button" style={styles.btnDraft} onClick={handleDraft}>
-              💾 Enregistrer brouillon
+            <button type="button" style={{ ...styles.btnDraft, opacity: saving ? 0.6 : 1 }} onClick={handleDraft} disabled={saving}>
+              {saving ? "…" : "💾 Enregistrer brouillon"}
             </button>
             <button
               type="button"
               style={styles.btnPreview}
               onClick={() => showToast("Mode prévisualisation — à implémenter")}
+              disabled={saving}
             >
               👁 Prévisualiser
             </button>
             <button
               type="button"
-              style={styles.btnPublish}
+              style={{ ...styles.btnPublish, opacity: saving ? 0.6 : 1 }}
               onClick={handlePublish}
+              disabled={saving}
             >
-              🚀 Publier le processus
+              {saving ? "Enregistrement…" : "🚀 Publier le processus"}
             </button>
           </div>
         </div>

@@ -1,83 +1,42 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { api, getCurrentUser } from "../lib/api";
 
-const ALL_DATA = [
-  {
-    id: 1,
-    nom: "Gestion PFE",
-    responsable: "Haddadou",
-    tel: "(225) 555-0118",
-    email: "haddadou@esi.dz",
-    dept: "Soutenances",
-    status: "actif",
-  },
-  {
-    id: 2,
-    nom: "Gestion PFE",
-    responsable: "Haddadou",
-    tel: "(252) 555-0126",
-    email: "haddadou@esi.dz",
-    dept: "Soutenances",
-    status: "actif",
-  },
-  {
-    id: 3,
-    nom: "Audit Labo",
-    responsable: "Bensalem",
-    tel: "(629) 555-0129",
-    email: "bensalem@esi.dz",
-    dept: "Laboratoire",
-    status: "revue",
-  },
-  {
-    id: 4,
-    nom: "Contrôle Qualité",
-    responsable: "Meziani",
-    tel: "(704) 555-0127",
-    email: "meziani@esi.dz",
-    dept: "Qualité",
-    status: "actif",
-  },
-  {
-    id: 5,
-    nom: "Gestion PFE",
-    responsable: "Haddadou",
-    tel: "(704) 555-0128",
-    email: "haddadou@esi.dz",
-    dept: "Soutenances",
-    status: "inactif",
-  },
-  {
-    id: 6,
-    nom: "Formation",
-    responsable: "Kaci",
-    tel: "(312) 555-0198",
-    email: "kaci@esi.dz",
-    dept: "Laboratoire",
-    status: "actif",
-  },
-  {
-    id: 7,
-    nom: "Audit Interne",
-    responsable: "Meziani",
-    tel: "(501) 555-0142",
-    email: "meziani@esi.dz",
-    dept: "Qualité",
-    status: "revue",
-  },
-];
-
-const DEPT_STYLE = {
-  Soutenances: { color: "#166534", bg: "#dcfce7", dot: "#22c55e" },
-  Laboratoire: { color: "#1e40af", bg: "#dbeafe", dot: "#3b82f6" },
-  Qualité: { color: "#92400e", bg: "#fef3c7", dot: "#f59e0b" },
+/* ── Type-based categorisation (maps backend TypeProcessus enum) ── */
+const TYPE_STYLE = {
+  strategique:  { color: "#854d0e", bg: "#fef9c3", dot: "#ca8a04" },
+  operationnel: { color: "#166534", bg: "#dcfce7", dot: "#22c55e" },
+  support:      { color: "#1e40af", bg: "#dbeafe", dot: "#3b82f6" },
+};
+const TYPE_LABEL = {
+  strategique: "Stratégique",
+  operationnel: "Opérationnel",
+  support: "Support",
 };
 
+/* ── Statut display (maps backend StatutProcessus enum) ── */
 const STATUS_STYLE = {
-  actif: { color: "#166534", bg: "#dcfce7", label: "Actif" },
-  revue: { color: "#92400e", bg: "#fef3c7", label: "En revue" },
-  inactif: { color: "#6b7280", bg: "#f3f4f6", label: "Inactif" },
+  non_demarre:  { color: "#6b7280", bg: "#f3f4f6", label: "Non démarré" },
+  en_cours:     { color: "#92400e", bg: "#fef3c7", label: "En cours" },
+  conforme:     { color: "#166534", bg: "#dcfce7", label: "Conforme" },
+  non_conforme: { color: "#991b1b", bg: "#fee2e2", label: "Non conforme" },
+  suspendu:     { color: "#6b7280", bg: "#f3f4f6", label: "Suspendu" },
 };
+
+/* ── Normalise backend ProcessusResponse → flat UI row ── */
+function normalize(p) {
+  return {
+    id:          p.id,
+    nom:         p.nom,
+    code:        p.code || "",
+    responsable: p.pilote ? `${p.pilote.prenom} ${p.pilote.nom}` : "—",
+    tel:         p.pilote?.telephone || "—",
+    email:       p.pilote?.email    || "—",
+    dept:        p.type  || null,
+    statut:      p.statut,
+    score:       p.score_maturite,
+  };
+}
 
 const KPI_ICONS = {
   total: (
@@ -380,17 +339,28 @@ function ConfirmModal({ nom, onConfirm, onCancel }) {
 
 export default function MainContent({ collapsed }) {
   const navigate = useNavigate();
-  const [data, setData] = useState(ALL_DATA);
-  
-  const [search, setSearch] = useState("");
-  const [deptFilter, setDeptFilter] = useState("Tous");
-  const [sortField, setSortField] = useState(null);
-  const [sortAsc, setSortAsc] = useState(true);
+  const [data, setData]           = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [apiError, setApiError]   = useState(null);
+
+  const [search, setSearch]           = useState("");
+  const [typeFilter, setTypeFilter]   = useState("Tous");
+  const [sortField, setSortField]     = useState(null);
+  const [sortAsc, setSortAsc]         = useState(true);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [selectedRows, setSelectedRows] = useState([]);
-  const [viewMode, setViewMode] = useState("table");
+  const [viewMode, setViewMode]       = useState("table");
 
-  const depts = ["Tous", "Soutenances", "Laboratoire", "Qualité"];
+  /* Fetch on mount */
+  useEffect(() => {
+    setLoading(true);
+    api.get("/processus")
+      .then((items) => setData((items || []).map(normalize)))
+      .catch((err)  => setApiError(err.message))
+      .finally(()   => setLoading(false));
+  }, []);
+
+  const types = ["Tous", "strategique", "operationnel", "support"];
 
   const filtered = data
     .filter((r) => {
@@ -400,7 +370,7 @@ export default function MainContent({ collapsed }) {
           r.nom.toLowerCase().includes(q) ||
           r.responsable.toLowerCase().includes(q) ||
           r.email.toLowerCase().includes(q)) &&
-        (deptFilter === "Tous" || r.dept === deptFilter)
+        (typeFilter === "Tous" || r.dept === typeFilter)
       );
     })
     .sort((a, b) =>
@@ -426,9 +396,24 @@ export default function MainContent({ collapsed }) {
     setSelectedRows((p) =>
       p.length === filtered.length ? [] : filtered.map((r) => r.id),
     );
-  const confirmDelete = () => {
-    setData((p) => p.filter((r) => r.id !== deleteTarget.id));
+  const confirmDelete = async () => {
+    try {
+      await api.delete(`/processus/${deleteTarget.id}`);
+      setData((p) => p.filter((r) => r.id !== deleteTarget.id));
+    } catch (err) {
+      alert(`Erreur lors de la suppression : ${err.message}`);
+    }
     setDeleteTarget(null);
+  };
+
+  const bulkDelete = async () => {
+    try {
+      await Promise.all(selectedRows.map((id) => api.delete(`/processus/${id}`)));
+      setData((p) => p.filter((r) => !selectedRows.includes(r.id)));
+      setSelectedRows([]);
+    } catch (err) {
+      alert(`Erreur lors de la suppression : ${err.message}`);
+    }
   };
 
   const SortArrow = ({ f }) => (
@@ -675,7 +660,12 @@ export default function MainContent({ collapsed }) {
               <span className="n-dot" />
             </div>
             <div className="u-chip">
-              <div className="u-av">AZ</div>
+              <div className="u-av">
+                {(() => {
+                  const u = getCurrentUser();
+                  return u?.nom_complet?.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2) || "?";
+                })()}
+              </div>
               <div>
                 <div
                   style={{
@@ -686,7 +676,7 @@ export default function MainContent({ collapsed }) {
                     fontFamily: "'Plus Jakarta Sans',sans-serif",
                   }}
                 >
-                  Atir Zineb
+                  {getCurrentUser()?.nom_complet || "—"}
                 </div>
                 <div
                   style={{
@@ -792,31 +782,31 @@ export default function MainContent({ collapsed }) {
             value={data.length}
             icon={KPI_ICONS.total}
             color="#1e3d2f"
-            sub={`${data.filter((d) => d.status === "actif").length} actifs`}
+            sub={`${data.filter((d) => d.statut === "conforme").length} conformes`}
             delay={0}
           />
           <KpiCard
-            label="Soutenances"
-            value={data.filter((d) => d.dept === "Soutenances").length}
+            label="Stratégiques"
+            value={data.filter((d) => d.dept === "strategique").length}
             icon={KPI_ICONS.soutenances}
-            color="#22c55e"
-            sub="département"
+            color="#ca8a04"
+            sub="type"
             delay={60}
           />
           <KpiCard
-            label="Laboratoire"
-            value={data.filter((d) => d.dept === "Laboratoire").length}
+            label="Opérationnels"
+            value={data.filter((d) => d.dept === "operationnel").length}
             icon={KPI_ICONS.laboratoire}
-            color="#3b82f6"
-            sub="département"
+            color="#22c55e"
+            sub="type"
             delay={120}
           />
           <KpiCard
-            label="Qualité"
-            value={data.filter((d) => d.dept === "Qualité").length}
+            label="Support"
+            value={data.filter((d) => d.dept === "support").length}
             icon={KPI_ICONS.qualite}
-            color="#f59e0b"
-            sub="département"
+            color="#3b82f6"
+            sub="type"
             delay={180}
           />
         </div>
@@ -857,13 +847,13 @@ export default function MainContent({ collapsed }) {
                   </span>
                 )}
               </div>
-              {depts.map((d) => (
+              {types.map((t) => (
                 <button
-                  key={d}
-                  className={`dtab ${deptFilter === d ? "active" : ""}`}
-                  onClick={() => setDeptFilter(d)}
+                  key={t}
+                  className={`dtab ${typeFilter === t ? "active" : ""}`}
+                  onClick={() => setTypeFilter(t)}
                 >
-                  {d}
+                  {t === "Tous" ? "Tous" : TYPE_LABEL[t]}
                 </button>
               ))}
             </div>
@@ -943,12 +933,7 @@ export default function MainContent({ collapsed }) {
                   {selectedRows.length > 1 ? "s" : ""}
                 </span>
                 <button
-                  onClick={() => {
-                    setData((p) =>
-                      p.filter((r) => !selectedRows.includes(r.id)),
-                    );
-                    setSelectedRows([]);
-                  }}
+                  onClick={bulkDelete}
                   style={{
                     marginLeft: "auto",
                     background: "#ef4444",
@@ -997,7 +982,16 @@ export default function MainContent({ collapsed }) {
           )}
 
           {/* ── TABLE VIEW ── */}
-          {viewMode === "table" && (
+          {loading && (
+            <div className="empty-state">Chargement des processus…</div>
+          )}
+          {apiError && (
+            <div className="empty-state" style={{ color: "#ef4444" }}>
+              Erreur : {apiError}
+            </div>
+          )}
+
+          {viewMode === "table" && !loading && !apiError && (
             <div className="tbl-scroll" style={{ marginTop: 10 }}>
               {filtered.length === 0 ? (
                 <div className="empty-state">
@@ -1042,7 +1036,7 @@ export default function MainContent({ collapsed }) {
                         ["responsable", "Responsable"],
                         ["tel", "Téléphone"],
                         ["email", "Email"],
-                        ["dept", "Département"],
+                        ["dept", "Type"],
                       ].map(([f, l]) => (
                         <th key={f} onClick={() => toggleSort(f)}>
                           <span
@@ -1062,12 +1056,12 @@ export default function MainContent({ collapsed }) {
                   </thead>
                   <tbody>
                     {filtered.map((row, i) => {
-                      const ds = DEPT_STYLE[row.dept] || {
+                      const ds = TYPE_STYLE[row.dept] || {
                         color: "#555",
                         bg: "#f3f4f6",
                         dot: "#9ca3af",
                       };
-                      const ss = STATUS_STYLE[row.status];
+                      const ss = STATUS_STYLE[row.statut] || STATUS_STYLE.non_demarre;
                       const isSel = selectedRows.includes(row.id);
                       return (
                         <tr
@@ -1104,7 +1098,7 @@ export default function MainContent({ collapsed }) {
                           </td>
                           <td>
                             <Badge
-                              text={row.dept}
+                              text={TYPE_LABEL[row.dept] || row.dept || "—"}
                               style={{
                                 color: ds.color,
                                 background: ds.bg,
@@ -1153,7 +1147,7 @@ export default function MainContent({ collapsed }) {
           )}
 
           {/* ── CARDS VIEW ── */}
-          {viewMode === "cards" && (
+          {viewMode === "cards" && !loading && !apiError && (
             <div className="cards-grid">
               {filtered.length === 0 ? (
                 <div className="empty-state" style={{ gridColumn: "1/-1" }}>
@@ -1161,12 +1155,12 @@ export default function MainContent({ collapsed }) {
                 </div>
               ) : (
                 filtered.map((row, i) => {
-                  const ds = DEPT_STYLE[row.dept] || {
+                  const ds = TYPE_STYLE[row.dept] || {
                     color: "#555",
                     bg: "#f3f4f6",
                     dot: "#9ca3af",
                   };
-                  const ss = STATUS_STYLE[row.status];
+                  const ss = STATUS_STYLE[row.statut] || STATUS_STYLE.non_demarre;
                   return (
                     <div
                       key={row.id}
@@ -1182,7 +1176,7 @@ export default function MainContent({ collapsed }) {
                         }}
                       >
                         <Badge
-                          text={row.dept}
+                          text={TYPE_LABEL[row.dept] || row.dept || "—"}
                           style={{
                             color: ds.color,
                             background: ds.bg,
