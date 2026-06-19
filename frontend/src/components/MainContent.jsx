@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import NotificationsPanel, { getUnreadCount } from "./NotificationsPanel.jsx";
 import { api, getCurrentUser } from "../lib/api";
 
 /* ── Type-based categorisation (maps backend TypeProcessus enum) ── */
@@ -436,6 +437,7 @@ export default function MainContent({ collapsed }) {
 
   return (
     <>
+      {showNotifs && <NotificationsPanel onClose={() => setShowNotifs(false)} />}
       <style>{`
         @keyframes fadeUp {
           from { opacity: 0; transform: translateY(12px); }
@@ -644,20 +646,12 @@ export default function MainContent({ collapsed }) {
                 FR
               </span>
             </div>
-            <div className="icon-btn">
-              <svg
-                width="15"
-                height="15"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="#555"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-              >
+            <div className="icon-btn" onClick={() => { setShowNotifs((v) => !v); setUnreadCount(0); }} style={{ cursor: "pointer" }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="1.8" strokeLinecap="round">
                 <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" />
                 <path d="M13.73 21a2 2 0 01-3.46 0" />
               </svg>
-              <span className="n-dot" />
+              {unreadCount > 0 && <span className="n-dot" />}
             </div>
             <div className="u-chip">
               <div className="u-av">
@@ -1076,12 +1070,11 @@ export default function MainContent({ collapsed }) {
                               onChange={() => toggleRow(row.id)}
                             />
                           </td>
-                          <td className="nom-cell"
-                            style={{cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset:'1px'}}
+                          <td
+                            className="nom-cell"
+                            style={{ cursor: "pointer", textDecoration: "underline", textUnderlineOffset: "2px" }}
                             onClick={() => navigate(`/fiche-processus/${row.id}`)}
-                          >
-                            {row.nom}
-                          </td>
+                          >{row.nom}</td>
                           <td>{row.responsable}</td>
                           <td style={{ color: "#6b7280" }}>{row.tel}</td>
                           <td>
