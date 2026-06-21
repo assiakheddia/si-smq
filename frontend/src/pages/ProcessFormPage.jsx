@@ -88,17 +88,20 @@ const styles = {
     transition: "border 0.2s", boxSizing: "border-box", fontFamily: "'Plus Jakarta Sans', sans-serif",
   },
   inputError: { border: `1.5px solid ${C.danger}` },
+  inputWarning: { border: `1.5px solid ${C.warn}` },
   textarea: {
     width: "100%", padding: "10px 14px", borderRadius: 10, border: `1.5px solid ${C.border}`,
     background: C.softBg, fontSize: 14, color: C.text, outline: "none",
     resize: "vertical", minHeight: 90, fontFamily: "'Plus Jakarta Sans', sans-serif", boxSizing: "border-box",
   },
+  textareaWarning: { border: `1.5px solid ${C.warn}` },
   select: {
     width: "100%", padding: "10px 14px", borderRadius: 10, border: `1.5px solid ${C.border}`,
     background: C.softBg, fontSize: 14, color: C.text, outline: "none",
     cursor: "pointer", appearance: "none", fontFamily: "'Plus Jakarta Sans', sans-serif", boxSizing: "border-box",
   },
   errorMsg: { fontSize: 11, color: C.danger, marginTop: 2 },
+  warningMsg: { fontSize: 11, color: C.warn, marginTop: 2 },
   tagWrap: { display: "flex", flexWrap: "wrap", gap: 6, padding: "8px 10px", border: `1.5px solid ${C.border}`, borderRadius: 10, background: C.softBg, minHeight: 42, cursor: "text" },
   tag: { background: C.lightBg, border: `1px solid ${C.accent}`, color: C.primary, borderRadius: 20, padding: "3px 10px", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 },
   tagX: { background: "none", border: "none", cursor: "pointer", color: C.muted, fontSize: 14, lineHeight: 1, padding: 0 },
@@ -168,14 +171,130 @@ const styles = {
 };
 
 /* ═══════════════════════════════════════════════════════════════════
-   FIELD CONTEXT  (lets Field components read fieldEditMode/hidden)
+   VALIDATION UTILITIES
+═══════════════════════════════════════════════════════════════════ */
+
+// French common words dictionary for spell check
+const FRENCH_WORDS = new Set([
+  // Core quality management
+  'processus', 'qualité', 'management', 'soutien', 'réalisation', 'planification',
+  'mise', 'œuvre', 'contrôle', 'revue', 'responsable', 'approbateur', 'consultant',
+  'informé', 'objectif', 'stratégique', 'performance', 'indicateur', 'risque',
+  'critique', 'majeur', 'mineur', 'documentation', 'référence', 'version',
+  'approbation', 'dysfonctionnement', 'amélioration', 'corrective', 'déroulement',
+  'modélisation', 'cartographie', 'direction', 'département', 'service', 'équipe',
+  'formation', 'compétence', 'ressource', 'matériel', 'logiciel', 'plateforme',
+  'messagerie', 'calendrier', 'délai', 'échéance', 'période', 'client', 'bénéficiaire',
+  'partenaire', 'audit', 'conformité', 'norme', 'exigence', 'procédure', 'mode',
+  'opératoire', 'enregistrement', 'traçabilité', 'validation', 'attribution',
+  'affectation', 'suivi', 'évaluation', 'soutenance', 'jury', 'encadrement',
+  'étudiant', 'enseignant', 'administratif', 'technique', 'pédagogique', 'budget',
+  'coût', 'estimation', 'annuel', 'règlement', 'intérieur', 'réglementation',
+  'contrainte', 'solution', 'alternative', 'mesure', 'atténuation', 'préventive',
+  'action', 'corrective', 'préventive', 'amélioration', 'indicateur', 'performance',
+  'efficacité', 'suivi', 'évaluation', 'contrôle', 'maîtrise', 'organisation',
+  'gestion', 'pilotage', 'programmation', 'ordonnancement', 'communication',
+  'coordination', 'collaboration', 'document', 'preuve', 'enregistrement', 'archive',
+  'système', 'qualité', 'environnement', 'sécurité', 'hygiène', 'travail',
+  'procédure', 'instruction', 'tâche', 'activité', 'étape', 'phase', 'cycle',
+  'livrable', 'produit', 'service', 'réclamation', 'satisfaction', 'indicateur',
+  'tableau', 'bord', 'dashboard', 'rapport', 'analyse', 'statistique', 'tendance',
+  'alerte', 'notification', 'recommandation', 'décision', 'stratégie', 'vision',
+  'mission', 'valeur', 'culture', 'engagement', 'leadership', 'participation',
+  'implication', 'responsabilité', 'autorité', 'délégation', 'autonomie',
+  'initiative', 'proactif', 'réactif', 'précis', 'exact', 'valide', 'fiable',
+  'robuste', 'flexible', 'adaptable', 'évolutif', 'maintenance', 'amélioration',
+  'continue', 'pérenne', 'durable', 'efficace', 'efficient', 'performant',
+  'rentable', 'optimisé', 'simplifié', 'standardisé', 'harmonisé', 'intégré',
+  'coordonné', 'synchronisé', 'automatisé', 'digitalisé', 'modernisé',
+  'révisé', 'actualisé', 'pertinent', 'cohérent', 'homogène', 'transparent',
+  'auditable', 'traçable', 'consultable', 'accessible', 'disponible',
+  'utilisable', 'compréhensible', 'clair', 'précis', 'complet', 'détaillé',
+  'exhaustif', 'synthétique', 'visuel', 'interactif', 'ergonomique', 'intuitif',
+  // Common French words
+  'exemple', 'nom', 'prénom', 'date', 'heure', 'minute', 'seconde',
+  'semaine', 'mois', 'année', 'jour', 'nuit', 'matin', 'après-midi', 'soir',
+  'travaille', 'fermé', 'ouvert', 'affaire', 'projet', 'programme',
+  'politique', 'stratégie', 'procédure', 'protocole', 'standard',
+  'certification', 'accréditation', 'qualification', 'habilitation',
+  'formation', 'expérience', 'compétence', 'savoir', 'savoir-faire',
+  'savoir-être', 'attitude', 'comportement', 'éthique', 'déontologie',
+]);
+
+// Check if a word is French or contains only special characters/numbers
+function isFrenchWord(word) {
+  if (!word || word.length < 2) return true;
+  // Remove accents for comparison
+  const normalized = word.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  // Check if it's all numbers or special chars
+  if (/^[\d\s\-\.,;:!?()"'\/]+$/.test(normalized)) return true;
+  // Check if it's a French word
+  return FRENCH_WORDS.has(normalized.toLowerCase());
+}
+
+// Validate that a field contains only letters, spaces, and accents (no numbers)
+function isValidName(text) {
+  if (!text) return true;
+  // Allow letters (including accented), spaces, hyphens, apostrophes, and dots
+  return /^[a-zA-ZÀ-ÿ\s\-'\.]+$/.test(text);
+}
+
+// Validate text for French spelling
+function validateFrenchSpelling(text) {
+  if (!text || text.trim().length < 2) return { isValid: true, warnings: [] };
+  
+  const words = text.split(/[\s,;:.!?()"']+/).filter(w => w.length > 0);
+  const warnings = [];
+  
+  for (const word of words) {
+    // Skip if it's an email, URL, or number
+    if (word.includes('@') || word.includes('http') || /^\d+$/.test(word)) continue;
+    if (!isFrenchWord(word)) {
+      warnings.push(word);
+    }
+  }
+  
+  return { isValid: warnings.length === 0, warnings };
+}
+
+// Validate email format
+function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+// Validate phone number (French format)
+function isValidPhone(phone) {
+  if (!phone) return true;
+  return /^(\+213|0)[\d\s\-]{9,12}$/.test(phone.replace(/\s/g, ''));
+}
+
+// Validate date format
+function isValidDate(date) {
+  if (!date) return true;
+  return /^\d{4}-\d{2}-\d{2}$/.test(date);
+}
+
+// Validate that text is not empty or just spaces
+function isNotEmpty(text) {
+  return text && text.trim().length > 0;
+}
+
+// Validate text length
+function isValidLength(text, min = 2, max = 500) {
+  if (!text) return true;
+  const len = text.trim().length;
+  return len >= min && len <= max;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   FIELD CONTEXT
 ═══════════════════════════════════════════════════════════════════ */
 const FieldCtx = createContext({ hidden: {}, editMode: false, toggle: () => {} });
 
 /* ═══════════════════════════════════════════════════════════════════
-   REUSABLE COMPONENTS  (defined OUTSIDE main – no re-mount bug)
+   REUSABLE COMPONENTS
 ═══════════════════════════════════════════════════════════════════ */
-function Field({ label, required, error, children, fkey }) {
+function Field({ label, required, error, warning, children, fkey }) {
   const { hidden, editMode, toggle } = useContext(FieldCtx);
   const isHidden = Boolean(fkey && hidden[fkey]);
   if (isHidden && !editMode) return null;
@@ -194,11 +313,12 @@ function Field({ label, required, error, children, fkey }) {
       </div>
       {!isHidden && children}
       {!isHidden && error && <span style={styles.errorMsg}>⚠ {error}</span>}
+      {!isHidden && warning && !error && <span style={styles.warningMsg}>⚠ {warning}</span>}
     </div>
   );
 }
 
-function Input({ value, onChange, placeholder, error, type = "text", readOnly }) {
+function Input({ value, onChange, placeholder, error, warning, type = "text", readOnly }) {
   return (
     <input
       type={type}
@@ -206,23 +326,32 @@ function Input({ value, onChange, placeholder, error, type = "text", readOnly })
       onChange={onChange}
       placeholder={placeholder}
       readOnly={readOnly}
-      style={{ ...styles.input, ...(error ? styles.inputError : {}), ...(readOnly ? { opacity: 0.65, cursor: "default" } : {}) }}
+      style={{ 
+        ...styles.input, 
+        ...(error ? styles.inputError : {}), 
+        ...(warning && !error ? styles.inputWarning : {}),
+        ...(readOnly ? { opacity: 0.65, cursor: "default" } : {})
+      }}
       onFocus={(e) => { if (!readOnly) e.target.style.borderColor = C.primary; }}
-      onBlur={(e) => { e.target.style.borderColor = error ? C.danger : C.border; }}
+      onBlur={(e) => { e.target.style.borderColor = error ? C.danger : warning ? C.warn : C.border; }}
     />
   );
 }
 
-function TextArea({ value, onChange, placeholder, rows = 3 }) {
+function TextArea({ value, onChange, placeholder, error, warning, rows = 3 }) {
   return (
     <textarea
       value={value}
       onChange={onChange}
       placeholder={placeholder}
       rows={rows}
-      style={styles.textarea}
+      style={{ 
+        ...styles.textarea, 
+        ...(error ? styles.inputError : {}),
+        ...(warning && !error ? styles.textareaWarning : {})
+      }}
       onFocus={(e) => { e.target.style.borderColor = C.primary; }}
-      onBlur={(e) => { e.target.style.borderColor = C.border; }}
+      onBlur={(e) => { e.target.style.borderColor = error ? C.danger : warning ? C.warn : C.border; }}
     />
   );
 }
@@ -307,7 +436,7 @@ function SectionHeader({ num, title, sub }) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   RACI MATRIX COMPONENT  (defined OUTSIDE main)
+   RACI MATRIX COMPONENT
 ═══════════════════════════════════════════════════════════════════ */
 const RACI_CYCLE = ["R", "A", "C", "I", ""];
 const RACI_STYLE = {
@@ -438,11 +567,22 @@ function RaciMatrix({ raci, onChange }) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   AUDIT MODAL  (defined OUTSIDE main)
+   AUDIT MODAL
 ═══════════════════════════════════════════════════════════════════ */
 function AuditModal({ onClose, onSend }) {
   const [email, setEmail] = useState("");
   const [msg, setMsg] = useState("");
+  const [emailError, setEmailError] = useState("");
+  
+  const handleSend = () => {
+    if (!isValidEmail(email)) {
+      setEmailError("Veuillez entrer une adresse email valide.");
+      return;
+    }
+    setEmailError("");
+    onSend(email, msg);
+  };
+  
   return (
     <div style={styles.auditOverlay}>
       <div style={styles.auditBox}>
@@ -459,8 +599,9 @@ function AuditModal({ onClose, onSend }) {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="auditeur@organisme.dz"
-              style={styles.input}
+              style={{ ...styles.input, ...(emailError ? styles.inputError : {}) }}
             />
+            {emailError && <span style={styles.errorMsg}>⚠ {emailError}</span>}
           </div>
           <div style={styles.fieldWrap}>
             <label style={styles.label}>Message (optionnel)</label>
@@ -476,8 +617,8 @@ function AuditModal({ onClose, onSend }) {
         <div style={{ display: "flex", gap: 10, marginTop: 24 }}>
           <button onClick={onClose} style={{ ...styles.btnCancel, flex: 1 }}>Annuler</button>
           <button
-            onClick={() => { if (email.includes("@")) onSend(email, msg); }}
-            style={{ ...styles.btnPublish, flex: 1, opacity: email.includes("@") ? 1 : 0.5 }}
+            onClick={handleSend}
+            style={{ ...styles.btnPublish, flex: 1, opacity: isValidEmail(email) ? 1 : 0.5 }}
           >
             Envoyer la fiche
           </button>
@@ -660,6 +801,7 @@ export default function ProcessFormPage() {
   const [form, setForm] = useState(INIT);
   const [activeTab, setActiveTab] = useState(0);
   const [errors, setErrors] = useState({});
+  const [warnings, setWarnings] = useState({});
   const [toast, setToast] = useState(null);
   const [dirty, setDirty] = useState(false);
 
@@ -675,12 +817,179 @@ export default function ProcessFormPage() {
   const [showNotifs, setShowNotifs] = useState(false);
   const [unreadCount, setUnreadCount] = useState(() => getUnreadCount());
 
+  /* ── Validation Helpers ── */
+const validateField = useCallback((key, value) => {
+  const newErrors = { ...errors };
+  const newWarnings = { ...warnings };
+  
+  // Required field validation
+  if (REQUIRED_FIELDS.includes(key) && !isNotEmpty(value)) {
+    newErrors[key] = "Ce champ est obligatoire.";
+  } else {
+    delete newErrors[key];
+  }
+  
+  // Pilote validation - no numbers allowed
+  if (key === "pilote" && value && !isValidName(value)) {
+    newErrors[key] = "Le nom ne doit pas contenir de chiffres.";
+  } else if (key === "pilote" && value && isValidName(value)) {
+    delete newErrors[key];
+  }
+  
+  // Email validation
+  if (key === "email" && value && !isValidEmail(value)) {
+    newErrors[key] = "Veuillez entrer une adresse email valide.";
+  } else if (key === "email" && value && isValidEmail(value)) {
+    delete newErrors[key];
+  }
+  
+  // Phone validation
+  if (key === "telephone" && value && !isValidPhone(value)) {
+    newWarnings[key] = "Format de téléphone non standard. Utilisez +213 ou 0.";
+  } else if (key === "telephone") {
+    delete newWarnings[key];
+  }
+  
+  // French spell check for all text fields
+  const textFields = [
+    "designation", "objectif", "pilote", "sousDept", 
+    "objectifStrategique", "enjeuxStrategiques",
+    "periode", "clients", "effectifs"
+  ];
+  
+  if (textFields.includes(key)) {
+    const spellResult = validateFrenchSpelling(value);
+    if (!spellResult.isValid && value && value.length > 3) {
+      const unknownWords = spellResult.warnings.slice(0, 3);
+      newWarnings[key] = `Mots suspects: ${unknownWords.join(', ')}${spellResult.warnings.length > 3 ? '...' : ''}`;
+    } else {
+      delete newWarnings[key];
+    }
+  }
+  
+  // For tag fields (competences, ressourcesMat, ressourcesLog) - validate each tag
+  if (["competences", "ressourcesMat", "ressourcesLog"].includes(key)) {
+    const allWarnings = [];
+    if (Array.isArray(value)) {
+      value.forEach(tag => {
+        const result = validateFrenchSpelling(tag);
+        if (!result.isValid && tag.length > 2) {
+          allWarnings.push(...result.warnings.slice(0, 2));
+        }
+      });
+    }
+    if (allWarnings.length > 0) {
+      const uniqueWarnings = [...new Set(allWarnings)];
+      newWarnings[key] = `Mots suspects: ${uniqueWarnings.slice(0, 3).join(', ')}${uniqueWarnings.length > 3 ? '...' : ''}`;
+    } else {
+      delete newWarnings[key];
+    }
+  }
+  
+  setErrors(newErrors);
+  setWarnings(newWarnings);
+  return Object.keys(newErrors).length === 0;
+}, [errors, warnings]);
+
+const validateAll = useCallback(() => {
+  const newErrors = {};
+  const newWarnings = {};
+  
+  REQUIRED_FIELDS.forEach((f) => {
+    if (!isNotEmpty(form[f])) {
+      newErrors[f] = "Ce champ est obligatoire.";
+    }
+  });
+  
+  // Pilote validation - no numbers allowed
+  if (form.pilote && !isValidName(form.pilote)) {
+    newErrors.pilote = "Le nom ne doit pas contenir de chiffres.";
+  }
+  
+  if (form.email && !isValidEmail(form.email)) {
+    newErrors.email = "Veuillez entrer une adresse email valide.";
+  }
+  
+  if (form.telephone && !isValidPhone(form.telephone)) {
+    newWarnings.telephone = "Format de téléphone non standard.";
+  }
+  
+  // French spell check for all text fields
+  const textFields = [
+    "designation", "objectif", "pilote", "sousDept", 
+    "objectifStrategique", "enjeuxStrategiques",
+    "periode", "clients", "effectifs"
+  ];
+  
+  textFields.forEach((key) => {
+    if (form[key]) {
+      const spellResult = validateFrenchSpelling(form[key]);
+      if (!spellResult.isValid && form[key].length > 3) {
+        const unknownWords = spellResult.warnings.slice(0, 3);
+        newWarnings[key] = `Mots suspects: ${unknownWords.join(', ')}${spellResult.warnings.length > 3 ? '...' : ''}`;
+      }
+    }
+  });
+  
+  // For tag fields
+  ["competences", "ressourcesMat", "ressourcesLog", "moyensAlloues"].forEach((key) => {
+    if (form[key] && Array.isArray(form[key]) && form[key].length > 0) {
+      const allWarnings = [];
+      form[key].forEach(tag => {
+        const result = validateFrenchSpelling(tag);
+        if (!result.isValid && tag.length > 2) {
+          allWarnings.push(...result.warnings.slice(0, 2));
+        }
+      });
+      if (allWarnings.length > 0) {
+        const uniqueWarnings = [...new Set(allWarnings)];
+        newWarnings[key] = `Mots suspects: ${uniqueWarnings.slice(0, 3).join(', ')}${uniqueWarnings.length > 3 ? '...' : ''}`;
+      }
+    }
+  });
+  
+  // For risks
+  if (form.risques && Array.isArray(form.risques)) {
+    form.risques.forEach((r, i) => {
+      // Description spell check
+      if (r.description && r.description.length > 3) {
+        const result = validateFrenchSpelling(r.description);
+        if (!result.isValid) {
+          const unknownWords = result.warnings.slice(0, 3);
+          newWarnings[`risque_${i}_description`] = `Mots suspects: ${unknownWords.join(', ')}${result.warnings.length > 3 ? '...' : ''}`;
+        }
+      }
+      // Mesure spell check
+      if (r.mesure && r.mesure.length > 3) {
+        const result = validateFrenchSpelling(r.mesure);
+        if (!result.isValid) {
+          const unknownWords = result.warnings.slice(0, 3);
+          newWarnings[`risque_${i}_mesure`] = `Mots suspects: ${unknownWords.join(', ')}${result.warnings.length > 3 ? '...' : ''}`;
+        }
+      }
+      // Responsable name validation
+      if (r.responsable && !isValidName(r.responsable)) {
+        newWarnings[`risque_${i}_responsable`] = "Le nom ne doit pas contenir de chiffres.";
+      }
+    });
+  }
+  
+  setErrors(newErrors);
+  setWarnings(newWarnings);
+  return Object.keys(newErrors).length === 0;
+}, [form]);
+
   /* ── Helpers ── */
   const set = useCallback((key, value) => {
     setForm((f) => ({ ...f, [key]: value }));
     setDirty(true);
-    if (errors[key]) setErrors((e) => { const n = { ...e }; delete n[key]; return n; });
-  }, [errors]);
+    validateField(key, value);
+  }, [validateField]);
+
+  const setNested = useCallback((parent, key, value) => {
+    setForm((f) => ({ ...f, [parent]: { ...f[parent], [key]: value } }));
+    setDirty(true);
+  }, []);
 
   const toggleField = useCallback((fkey) => {
     setHiddenFields((h) => ({ ...h, [fkey]: !h[fkey] }));
@@ -702,7 +1011,17 @@ export default function ProcessFormPage() {
   /* ── Validation ── */
   const validate = () => {
     const e = {};
+    const w = {};
     REQUIRED_FIELDS.forEach((f) => { if (!form[f]?.trim()) e[f] = "Ce champ est obligatoire"; });
+    
+    if (form.email && !isValidEmail(form.email)) {
+      e.email = "Veuillez entrer une adresse email valide.";
+    }
+    
+    if (form.telephone && !isValidPhone(form.telephone)) {
+      w.telephone = "Format de téléphone non standard.";
+    }
+    
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -718,14 +1037,29 @@ export default function ProcessFormPage() {
     } else navigate("/processus");
   };
 
-  const handleDraft = () => { showToast("Brouillon enregistré ✓"); setDirty(false); };
+  const handleDraft = () => { 
+    validateAll();
+    showToast("Brouillon enregistré ✓"); 
+    setDirty(false); 
+  };
 
   const handlePublish = () => {
-    if (!validate()) {
-      showToast("Veuillez remplir tous les champs obligatoires.", "error");
+    if (!validateAll()) {
+      const errorMessages = Object.values(errors);
+      if (errorMessages.length > 0) {
+        showToast("Veuillez corriger les champs obligatoires avant de publier.", "error");
+      } else if (Object.values(warnings).length > 0) {
+        if (window.confirm("Des fautes d'orthographe ont été détectées. Voulez-vous continuer quand même ?")) {
+          proceedPublish();
+        }
+      }
       setActiveTab(0);
       return;
     }
+    proceedPublish();
+  };
+
+  const proceedPublish = () => {
     const entry = {
       id: `pub_${Date.now()}`,
       nom: form.designation,
@@ -779,8 +1113,7 @@ export default function ProcessFormPage() {
   };
 
   /* ═══════════════════════════════════════════════════════════════
-     TAB RENDERS — called as functions, NOT as <Components />
-     This is essential: avoids React unmount/remount on every keystroke
+     TAB RENDERS
   ═══════════════════════════════════════════════════════════════ */
   const renderTab1 = () => (
     <div>
@@ -793,27 +1126,64 @@ export default function ProcessFormPage() {
           <Select value={form.typeProcessus} onChange={(e) => set("typeProcessus", e.target.value)}
             options={[{ value: "Management", label: "Management" }, { value: "Réalisation", label: "Réalisation" }, { value: "Soutien", label: "Soutien" }]} />
         </Field>
-        <Field label="Désignation du processus" required error={errors.designation}>
-          <Input value={form.designation} onChange={(e) => set("designation", e.target.value)} placeholder="Ex : Gestion des soutenances PFE" error={errors.designation} />
+        <Field label="Désignation du processus" required error={errors.designation} warning={warnings.designation}>
+          <Input 
+            value={form.designation} 
+            onChange={(e) => set("designation", e.target.value)} 
+            placeholder="Ex : Gestion des soutenances PFE" 
+            error={errors.designation}
+            warning={warnings.designation}
+          />
         </Field>
-        <Field label="Pilote du processus" required error={errors.pilote}>
-          <Input value={form.pilote} onChange={(e) => set("pilote", e.target.value)} placeholder="Nom du responsable" error={errors.pilote} />
+        <Field label="Pilote du processus" required error={errors.pilote} warning={warnings.pilote}>
+          <Input 
+            value={form.pilote} 
+            onChange={(e) => set("pilote", e.target.value)} 
+            placeholder="Nom du responsable" 
+            error={errors.pilote}
+            warning={warnings.pilote}
+          />
         </Field>
         <Field label="Email" required error={errors.email}>
-          <Input type="email" value={form.email} onChange={(e) => set("email", e.target.value)} placeholder="pilote@etablissement.dz" error={errors.email} />
+          <Input 
+            type="email" 
+            value={form.email} 
+            onChange={(e) => set("email", e.target.value)} 
+            placeholder="pilote@etablissement.dz" 
+            error={errors.email} 
+          />
         </Field>
-        <Field label="Téléphone" fkey="telephone">
-          <Input type="tel" value={form.telephone} onChange={(e) => set("telephone", e.target.value)} placeholder="+213 XXX XXX XXX" />
+        <Field label="Téléphone" fkey="telephone" warning={warnings.telephone}>
+          <Input 
+            type="tel" 
+            value={form.telephone} 
+            onChange={(e) => set("telephone", e.target.value)} 
+            placeholder="+213 XXX XXX XXX"
+            warning={warnings.telephone}
+          />
         </Field>
-        <Field label="Sous-département" required error={errors.sousDept}>
-          <Input value={form.sousDept} onChange={(e) => set("sousDept", e.target.value)} placeholder="Ex : Laboratoire, Scolarité..." error={errors.sousDept} />
+        <Field label="Sous-département" required error={errors.sousDept} warning={warnings.sousDept}>
+          <Input 
+            value={form.sousDept} 
+            onChange={(e) => set("sousDept", e.target.value)} 
+            placeholder="Ex : Laboratoire, Scolarité..." 
+            error={errors.sousDept}
+            warning={warnings.sousDept}
+          />
         </Field>
         <Field label="Structures concernées" fkey="structures">
           <TagInput tags={form.structures} onChange={(v) => set("structures", v)} placeholder="Taper et Entrée pour ajouter..." />
         </Field>
         <div style={styles.gridFull}>
-          <Field label="Objectif du processus" required error={errors.objectif}>
-            <TextArea value={form.objectif} onChange={(e) => set("objectif", e.target.value)} placeholder="Décrire l'objectif principal du processus..." rows={4} />
+          <Field label="Objectif du processus" required error={errors.objectif} warning={warnings.objectif}>
+            <TextArea 
+              value={form.objectif} 
+              onChange={(e) => set("objectif", e.target.value)} 
+              placeholder="Décrire l'objectif principal du processus..." 
+              rows={4}
+              error={errors.objectif}
+              warning={warnings.objectif}
+            />
           </Field>
         </div>
       </div>
@@ -835,147 +1205,261 @@ export default function ProcessFormPage() {
   );
 
   const renderTab2 = () => (
-    <div>
-      <SectionHeader num="2" title="Éléments Clés du Processus" sub="Flux, ressources, compétences et indicateurs de performance" />
-      <div style={styles.grid2}>
-        <Field label="Période / Mois" fkey="periode">
-          <Input value={form.periode} onChange={(e) => set("periode", e.target.value)} placeholder="Ex : Oct → Juin (9 mois)" />
-        </Field>
-        <Field label="Objectif stratégique" fkey="objectifStrategique">
-          <Input value={form.objectifStrategique} onChange={(e) => set("objectifStrategique", e.target.value)} placeholder="Lien avec la stratégie globale..." />
-        </Field>
-        <Field label="Clients / Bénéficiaires" fkey="clients">
-          <TextArea value={form.clients} onChange={(e) => set("clients", e.target.value)} placeholder="Étudiants, Direction, Entreprises partenaires..." rows={2} />
-        </Field>
-        <Field label="Effectifs impliqués" fkey="effectifs">
-          <TextArea value={form.effectifs} onChange={(e) => set("effectifs", e.target.value)} placeholder="Ex : 12 enseignants, 3 membres administratifs..." rows={2} />
-        </Field>
-      </div>
-
-      <div style={styles.divider} />
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12 }}>Flux d'entrées / Sorties</div>
-        <div style={styles.fluxBox}>
-          <div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 8, textTransform: "uppercase" }}>↙ Entrées</div>
-            <DynamicList items={form.fluxEntrees} onChange={(v) => set("fluxEntrees", v)} placeholder="Flux d'entrée..." />
-          </div>
-          <div style={styles.fluxArrow}>⇄</div>
-          <div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 8, textTransform: "uppercase" }}>Sorties ↗</div>
-            <DynamicList items={form.fluxSorties} onChange={(v) => set("fluxSorties", v)} placeholder="Flux de sortie..." />
-          </div>
-        </div>
-      </div>
-
-      <div style={styles.grid2}>
-        <Field label="Compétences clés" fkey="competences">
-          <TagInput tags={form.competences} onChange={(v) => set("competences", v)} placeholder="Ajouter une compétence..." />
-        </Field>
-        <Field label="Ressources matérielles" fkey="ressourcesMat">
-          <TagInput tags={form.ressourcesMat} onChange={(v) => set("ressourcesMat", v)} placeholder="Équipements, locaux..." />
-        </Field>
-        <Field label="Ressources logicielles" fkey="ressourcesLog">
-          <TagInput tags={form.ressourcesLog} onChange={(v) => set("ressourcesLog", v)} placeholder="Logiciels, plateformes..." />
-        </Field>
-      </div>
-
-      <div style={styles.divider} />
-      <SectionHeader num="2b" title="KPIs — Indicateurs de Performance" sub="Définir les mesures de suivi du processus" />
-      {form.kpis.map((kpi, i) => (
-        <div key={i} style={styles.kpiCard}>
-          <div style={styles.kpiCardHeader}>
-            <span style={styles.kpiCardTitle}>KPI #{i + 1}</span>
-            <button type="button" style={styles.removeCard} onClick={() => set("kpis", form.kpis.filter((_, idx) => idx !== i))}>✕ Supprimer</button>
-          </div>
-          <div style={styles.grid3}>
-            {[
-              { key: "nom", label: "Nom du KPI", placeholder: "Ex : Taux de réussite" },
-              { key: "unite", label: "Unité", placeholder: "%, jours, nombre..." },
-              { key: "valeurCible", label: "Valeur cible", placeholder: "Ex : ≥ 90%" },
-              { key: "seuilAlerte", label: "Seuil d'alerte", placeholder: "Ex : < 75%" },
-              { key: "frequence", label: "Fréquence de collecte", placeholder: "Mensuel, Annuel..." },
-              { key: "responsable", label: "Responsable", placeholder: "Nom ou rôle" },
-            ].map(({ key, label, placeholder }) => (
-              <Field key={key} label={label}>
-                <Input value={kpi[key]} onChange={(e) => { const u = [...form.kpis]; u[i] = { ...u[i], [key]: e.target.value }; set("kpis", u); }} placeholder={placeholder} />
-              </Field>
-            ))}
-          </div>
-        </div>
-      ))}
-      <button type="button" style={styles.addBtn} onClick={() => set("kpis", [...form.kpis, makeKpi()])}>＋ Ajouter un KPI</button>
+  <div>
+    <SectionHeader num="2" title="Éléments Clés du Processus" sub="Flux, ressources, compétences et indicateurs de performance" />
+    <div style={styles.grid2}>
+      <Field label="Période / Mois" fkey="periode" warning={warnings.periode}>
+        <Input 
+          value={form.periode} 
+          onChange={(e) => set("periode", e.target.value)} 
+          placeholder="Ex : Oct → Juin (9 mois)"
+          warning={warnings.periode}
+        />
+      </Field>
+      <Field label="Objectif stratégique" fkey="objectifStrategique" warning={warnings.objectifStrategique}>
+        <Input 
+          value={form.objectifStrategique} 
+          onChange={(e) => set("objectifStrategique", e.target.value)} 
+          placeholder="Lien avec la stratégie globale..."
+          warning={warnings.objectifStrategique}
+        />
+      </Field>
+      <Field label="Clients / Bénéficiaires" fkey="clients" warning={warnings.clients}>
+        <TextArea 
+          value={form.clients} 
+          onChange={(e) => set("clients", e.target.value)} 
+          placeholder="Étudiants, Direction, Entreprises partenaires..." 
+          rows={2}
+          warning={warnings.clients}
+        />
+      </Field>
+      <Field label="Effectifs impliqués" fkey="effectifs" warning={warnings.effectifs}>
+        <TextArea 
+          value={form.effectifs} 
+          onChange={(e) => set("effectifs", e.target.value)} 
+          placeholder="Ex : 12 enseignants, 3 membres administratifs..." 
+          rows={2}
+          warning={warnings.effectifs}
+        />
+      </Field>
     </div>
-  );
 
-  const renderTab3 = () => (
-    <div>
-      <SectionHeader num="3" title="Contexte et Environnement" sub="Cartographie des processus voisins et facteurs contextuels" />
-      <div style={{ ...styles.fluxBox, marginBottom: 24 }}>
+    <div style={styles.divider} />
+    <div style={{ marginBottom: 20 }}>
+      <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12 }}>Flux d'entrées / Sorties</div>
+      <div style={styles.fluxBox}>
         <div>
-          <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 8, textTransform: "uppercase" }}>← Processus AMONT</div>
-          <DynamicList items={form.processusAmont} onChange={(v) => set("processusAmont", v)} placeholder="Processus fournisseur..." />
+          <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 8, textTransform: "uppercase" }}>↙ Entrées</div>
+          <DynamicList items={form.fluxEntrees} onChange={(v) => set("fluxEntrees", v)} placeholder="Flux d'entrée..." />
         </div>
         <div style={styles.fluxArrow}>⇄</div>
         <div>
-          <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 8, textTransform: "uppercase" }}>Processus AVAL →</div>
-          <DynamicList items={form.processusAval} onChange={(v) => set("processusAval", v)} placeholder="Processus client..." />
+          <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 8, textTransform: "uppercase" }}>Sorties ↗</div>
+          <DynamicList items={form.fluxSorties} onChange={(v) => set("fluxSorties", v)} placeholder="Flux de sortie..." />
         </div>
       </div>
-      <div style={styles.grid2}>
-        <div style={styles.gridFull}>
-          <Field label="Enjeux stratégiques" fkey="enjeuxStrategiques">
-            <TextArea value={form.enjeuxStrategiques} onChange={(e) => set("enjeuxStrategiques", e.target.value)} placeholder="Décrire les enjeux liés à ce processus..." rows={3} />
-          </Field>
+    </div>
+
+    <div style={styles.grid2}>
+      <Field label="Compétences clés" fkey="competences" warning={warnings.competences}>
+        <TagInput 
+          tags={form.competences} 
+          onChange={(v) => set("competences", v)} 
+          placeholder="Ajouter une compétence..." 
+        />
+      </Field>
+      <Field label="Ressources matérielles" fkey="ressourcesMat" warning={warnings.ressourcesMat}>
+        <TagInput 
+          tags={form.ressourcesMat} 
+          onChange={(v) => set("ressourcesMat", v)} 
+          placeholder="Équipements, locaux..." 
+        />
+      </Field>
+      <Field label="Ressources logicielles" fkey="ressourcesLog" warning={warnings.ressourcesLog}>
+        <TagInput 
+          tags={form.ressourcesLog} 
+          onChange={(v) => set("ressourcesLog", v)} 
+          placeholder="Logiciels, plateformes..." 
+        />
+      </Field>
+    </div>
+
+    <div style={styles.divider} />
+    <SectionHeader num="2b" title="KPIs — Indicateurs de Performance" sub="Définir les mesures de suivi du processus" />
+    {form.kpis.map((kpi, i) => (
+      <div key={i} style={styles.kpiCard}>
+        <div style={styles.kpiCardHeader}>
+          <span style={styles.kpiCardTitle}>KPI #{i + 1}</span>
+          <button type="button" style={styles.removeCard} onClick={() => set("kpis", form.kpis.filter((_, idx) => idx !== i))}>✕ Supprimer</button>
         </div>
-        <Field label="Moyens alloués" fkey="moyensAlloues">
-          <TagInput tags={form.moyensAlloues} onChange={(v) => set("moyensAlloues", v)} placeholder="Ressources, outils..." />
+        <div style={styles.grid3}>
+          {[
+            { key: "nom", label: "Nom du KPI", placeholder: "Ex : Taux de réussite" },
+            { key: "unite", label: "Unité", placeholder: "%, jours, nombre..." },
+            { key: "valeurCible", label: "Valeur cible", placeholder: "Ex : ≥ 90%" },
+            { key: "seuilAlerte", label: "Seuil d'alerte", placeholder: "Ex : < 75%" },
+            { key: "frequence", label: "Fréquence de collecte", placeholder: "Mensuel, Annuel..." },
+            { key: "responsable", label: "Responsable", placeholder: "Nom ou rôle" },
+          ].map(({ key, label, placeholder }) => (
+            <Field key={key} label={label}>
+              <Input value={kpi[key]} onChange={(e) => { const u = [...form.kpis]; u[i] = { ...u[i], [key]: e.target.value }; set("kpis", u); }} placeholder={placeholder} />
+            </Field>
+          ))}
+        </div>
+      </div>
+    ))}
+    <button type="button" style={styles.addBtn} onClick={() => set("kpis", [...form.kpis, makeKpi()])}>＋ Ajouter un KPI</button>
+  </div>
+);
+
+const renderTab3 = () => (
+  <div>
+    <SectionHeader num="3" title="Contexte et Environnement" sub="Cartographie des processus voisins et facteurs contextuels" />
+    
+    <div style={{ ...styles.fluxBox, marginBottom: 24 }}>
+      <div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 8, textTransform: "uppercase" }}>← Processus AMONT</div>
+        <DynamicList items={form.processusAmont} onChange={(v) => set("processusAmont", v)} placeholder="Processus fournisseur..." />
+      </div>
+      <div style={styles.fluxArrow}>⇄</div>
+      <div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 8, textTransform: "uppercase" }}>Processus AVAL →</div>
+        <DynamicList items={form.processusAval} onChange={(v) => set("processusAval", v)} placeholder="Processus client..." />
+      </div>
+    </div>
+    
+    <div style={styles.grid2}>
+      <div style={styles.gridFull}>
+        <Field label="Enjeux stratégiques" fkey="enjeuxStrategiques" warning={warnings.enjeuxStrategiques}>
+          <TextArea 
+            value={form.enjeuxStrategiques} 
+            onChange={(e) => set("enjeuxStrategiques", e.target.value)} 
+            placeholder="Décrire les enjeux liés à ce processus..." 
+            rows={3}
+            warning={warnings.enjeuxStrategiques}
+          />
         </Field>
       </div>
-      <div style={styles.divider} />
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12 }}>⚠ Contraintes</div>
-        <DynamicList items={form.contraintes} onChange={(v) => set("contraintes", v)} placeholder="Contrainte réglementaire, temporelle..." />
-      </div>
-      <div style={styles.divider} />
-      <SectionHeader num="3b" title="Risques identifiés" sub="Probabilité × Gravité = Criticité calculée automatiquement" />
-      {form.risques.map((r, i) => {
-        const crit = parseInt(r.probabilite || 1) * parseInt(r.gravite || 1);
-        const critColor = crit >= 9 ? C.danger : crit >= 4 ? C.warn : "#4caf50";
-        return (
-          <div key={i} style={styles.riskCard}>
-            <div style={styles.kpiCardHeader}>
-              <span style={styles.kpiCardTitle}>
-                Risque #{i + 1}{" "}
-                <span style={{ ...styles.critBadge, background: critColor + "22", color: critColor }}>Criticité : {crit}</span>
-              </span>
-              <button type="button" style={styles.removeCard} onClick={() => set("risques", form.risques.filter((_, idx) => idx !== i))}>✕ Supprimer</button>
-            </div>
-            <div style={styles.grid2}>
-              <div style={styles.gridFull}>
-                <Field label="Description du risque">
-                  <Input value={r.description} onChange={(e) => { const u = [...form.risques]; u[i] = { ...u[i], description: e.target.value }; set("risques", u); }} placeholder="Décrire le risque identifié..." />
-                </Field>
-              </div>
-              <Field label="Probabilité (1–3)">
-                <Select value={r.probabilite} onChange={(e) => { const u = [...form.risques]; u[i] = { ...u[i], probabilite: e.target.value }; set("risques", u); }} options={[{ value: "1", label: "1 – Faible" }, { value: "2", label: "2 – Moyenne" }, { value: "3", label: "3 – Élevée" }]} />
-              </Field>
-              <Field label="Gravité (1–3)">
-                <Select value={r.gravite} onChange={(e) => { const u = [...form.risques]; u[i] = { ...u[i], gravite: e.target.value }; set("risques", u); }} options={[{ value: "1", label: "1 – Mineure" }, { value: "2", label: "2 – Modérée" }, { value: "3", label: "3 – Sévère" }]} />
-              </Field>
-              <Field label="Mesure d'atténuation">
-                <Input value={r.mesure} onChange={(e) => { const u = [...form.risques]; u[i] = { ...u[i], mesure: e.target.value }; set("risques", u); }} placeholder="Action préventive ou corrective..." />
-              </Field>
-              <Field label="Responsable">
-                <Input value={r.responsable} onChange={(e) => { const u = [...form.risques]; u[i] = { ...u[i], responsable: e.target.value }; set("risques", u); }} placeholder="Nom ou rôle..." />
-              </Field>
-            </div>
-          </div>
-        );
-      })}
-      <button type="button" style={styles.addBtn} onClick={() => set("risques", [...form.risques, makeRisque()])}>＋ Ajouter un risque</button>
+      <Field label="Moyens alloués" fkey="moyensAlloues" warning={warnings.moyensAlloues}>
+        <TagInput 
+          tags={form.moyensAlloues} 
+          onChange={(v) => set("moyensAlloues", v)} 
+          placeholder="Ressources, outils..." 
+        />
+      </Field>
     </div>
-  );
+    
+    <div style={styles.divider} />
+    <div style={{ marginBottom: 20 }}>
+      <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12 }}>⚠ Contraintes</div>
+      <DynamicList items={form.contraintes} onChange={(v) => set("contraintes", v)} placeholder="Contrainte réglementaire, temporelle..." />
+    </div>
+    
+    <div style={styles.divider} />
+    <SectionHeader num="3b" title="Risques identifiés" sub="Probabilité × Gravité = Criticité calculée automatiquement" />
+    {form.risques.map((r, i) => {
+      const crit = parseInt(r.probabilite || 1) * parseInt(r.gravite || 1);
+      const critColor = crit >= 9 ? C.danger : crit >= 4 ? C.warn : "#4caf50";
+      return (
+        <div key={i} style={styles.riskCard}>
+          <div style={styles.kpiCardHeader}>
+            <span style={styles.kpiCardTitle}>
+              Risque #{i + 1}{" "}
+              <span style={{ ...styles.critBadge, background: critColor + "22", color: critColor }}>Criticité : {crit}</span>
+            </span>
+            <button type="button" style={styles.removeCard} onClick={() => set("risques", form.risques.filter((_, idx) => idx !== i))}>✕ Supprimer</button>
+          </div>
+          <div style={styles.grid2}>
+            <div style={styles.gridFull}>
+              <Field label="Description du risque" warning={warnings[`risque_${i}_description`]}>
+                <Input 
+                  value={r.description} 
+                  onChange={(e) => { 
+                    const u = [...form.risques]; 
+                    u[i] = { ...u[i], description: e.target.value }; 
+                    set("risques", u);
+                    // Validate the description
+                    const spellResult = validateFrenchSpelling(e.target.value);
+                    if (!spellResult.isValid && e.target.value.length > 3) {
+                      const unknownWords = spellResult.warnings.slice(0, 3);
+                      setWarnings(prev => ({ 
+                        ...prev, 
+                        [`risque_${i}_description`]: `Mots suspects: ${unknownWords.join(', ')}${spellResult.warnings.length > 3 ? '...' : ''}`
+                      }));
+                    } else {
+                      setWarnings(prev => {
+                        const newWarnings = { ...prev };
+                        delete newWarnings[`risque_${i}_description`];
+                        return newWarnings;
+                      });
+                    }
+                  }} 
+                  placeholder="Décrire le risque identifié..." 
+                />
+              </Field>
+            </div>
+            <Field label="Probabilité (1–3)">
+              <Select value={r.probabilite} onChange={(e) => { const u = [...form.risques]; u[i] = { ...u[i], probabilite: e.target.value }; set("risques", u); }} options={[{ value: "1", label: "1 – Faible" }, { value: "2", label: "2 – Moyenne" }, { value: "3", label: "3 – Élevée" }]} />
+            </Field>
+            <Field label="Gravité (1–3)">
+              <Select value={r.gravite} onChange={(e) => { const u = [...form.risques]; u[i] = { ...u[i], gravite: e.target.value }; set("risques", u); }} options={[{ value: "1", label: "1 – Mineure" }, { value: "2", label: "2 – Modérée" }, { value: "3", label: "3 – Sévère" }]} />
+            </Field>
+            <Field label="Mesure d'atténuation" warning={warnings[`risque_${i}_mesure`]}>
+              <Input 
+                value={r.mesure} 
+                onChange={(e) => { 
+                  const u = [...form.risques]; 
+                  u[i] = { ...u[i], mesure: e.target.value }; 
+                  set("risques", u);
+                  const spellResult = validateFrenchSpelling(e.target.value);
+                  if (!spellResult.isValid && e.target.value.length > 3) {
+                    const unknownWords = spellResult.warnings.slice(0, 3);
+                    setWarnings(prev => ({ 
+                      ...prev, 
+                      [`risque_${i}_mesure`]: `Mots suspects: ${unknownWords.join(', ')}${spellResult.warnings.length > 3 ? '...' : ''}`
+                    }));
+                  } else {
+                    setWarnings(prev => {
+                      const newWarnings = { ...prev };
+                      delete newWarnings[`risque_${i}_mesure`];
+                      return newWarnings;
+                    });
+                  }
+                }} 
+                placeholder="Action préventive ou corrective..." 
+              />
+            </Field>
+            <Field label="Responsable" warning={warnings[`risque_${i}_responsable`]}>
+              <Input 
+                value={r.responsable} 
+                onChange={(e) => { 
+                  const u = [...form.risques]; 
+                  u[i] = { ...u[i], responsable: e.target.value }; 
+                  set("risques", u);
+                  // Validate that it's a name (no numbers)
+                  if (e.target.value && !isValidName(e.target.value)) {
+                    setWarnings(prev => ({ 
+                      ...prev, 
+                      [`risque_${i}_responsable`]: "Le nom ne doit pas contenir de chiffres."
+                    }));
+                  } else {
+                    setWarnings(prev => {
+                      const newWarnings = { ...prev };
+                      delete newWarnings[`risque_${i}_responsable`];
+                      return newWarnings;
+                    });
+                  }
+                }} 
+                placeholder="Nom ou rôle..." 
+              />
+            </Field>
+          </div>
+        </div>
+      );
+    })}
+    <button type="button" style={styles.addBtn} onClick={() => set("risques", [...form.risques, makeRisque()])}>＋ Ajouter un risque</button>
+  </div>
+);
 
   const renderTab4 = () => (
     <div>

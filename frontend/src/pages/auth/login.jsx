@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import logo from "../assets/Vector.svg";
+import logo from "../../assets/Vector.svg";
 
 
 const LogoPlaceholder = () => (
