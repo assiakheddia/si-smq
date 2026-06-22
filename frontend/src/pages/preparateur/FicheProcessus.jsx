@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useState, useRef, useEffect, useCallback } from "react";
-import Topbar from "../components/Topbar.jsx";
+import Topbar from "../../components/Topbar.jsx";
 
 /* ═══════════════════════════════════════════════════════════════════
    DESIGN TOKENS
@@ -294,13 +294,21 @@ const PROCESSUS_DATA = {
     raci: {
       roles: ["Pilote", "Qualité", "Direction"],
       activities: ["Planification", "Mise en œuvre", "Contrôle", "Revue"],
-      cells: { 
-        "0-0": "R", "0-1": "C", "0-2": "A", 
-        "1-0": "R", "1-1": "C", "1-2": "I", 
-        "2-0": "C", "2-1": "R", "2-2": "A", 
-        "3-0": "I", "3-1": "A", "3-2": "R" 
+      cells: {
+        "0-0": "R",
+        "0-1": "C",
+        "0-2": "A",
+        "1-0": "R",
+        "1-1": "C",
+        "1-2": "I",
+        "2-0": "C",
+        "2-1": "R",
+        "2-2": "A",
+        "3-0": "I",
+        "3-1": "A",
+        "3-2": "R",
       },
-    }, 
+    },
     periode: "Septembre → Juin",
     coutEstime: "Budget pédagogique annuel",
     objectifStrategique: "Améliorer la qualité des PFEs et l'encadrement",
@@ -713,7 +721,12 @@ const Tab1 = ({ processus }) => {
 
   // Get roles and activities from raci data
   const roles = processus.raci?.roles || ["Pilote", "Qualité", "Direction"];
-  const activities = processus.raci?.activities || ["Planification", "Mise en œuvre", "Contrôle", "Revue"];
+  const activities = processus.raci?.activities || [
+    "Planification",
+    "Mise en œuvre",
+    "Contrôle",
+    "Revue",
+  ];
   const cells = processus.raci?.cells || {};
 
   // RACI styles - same colors as in ProcessFormPage
@@ -806,15 +819,52 @@ const Tab1 = ({ processus }) => {
         sub="Matrice des responsabilités (R = Responsable, A = Approbateur, C = Consulté, I = Informé)"
       />
 
-      <div style={{ overflowX: "auto", borderRadius: 12, border: `1px solid ${C.border}`, marginBottom: 24 }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 500 }}>
+      <div
+        style={{
+          overflowX: "auto",
+          borderRadius: 12,
+          border: `1px solid ${C.border}`,
+          marginBottom: 24,
+        }}
+      >
+        <table
+          style={{
+            width: "100%",
+            borderCollapse: "collapse",
+            fontSize: 13,
+            minWidth: 500,
+          }}
+        >
           <thead>
             <tr>
-              <th style={{ padding: "10px 14px", background: C.dark, color: "#fff", fontWeight: 700, textAlign: "left", border: `1px solid ${C.dark}`, fontSize: 12, minWidth: 160 }}>
+              <th
+                style={{
+                  padding: "10px 14px",
+                  background: C.dark,
+                  color: "#fff",
+                  fontWeight: 700,
+                  textAlign: "left",
+                  border: `1px solid ${C.dark}`,
+                  fontSize: 12,
+                  minWidth: 160,
+                }}
+              >
                 Activité / Rôle
               </th>
               {roles.map((role, ri) => (
-                <th key={ri} style={{ padding: "10px 14px", background: C.primary, color: "#fff", fontWeight: 700, textAlign: "center", border: `1px solid ${C.dark}`, fontSize: 12, whiteSpace: "nowrap" }}>
+                <th
+                  key={ri}
+                  style={{
+                    padding: "10px 14px",
+                    background: C.primary,
+                    color: "#fff",
+                    fontWeight: 700,
+                    textAlign: "center",
+                    border: `1px solid ${C.dark}`,
+                    fontSize: 12,
+                    whiteSpace: "nowrap",
+                  }}
+                >
                   {role}
                 </th>
               ))}
@@ -823,7 +873,15 @@ const Tab1 = ({ processus }) => {
           <tbody>
             {activities.map((activity, ai) => (
               <tr key={ai}>
-                <td style={{ padding: "6px 10px", border: `1px solid ${C.border}`, background: C.lightBg, minWidth: 160, fontWeight: 500 }}>
+                <td
+                  style={{
+                    padding: "6px 10px",
+                    border: `1px solid ${C.border}`,
+                    background: C.lightBg,
+                    minWidth: 160,
+                    fontWeight: 500,
+                  }}
+                >
                   {activity}
                 </td>
                 {roles.map((_, ri) => {
@@ -855,26 +913,37 @@ const Tab1 = ({ processus }) => {
       </div>
 
       {/* RACI Legend */}
-      <div style={{ padding: "12px 16px", background: C.lightBg, borderRadius: 10, fontSize: 12, color: C.muted, marginBottom: 24 }}>
+      <div
+        style={{
+          padding: "12px 16px",
+          background: C.lightBg,
+          borderRadius: 10,
+          fontSize: 12,
+          color: C.muted,
+          marginBottom: 24,
+        }}
+      >
         <strong>Légende :</strong>&nbsp;
         {[
           ["R", "Responsable – exécute"],
           ["A", "Approbateur – valide"],
           ["C", "Consulté – donne avis"],
-          ["I", "Informé – reçoit info"]
+          ["I", "Informé – reçoit info"],
         ].map(([k, v]) => {
           const style = getRaciStyle(k);
           return (
             <span key={k} style={{ marginRight: 14 }}>
-              <span style={{
-                padding: "1px 7px",
-                borderRadius: 4,
-                fontWeight: 700,
-                fontSize: 11,
-                background: style.background,
-                color: style.color,
-                border: `1px solid ${style.borderColor}`
-              }}>
+              <span
+                style={{
+                  padding: "1px 7px",
+                  borderRadius: 4,
+                  fontWeight: 700,
+                  fontSize: 11,
+                  background: style.background,
+                  color: style.color,
+                  border: `1px solid ${style.borderColor}`,
+                }}
+              >
                 {k}
               </span>
               &nbsp;{v}
@@ -894,38 +963,43 @@ const Tab1 = ({ processus }) => {
       <table style={S.table}>
         <thead>
           <tr>
-            {["Version", "Date", "Auteur", "Modifications", "Statut"].map((h) => (
-              <th key={h} style={S.th}>
-                {h}
-              </th>
-            ))}
+            {["Version", "Date", "Auteur", "Modifications", "Statut"].map(
+              (h) => (
+                <th key={h} style={S.th}>
+                  {h}
+                </th>
+              ),
+            )}
           </tr>
         </thead>
         <tbody>
           {[
             {
-              v: `PROC-${String(baseNum).padStart(3, '0')}2.1`,
+              v: `PROC-${String(baseNum).padStart(3, "0")}2.1`,
               d: "27/03/2026",
               a: "Ryma Felkir",
               m: "Mise à jour des KPIs et ajout des nouvelles étapes",
               s: "Approuvé",
             },
             {
-              v: `PROC-${String(baseNum).padStart(3, '0')}2.0`,
+              v: `PROC-${String(baseNum).padStart(3, "0")}2.0`,
               d: "15/01/2026",
               a: "Ryma Felkir",
               m: "Refonte complète du processus",
               s: "Archivé",
             },
             {
-              v: `PROC-${String(baseNum).padStart(3, '0')}1.0`,
+              v: `PROC-${String(baseNum).padStart(3, "0")}1.0`,
               d: "10/09/2025",
               a: "Admin Système",
               m: "Création initiale",
               s: "Archivé",
             },
           ].map((h, i) => (
-            <tr key={i} style={{ background: i % 2 === 0 ? C.white : C.lightBg }}>
+            <tr
+              key={i}
+              style={{ background: i % 2 === 0 ? C.white : C.lightBg }}
+            >
               <td style={S.td}>
                 <span style={{ fontWeight: 700, color: C.primary }}>{h.v}</span>
               </td>
@@ -1456,7 +1530,10 @@ const Tab3 = ({ processus }) => (
       <InfoRow label="Contraintes">
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {processus.contraintes.map((c, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div
+              key={i}
+              style={{ display: "flex", alignItems: "center", gap: 8 }}
+            >
               <span style={{ color: "#f59e0b", fontSize: 14 }}>⚡</span>
               <span style={{ fontSize: 13, color: C.text }}>{c}</span>
             </div>
@@ -1580,7 +1657,8 @@ const Tab4 = ({ processus }) => {
             marginBottom: 16,
           }}
         >
-          Documents normatifs et de référence associés au processus (cliquez sur le titre pour télécharger)
+          Documents normatifs et de référence associés au processus (cliquez sur
+          le titre pour télécharger)
         </div>
       </div>
 
@@ -1599,7 +1677,7 @@ const Tab4 = ({ processus }) => {
             {processus.documents.map((doc, i) => (
               <tr key={i}>
                 <td style={S.td}>{doc.id}</td>
-                <td 
+                <td
                   style={{
                     ...S.td,
                     cursor: "pointer",
@@ -1609,7 +1687,12 @@ const Tab4 = ({ processus }) => {
                     fontWeight: 500,
                     transition: "color 0.2s",
                   }}
-                  onClick={() => handleFileDownload(doc.titre, doc.format?.toLowerCase() || "pdf")}
+                  onClick={() =>
+                    handleFileDownload(
+                      doc.titre,
+                      doc.format?.toLowerCase() || "pdf",
+                    )
+                  }
                   onMouseEnter={(e) => {
                     e.currentTarget.style.color = C.accent;
                   }}
@@ -1659,7 +1742,8 @@ const Tab4 = ({ processus }) => {
             marginBottom: 16,
           }}
         >
-          Traces et preuves de l'exécution du processus (cliquez pour télécharger)
+          Traces et preuves de l'exécution du processus (cliquez pour
+          télécharger)
         </div>
       </div>
 
@@ -2225,9 +2309,10 @@ const Tab7 = ({ processus }) => {
           border: `1px solid ${C.border}`,
         }}
       >
-        Cette section recense l'ensemble des non-conformités identifiées lors des audits internes et externes,
-        ainsi que les actions correctives mises en place pour y remédier. Chaque non-conformité est suivie
-        jusqu'à sa clôture complète.
+        Cette section recense l'ensemble des non-conformités identifiées lors
+        des audits internes et externes, ainsi que les actions correctives mises
+        en place pour y remédier. Chaque non-conformité est suivie jusqu'à sa
+        clôture complète.
       </div>
 
       {/* Filter bar */}
@@ -2295,7 +2380,16 @@ const Tab7 = ({ processus }) => {
         </div>
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 12, fontWeight: 600, color: C.muted, alignSelf: "center" }}>Statut:</span>
+          <span
+            style={{
+              fontSize: 12,
+              fontWeight: 600,
+              color: C.muted,
+              alignSelf: "center",
+            }}
+          >
+            Statut:
+          </span>
           {statuts.map((s) => (
             <button
               key={s}
@@ -2319,7 +2413,16 @@ const Tab7 = ({ processus }) => {
         </div>
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 12, fontWeight: 600, color: C.muted, alignSelf: "center" }}>Gravité:</span>
+          <span
+            style={{
+              fontSize: 12,
+              fontWeight: 600,
+              color: C.muted,
+              alignSelf: "center",
+            }}
+          >
+            Gravité:
+          </span>
           {gravites.map((g) => (
             <button
               key={g}
@@ -2361,7 +2464,14 @@ const Tab7 = ({ processus }) => {
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan="8" style={{ textAlign: "center", padding: "40px 20px", color: C.muted }}>
+                <td
+                  colSpan="8"
+                  style={{
+                    textAlign: "center",
+                    padding: "40px 20px",
+                    color: C.muted,
+                  }}
+                >
                   Aucune non-conformité trouvée.
                 </td>
               </tr>
@@ -2380,17 +2490,22 @@ const Tab7 = ({ processus }) => {
                       e.currentTarget.style.background = "#f7fbf8";
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.background = i % 2 === 0 ? C.white : C.lightBg;
+                      e.currentTarget.style.background =
+                        i % 2 === 0 ? C.white : C.lightBg;
                     }}
                   >
                     <td style={S.td}>
-                      <span style={{ fontWeight: 700, color: C.primary }}>{nc.ref}</span>
+                      <span style={{ fontWeight: 700, color: C.primary }}>
+                        {nc.ref}
+                      </span>
                     </td>
                     <td style={S.td}>
                       <span style={{ fontWeight: 500 }}>{nc.titre}</span>
                     </td>
                     <td style={S.td}>
-                      <span style={{ fontSize: 12, color: C.muted }}>{nc.clause}</span>
+                      <span style={{ fontSize: 12, color: C.muted }}>
+                        {nc.clause}
+                      </span>
                     </td>
                     <td style={S.td}>
                       <span
@@ -2429,7 +2544,12 @@ const Tab7 = ({ processus }) => {
                       </span>
                     </td>
                     <td style={S.td}>
-                      <span style={{ fontSize: 12, color: nc.action ? C.text : C.muted }}>
+                      <span
+                        style={{
+                          fontSize: 12,
+                          color: nc.action ? C.text : C.muted,
+                        }}
+                      >
                         {nc.action || "—"}
                       </span>
                     </td>
@@ -2461,8 +2581,8 @@ const Tab7 = ({ processus }) => {
             fontFamily: "'Plus Jakarta Sans',sans-serif",
           }}
         >
-          Affichage de <b style={{ color: "#374151" }}>{filtered.length}</b>{" "}
-          / <b style={{ color: "#374151" }}>{ncData.length}</b> non-conformités
+          Affichage de <b style={{ color: "#374151" }}>{filtered.length}</b> /{" "}
+          <b style={{ color: "#374151" }}>{ncData.length}</b> non-conformités
         </span>
       </div>
     </div>
@@ -2802,7 +2922,7 @@ function BpmnEditor({ onChange, initialData }) {
   }, [bNodes, bEdges, bLanes, onChange]);
 
   const selNode = bNodes.find((n) => n.id === bSelected);
-  const inputKey = `node-${bSelected || 'none'}`;
+  const inputKey = `node-${bSelected || "none"}`;
 
   const svgCoords = useCallback(
     (e) => {
@@ -3468,7 +3588,7 @@ export default function FicheProcessus() {
 
       <div style={S.main}>
         {/* Topbar - Using the imported component */}
-        <Topbar 
+        <Topbar
           title={processus.designation}
           showBack={true}
           onBackClick={() => navigate("/processus")}
@@ -3516,10 +3636,13 @@ export default function FicheProcessus() {
                 <div style={S.kpiRow}>
                   {[
                     { num: processus.kpis.length, lbl: "KPIs" },
-                    { num: processus.dysfonctionnements?.length || 0, lbl: "Dysfonctionnements" },
+                    {
+                      num: processus.dysfonctionnements?.length || 0,
+                      lbl: "Dysfonctionnements",
+                    },
                     { num: processus.risques.length, lbl: "Risques" },
-                    { 
-                      num: `${processus.niveauMaturite || 0}%`, 
+                    {
+                      num: `${processus.niveauMaturite || 0}%`,
                       lbl: "Niveau de Conformité ISO 9001",
                     },
                   ].map((k) => (

@@ -3,13 +3,13 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Login from "./pages/auth/login.jsx";
 import MainContent from "./components/MainContent.jsx";
 import Sidebar from "./components/Sidebar.jsx";
-import ProcessFormPage from "./pages/ProcessFormPage.jsx";
-import FicheProcessus from "./pages/FicheProcessus.jsx";
+import ProcessFormPage from "./pages/preparateur/ProcessFormPage.jsx";
+import FicheProcessus from "./pages/preparateur/FicheProcessus.jsx";
 import AuditsPage from "./pages/AuditsPage.jsx";
-import RapportsPage from "./pages/RapportsPage.jsx";
+import RapportsPage from "./pages/preparateur/RapportsPage.jsx";
 import ParametresPage from "./pages/ParametresPage.jsx";
-import DashboardPage from "./pages/DashboardPage.jsx";
-import RisquesPage from "./pages/RisquesPage.jsx";
+import DashboardPage from "./pages/preparateur/DashboardPage.jsx";
+import RisquesPage from "./pages/preparateur/RisquesPage.jsx";
 
 function AppLayout({ children }) {
   const [collapsed, setCollapsed] = useState(false);
