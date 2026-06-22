@@ -41,19 +41,6 @@ const NAV = [
     ),
   },
   {
-    id: "risques",
-    path: "/risques",
-    label: "Risques",
-    sub: "ISO 9001 § 6.1",
-    icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-        <line x1="12" y1="9" x2="12" y2="13" />
-        <line x1="12" y1="17" x2="12.01" y2="17" />
-      </svg>
-    ),
-  },
-  {
     id: "rapports",
     path: "/rapports",
     label: "Rapports",
@@ -156,14 +143,14 @@ export default function Sidebar({ collapsed, setCollapsed, sidebarWidth }) {
         .sb-item.active .sb-item-label { color: #f0fff4; }
         .sb-item:hover .sb-item-label { color: rgba(240,255,244,0.85); }
         .sb-item-sub {
-          font-size: 10px; color: rgba(240,255,244,0.22); margin-top: 1px;
+          fontSize: 10px; color: rgba(240,255,244,0.22); margin-top: 1px;
           font-family: 'Plus Jakarta Sans', sans-serif;
         }
         .sb-tooltip {
           position: absolute; left: calc(100% + 10px); top: 50%;
           transform: translateY(-50%);
           background: #1a3628; color: #e8f5e1;
-          font-size: 11.5px; font-weight: 600;
+          fontSize: 11.5px; font-weight: 600;
           padding: 5px 10px; border-radius: 7px; white-space: nowrap;
           border: 1px solid rgba(94,207,122,0.2);
           pointer-events: none; z-index: 1000;

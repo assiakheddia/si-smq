@@ -5,11 +5,10 @@ import MainContent from "./components/MainContent.jsx";
 import Sidebar from "./components/Sidebar.jsx";
 import ProcessFormPage from "./pages/preparateur/ProcessFormPage.jsx";
 import FicheProcessus from "./pages/preparateur/FicheProcessus.jsx";
-import AuditsPage from "./pages/AuditsPage.jsx";
+import AuditsPage from "./pages/preparateur/AuditsPage.jsx";
 import RapportsPage from "./pages/preparateur/RapportsPage.jsx";
-import ParametresPage from "./pages/ParametresPage.jsx";
+import ParametresPage from "./pages/preparateur/ParametresPage.jsx";
 import DashboardPage from "./pages/preparateur/DashboardPage.jsx";
-import RisquesPage from "./pages/preparateur/RisquesPage.jsx";
 
 function AppLayout({ children }) {
   const [collapsed, setCollapsed] = useState(false);
@@ -70,14 +69,6 @@ export default function App() {
           element={
             <AppLayout>
               <FicheProcessus />
-            </AppLayout>
-          }
-        />
-        <Route
-          path="/risques"
-          element={
-            <AppLayout>
-              <RisquesPage />
             </AppLayout>
           }
         />
