@@ -135,8 +135,6 @@ const styles = {
   toast: { position: "fixed", bottom: 28, right: 28, borderRadius: 12, padding: "14px 22px", fontSize: 14, fontWeight: 600, color: "#fff", boxShadow: "0 8px 32px rgba(0,0,0,0.18)", zIndex: 9999, animation: "slideUp 0.3s ease" },
   fluxBox: { display: "grid", gridTemplateColumns: "1fr 40px 1fr", gap: 12, alignItems: "start", background: C.lightBg, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 12 },
   fluxArrow: { display: "flex", alignItems: "center", justifyContent: "center", color: C.muted, fontSize: 22, paddingTop: 4 },
-
-  /* RACI Matrix */
   raciTableWrap: { overflowX: "auto", borderRadius: 12, border: `1px solid ${C.border}` },
   raciTable: { width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 500 },
   raciTh: { padding: "10px 14px", background: C.primary, color: "#fff", fontWeight: 700, textAlign: "center", border: `1px solid ${C.dark}`, fontSize: 12, whiteSpace: "nowrap" },
@@ -147,26 +145,14 @@ const styles = {
   raciRoleInput: { border: "none", outline: "none", background: "transparent", fontSize: 12, fontWeight: 700, color: "#fff", fontFamily: "'Plus Jakarta Sans', sans-serif", width: "100%", minWidth: 60, textAlign: "center" },
   raciRemoveBtn: { background: "rgba(255,255,255,0.2)", border: "none", borderRadius: 4, color: "#fff", cursor: "pointer", fontSize: 10, padding: "1px 5px", marginLeft: 4, lineHeight: 1.4 },
   raciAddBtn: { padding: "6px 14px", borderRadius: 8, border: `1.5px dashed ${C.accent}`, background: "rgba(119,213,143,0.07)", color: C.primary, fontSize: 12, fontWeight: 600, cursor: "pointer" },
-
-  /* Lock screen */
   lockScreen: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "60px 20px", textAlign: "center", gap: 16 },
-
-  /* Diagnostic overlay */
   diagOverlay: { position: "fixed", inset: 0, background: "rgba(30,61,47,0.88)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9000, backdropFilter: "blur(6px)" },
   diagBox: { background: "#fff", borderRadius: 24, padding: "48px 40px", maxWidth: 500, width: "90%", textAlign: "center", boxShadow: "0 32px 80px rgba(0,0,0,0.35)" },
-
-  /* Audit modal */
   auditOverlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9000, backdropFilter: "blur(3px)" },
   auditBox: { background: "#fff", borderRadius: 20, padding: "32px", maxWidth: 480, width: "90%", boxShadow: "0 24px 64px rgba(0,0,0,0.2)", fontFamily: "'Plus Jakarta Sans', sans-serif" },
-
-  /* Field edit mode */
   fieldEditToggle: { display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 12px", borderRadius: 20, border: `1px solid ${C.border}`, background: "#fff", color: C.muted, fontSize: 11, fontWeight: 600, cursor: "pointer" },
   fieldHideBtn: { background: "none", border: `1px solid ${C.border}`, borderRadius: 4, padding: "1px 7px", cursor: "pointer", fontSize: 10, color: C.muted, marginLeft: 6, lineHeight: 1.6 },
-
-  /* Diagnostic result banner */
   diagBanner: { background: "#fffbeb", border: "1px solid #f59e0b", borderRadius: 12, padding: "14px 18px", marginBottom: 20, fontSize: 13, display: "flex", alignItems: "flex-start", gap: 12 },
-
-  /* Audit sent banner */
   auditSentBanner: { background: "#f0fdf4", border: "1px solid #22c55e", borderRadius: 12, padding: "16px 20px", display: "flex", alignItems: "center", gap: 12, fontSize: 13, fontWeight: 600, color: "#166534" },
 };
 
@@ -176,7 +162,6 @@ const styles = {
 
 // French common words dictionary for spell check
 const FRENCH_WORDS = new Set([
-  // Core quality management
   'processus', 'qualité', 'management', 'soutien', 'réalisation', 'planification',
   'mise', 'œuvre', 'contrôle', 'revue', 'responsable', 'approbateur', 'consultant',
   'informé', 'objectif', 'stratégique', 'performance', 'indicateur', 'risque',
@@ -211,7 +196,6 @@ const FRENCH_WORDS = new Set([
   'auditable', 'traçable', 'consultable', 'accessible', 'disponible',
   'utilisable', 'compréhensible', 'clair', 'précis', 'complet', 'détaillé',
   'exhaustif', 'synthétique', 'visuel', 'interactif', 'ergonomique', 'intuitif',
-  // Common French words
   'exemple', 'nom', 'prénom', 'date', 'heure', 'minute', 'seconde',
   'semaine', 'mois', 'année', 'jour', 'nuit', 'matin', 'après-midi', 'soir',
   'travaille', 'fermé', 'ouvert', 'affaire', 'projet', 'programme',
@@ -219,71 +203,45 @@ const FRENCH_WORDS = new Set([
   'certification', 'accréditation', 'qualification', 'habilitation',
   'formation', 'expérience', 'compétence', 'savoir', 'savoir-faire',
   'savoir-être', 'attitude', 'comportement', 'éthique', 'déontologie',
+  'opportunité', 'opportunités', 'bénéfice', 'bénéfices', 'impact',
 ]);
 
-// Check if a word is French or contains only special characters/numbers
 function isFrenchWord(word) {
   if (!word || word.length < 2) return true;
-  // Remove accents for comparison
   const normalized = word.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-  // Check if it's all numbers or special chars
   if (/^[\d\s\-\.,;:!?()"'\/]+$/.test(normalized)) return true;
-  // Check if it's a French word
   return FRENCH_WORDS.has(normalized.toLowerCase());
 }
 
-// Validate that a field contains only letters, spaces, and accents (no numbers)
 function isValidName(text) {
   if (!text) return true;
-  // Allow letters (including accented), spaces, hyphens, apostrophes, and dots
   return /^[a-zA-ZÀ-ÿ\s\-'\.]+$/.test(text);
 }
 
-// Validate text for French spelling
 function validateFrenchSpelling(text) {
   if (!text || text.trim().length < 2) return { isValid: true, warnings: [] };
-  
   const words = text.split(/[\s,;:.!?()"']+/).filter(w => w.length > 0);
   const warnings = [];
-  
   for (const word of words) {
-    // Skip if it's an email, URL, or number
     if (word.includes('@') || word.includes('http') || /^\d+$/.test(word)) continue;
     if (!isFrenchWord(word)) {
       warnings.push(word);
     }
   }
-  
   return { isValid: warnings.length === 0, warnings };
 }
 
-// Validate email format
 function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
-// Validate phone number (French format)
 function isValidPhone(phone) {
   if (!phone) return true;
   return /^(\+213|0)[\d\s\-]{9,12}$/.test(phone.replace(/\s/g, ''));
 }
 
-// Validate date format
-function isValidDate(date) {
-  if (!date) return true;
-  return /^\d{4}-\d{2}-\d{2}$/.test(date);
-}
-
-// Validate that text is not empty or just spaces
 function isNotEmpty(text) {
   return text && text.trim().length > 0;
-}
-
-// Validate text length
-function isValidLength(text, min = 2, max = 500) {
-  if (!text) return true;
-  const len = text.trim().length;
-  return len >= min && len <= max;
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -466,7 +424,6 @@ function RaciMatrix({ raci, onChange }) {
   };
 
   const addRole = () => onChange({ ...raci, roles: [...raci.roles, "Nouveau rôle"] });
-
   const addActivity = () => onChange({ ...raci, activities: [...raci.activities, "Nouvelle activité"] });
 
   const removeRole = (ri) => {
@@ -748,6 +705,29 @@ function generateDysfonctionnements(form) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
+   HELPERS
+═══════════════════════════════════════════════════════════════════ */
+function makeKpi() { return { nom: "", unite: "", valeurCible: "", seuilAlerte: "", frequence: "", responsable: "" }; }
+function makeRisque() { return { description: "", probabilite: "1", gravite: "1", mesure: "", responsable: "" }; }
+function makeDoc() { return { id: "", titre: "", format: "PDF", version: "1.0", revue: "", statut: "Brouillon" }; }
+function makePreuve() { return { titre: "", type: "", date: "", responsable: "" }; }
+function makeDysf() { return { titre: "", description: "", consequences: "", causes: "", gravite: "Mineur", ameliorations: "", responsable: "", echeance: "", statut: "Ouvert" }; }
+function makeEtape(num) { return { numero: num, nom: "", acteur: "", description: "", entree: "", sortie: "", duree: "", document: "" }; }
+function makeOpportunite() { 
+  return { 
+    titre: "", 
+    description: "", 
+    impact: "Moyen", 
+    statut: "Planifié", 
+    responsable: "Atir Zineb",
+    echeance: "",
+    benefice: "",
+    source: "Préparateur",
+    dateCreation: new Date().toISOString().split("T")[0],
+  }; 
+}
+
+/* ═══════════════════════════════════════════════════════════════════
    INITIAL STATE
 ═══════════════════════════════════════════════════════════════════ */
 const INIT = {
@@ -770,14 +750,8 @@ const INIT = {
   documents: [], preuves: [],
   dysfonctionnements: [],
   etapes: [], bpmnFile: null,
+  opportunites: [],
 };
-
-function makeKpi() { return { nom: "", unite: "", valeurCible: "", seuilAlerte: "", frequence: "", responsable: "" }; }
-function makeRisque() { return { description: "", probabilite: "1", gravite: "1", mesure: "", responsable: "" }; }
-function makeDoc() { return { id: "", titre: "", format: "PDF", version: "1.0", revue: "", statut: "Brouillon" }; }
-function makePreuve() { return { titre: "", type: "", date: "", responsable: "" }; }
-function makeDysf() { return { titre: "", description: "", consequences: "", causes: "", gravite: "Mineur", ameliorations: "", responsable: "", echeance: "", statut: "Ouvert" }; }
-function makeEtape(num) { return { numero: num, nom: "", acteur: "", description: "", entree: "", sortie: "", duree: "", document: "" }; }
 
 const TABS = [
   { id: 0, label: "Informations et historique" },
@@ -804,8 +778,6 @@ export default function ProcessFormPage() {
   const [warnings, setWarnings] = useState({});
   const [toast, setToast] = useState(null);
   const [dirty, setDirty] = useState(false);
-
-  /* New state */
   const [published, setPublished] = useState(false);
   const [diagRunning, setDiagRunning] = useState(false);
   const [diagDone, setDiagDone] = useState(false);
@@ -818,172 +790,57 @@ export default function ProcessFormPage() {
   const [unreadCount, setUnreadCount] = useState(() => getUnreadCount());
 
   /* ── Validation Helpers ── */
-const validateField = useCallback((key, value) => {
-  const newErrors = { ...errors };
-  const newWarnings = { ...warnings };
-  
-  // Required field validation
-  if (REQUIRED_FIELDS.includes(key) && !isNotEmpty(value)) {
-    newErrors[key] = "Ce champ est obligatoire.";
-  } else {
-    delete newErrors[key];
-  }
-  
-  // Pilote validation - no numbers allowed
-  if (key === "pilote" && value && !isValidName(value)) {
-    newErrors[key] = "Le nom ne doit pas contenir de chiffres.";
-  } else if (key === "pilote" && value && isValidName(value)) {
-    delete newErrors[key];
-  }
-  
-  // Email validation
-  if (key === "email" && value && !isValidEmail(value)) {
-    newErrors[key] = "Veuillez entrer une adresse email valide.";
-  } else if (key === "email" && value && isValidEmail(value)) {
-    delete newErrors[key];
-  }
-  
-  // Phone validation
-  if (key === "telephone" && value && !isValidPhone(value)) {
-    newWarnings[key] = "Format de téléphone non standard. Utilisez +213 ou 0.";
-  } else if (key === "telephone") {
-    delete newWarnings[key];
-  }
-  
-  // French spell check for all text fields
-  const textFields = [
-    "designation", "objectif", "pilote", "sousDept", 
-    "objectifStrategique", "enjeuxStrategiques",
-    "periode", "clients", "effectifs"
-  ];
-  
-  if (textFields.includes(key)) {
-    const spellResult = validateFrenchSpelling(value);
-    if (!spellResult.isValid && value && value.length > 3) {
-      const unknownWords = spellResult.warnings.slice(0, 3);
-      newWarnings[key] = `Mots suspects: ${unknownWords.join(', ')}${spellResult.warnings.length > 3 ? '...' : ''}`;
+  const validateField = useCallback((key, value) => {
+    const newErrors = { ...errors };
+    const newWarnings = { ...warnings };
+    
+    if (REQUIRED_FIELDS.includes(key) && !isNotEmpty(value)) {
+      newErrors[key] = "Ce champ est obligatoire.";
     } else {
+      delete newErrors[key];
+    }
+    
+    if (key === "pilote" && value && !isValidName(value)) {
+      newErrors[key] = "Le nom ne doit pas contenir de chiffres.";
+    } else if (key === "pilote" && value && isValidName(value)) {
+      delete newErrors[key];
+    }
+    
+    if (key === "email" && value && !isValidEmail(value)) {
+      newErrors[key] = "Veuillez entrer une adresse email valide.";
+    } else if (key === "email" && value && isValidEmail(value)) {
+      delete newErrors[key];
+    }
+    
+    if (key === "telephone" && value && !isValidPhone(value)) {
+      newWarnings[key] = "Format de téléphone non standard. Utilisez +213 ou 0.";
+    } else if (key === "telephone") {
       delete newWarnings[key];
     }
-  }
-  
-  // For tag fields (competences, ressourcesMat, ressourcesLog) - validate each tag
-  if (["competences", "ressourcesMat", "ressourcesLog"].includes(key)) {
-    const allWarnings = [];
-    if (Array.isArray(value)) {
-      value.forEach(tag => {
-        const result = validateFrenchSpelling(tag);
-        if (!result.isValid && tag.length > 2) {
-          allWarnings.push(...result.warnings.slice(0, 2));
-        }
-      });
-    }
-    if (allWarnings.length > 0) {
-      const uniqueWarnings = [...new Set(allWarnings)];
-      newWarnings[key] = `Mots suspects: ${uniqueWarnings.slice(0, 3).join(', ')}${uniqueWarnings.length > 3 ? '...' : ''}`;
-    } else {
-      delete newWarnings[key];
-    }
-  }
-  
-  setErrors(newErrors);
-  setWarnings(newWarnings);
-  return Object.keys(newErrors).length === 0;
-}, [errors, warnings]);
-
-const validateAll = useCallback(() => {
-  const newErrors = {};
-  const newWarnings = {};
-  
-  REQUIRED_FIELDS.forEach((f) => {
-    if (!isNotEmpty(form[f])) {
-      newErrors[f] = "Ce champ est obligatoire.";
-    }
-  });
-  
-  // Pilote validation - no numbers allowed
-  if (form.pilote && !isValidName(form.pilote)) {
-    newErrors.pilote = "Le nom ne doit pas contenir de chiffres.";
-  }
-  
-  if (form.email && !isValidEmail(form.email)) {
-    newErrors.email = "Veuillez entrer une adresse email valide.";
-  }
-  
-  if (form.telephone && !isValidPhone(form.telephone)) {
-    newWarnings.telephone = "Format de téléphone non standard.";
-  }
-  
-  // French spell check for all text fields
-  const textFields = [
-    "designation", "objectif", "pilote", "sousDept", 
-    "objectifStrategique", "enjeuxStrategiques",
-    "periode", "clients", "effectifs"
-  ];
-  
-  textFields.forEach((key) => {
-    if (form[key]) {
-      const spellResult = validateFrenchSpelling(form[key]);
-      if (!spellResult.isValid && form[key].length > 3) {
+    
+    const textFields = ["designation", "objectif", "pilote", "sousDept", "objectifStrategique", "enjeuxStrategiques", "periode", "clients", "effectifs"];
+    if (textFields.includes(key)) {
+      const spellResult = validateFrenchSpelling(value);
+      if (!spellResult.isValid && value && value.length > 3) {
         const unknownWords = spellResult.warnings.slice(0, 3);
         newWarnings[key] = `Mots suspects: ${unknownWords.join(', ')}${spellResult.warnings.length > 3 ? '...' : ''}`;
+      } else {
+        delete newWarnings[key];
       }
     }
-  });
-  
-  // For tag fields
-  ["competences", "ressourcesMat", "ressourcesLog", "moyensAlloues"].forEach((key) => {
-    if (form[key] && Array.isArray(form[key]) && form[key].length > 0) {
-      const allWarnings = [];
-      form[key].forEach(tag => {
-        const result = validateFrenchSpelling(tag);
-        if (!result.isValid && tag.length > 2) {
-          allWarnings.push(...result.warnings.slice(0, 2));
-        }
-      });
-      if (allWarnings.length > 0) {
-        const uniqueWarnings = [...new Set(allWarnings)];
-        newWarnings[key] = `Mots suspects: ${uniqueWarnings.slice(0, 3).join(', ')}${uniqueWarnings.length > 3 ? '...' : ''}`;
-      }
-    }
-  });
-  
-  // For risks
-  if (form.risques && Array.isArray(form.risques)) {
-    form.risques.forEach((r, i) => {
-      // Description spell check
-      if (r.description && r.description.length > 3) {
-        const result = validateFrenchSpelling(r.description);
-        if (!result.isValid) {
-          const unknownWords = result.warnings.slice(0, 3);
-          newWarnings[`risque_${i}_description`] = `Mots suspects: ${unknownWords.join(', ')}${result.warnings.length > 3 ? '...' : ''}`;
-        }
-      }
-      // Mesure spell check
-      if (r.mesure && r.mesure.length > 3) {
-        const result = validateFrenchSpelling(r.mesure);
-        if (!result.isValid) {
-          const unknownWords = result.warnings.slice(0, 3);
-          newWarnings[`risque_${i}_mesure`] = `Mots suspects: ${unknownWords.join(', ')}${result.warnings.length > 3 ? '...' : ''}`;
-        }
-      }
-      // Responsable name validation
-      if (r.responsable && !isValidName(r.responsable)) {
-        newWarnings[`risque_${i}_responsable`] = "Le nom ne doit pas contenir de chiffres.";
-      }
-    });
-  }
-  
-  setErrors(newErrors);
-  setWarnings(newWarnings);
-  return Object.keys(newErrors).length === 0;
-}, [form]);
+    
+    setErrors(newErrors);
+    setWarnings(newWarnings);
+    return Object.keys(newErrors).length === 0;
+  }, [errors, warnings]);
 
   /* ── Helpers ── */
   const set = useCallback((key, value) => {
     setForm((f) => ({ ...f, [key]: value }));
     setDirty(true);
-    validateField(key, value);
+    if (typeof value === "string") {
+      validateField(key, value);
+    }
   }, [validateField]);
 
   const setNested = useCallback((parent, key, value) => {
@@ -1008,24 +865,6 @@ const validateAll = useCallback(() => {
     return Math.round((filled / checks.length) * 100);
   })();
 
-  /* ── Validation ── */
-  const validate = () => {
-    const e = {};
-    const w = {};
-    REQUIRED_FIELDS.forEach((f) => { if (!form[f]?.trim()) e[f] = "Ce champ est obligatoire"; });
-    
-    if (form.email && !isValidEmail(form.email)) {
-      e.email = "Veuillez entrer une adresse email valide.";
-    }
-    
-    if (form.telephone && !isValidPhone(form.telephone)) {
-      w.telephone = "Format de téléphone non standard.";
-    }
-    
-    setErrors(e);
-    return Object.keys(e).length === 0;
-  };
-
   const showToast = (msg, type = "success") => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3500);
@@ -1038,21 +877,22 @@ const validateAll = useCallback(() => {
   };
 
   const handleDraft = () => { 
-    validateAll();
     showToast("Brouillon enregistré ✓"); 
     setDirty(false); 
   };
 
+  const validateAll = () => {
+    const e = {};
+    REQUIRED_FIELDS.forEach((f) => { if (!isNotEmpty(form[f])) e[f] = "Ce champ est obligatoire"; });
+    if (form.email && !isValidEmail(form.email)) e.email = "Veuillez entrer une adresse email valide.";
+    if (form.pilote && !isValidName(form.pilote)) e.pilote = "Le nom ne doit pas contenir de chiffres.";
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
   const handlePublish = () => {
     if (!validateAll()) {
-      const errorMessages = Object.values(errors);
-      if (errorMessages.length > 0) {
-        showToast("Veuillez corriger les champs obligatoires avant de publier.", "error");
-      } else if (Object.values(warnings).length > 0) {
-        if (window.confirm("Des fautes d'orthographe ont été détectées. Voulez-vous continuer quand même ?")) {
-          proceedPublish();
-        }
-      }
+      showToast("Veuillez corriger les champs obligatoires avant de publier.", "error");
       setActiveTab(0);
       return;
     }
@@ -1113,8 +953,325 @@ const validateAll = useCallback(() => {
   };
 
   /* ═══════════════════════════════════════════════════════════════
+     RENDER OPPORTUNITES
+═══════════════════════════════════════════════════════════════ */
+  const renderOpportunites = () => {
+    const opps = form.opportunites || [];
+    
+    const impactStyles = {
+      "Fort": { color: "#166534", bg: "#dcfce7" },
+      "Moyen": { color: "#92400e", bg: "#fef3c7" },
+      "Faible": { color: "#1e40af", bg: "#dbeafe" },
+    };
+    
+    const statutStyles = {
+      "Planifié": { color: "#1e40af", bg: "#dbeafe" },
+      "En cours": { color: "#92400e", bg: "#fef3c7" },
+      "Clôturé": { color: "#166534", bg: "#dcfce7" },
+    };
+    
+    const sourceStyles = {
+      "Préparateur": { color: "#1e40af", bg: "#dbeafe" },
+      "Auditeur Interne": { color: "#991b1b", bg: "#fee2e2" },
+      "Auditeur Externe": { color: "#166534", bg: "#dcfce7" },
+      "Direction": { color: "#92400e", bg: "#fef3c7" },
+    };
+
+    const cycleStatut = (current) => {
+      const statuses = ["Planifié", "En cours", "Clôturé"];
+      const idx = statuses.indexOf(current);
+      return statuses[(idx + 1) % statuses.length];
+    };
+
+    return (
+      <div style={{ marginTop: 24 }}>
+  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+    <SectionHeader num="1c" title="Opportunités d'amélioration" sub="Identifiez les axes d'amélioration pour ce processus" />
+    <button
+      type="button"
+      style={styles.addBtn}
+      onClick={() => {
+        const newOpp = makeOpportunite();
+        // Auto-fill responsable with current user (simulated - in real app would come from auth context)
+        newOpp.responsable = "Atir Zineb"; // This would come from your auth system
+        set("opportunites", [...opps, newOpp]);
+      }}
+    >
+      ＋ Ajouter une opportunité
+    </button>
+  </div>
+
+  {opps.length === 0 ? (
+    <div style={styles.historyPlaceholder}>
+      <div style={{ fontSize: 24, marginBottom: 8 }}>💡</div>
+      <div style={{ fontWeight: 600, marginBottom: 4 }}>Aucune opportunité identifiée</div>
+      <div style={{ fontSize: 12, opacity: 0.7 }}>Cliquez sur "Ajouter une opportunité" pour commencer.</div>
+    </div>
+  ) : (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      {opps.map((opp, i) => {
+        const impactStyle = impactStyles[opp.impact] || impactStyles["Moyen"];
+        const statutStyle = statutStyles[opp.statut] || statutStyles["Planifié"];
+        const sourceStyle = sourceStyles[opp.source] || sourceStyles["Préparateur"];
+        
+        return (
+          <div key={i} style={{
+            background: C.white,
+            borderRadius: 14,
+            border: `1px solid ${C.border}`,
+            padding: "20px 24px",
+            transition: "box-shadow 0.2s, transform 0.15s",
+            boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+          }}>
+            {/* Header with title and source badge */}
+            <div style={{ 
+              display: "flex", 
+              alignItems: "center", 
+              justifyContent: "space-between",
+              marginBottom: 14,
+              flexWrap: "wrap",
+              gap: 8,
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                <span style={{ 
+                  fontWeight: 700, 
+                  color: C.text, 
+                  fontSize: 16,
+                  fontFamily: "'Outfit', sans-serif",
+                }}>
+                  {opp.titre || "Nouvelle opportunité"}
+                </span>
+                <span style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  color: sourceStyle.color,
+                  background: sourceStyle.bg,
+                  padding: "3px 12px",
+                  borderRadius: 20,
+                  border: `1px solid ${sourceStyle.color}30`,
+                }}>
+                  {opp.source || "Préparateur"}
+                </span>
+              </div>
+              <button
+                type="button"
+                style={{
+                  ...styles.dynRemove,
+                  fontSize: 13,
+                  padding: "4px 8px",
+                  borderRadius: 6,
+                  background: "#fef2f2",
+                  color: C.danger,
+                  border: "1px solid #fecaca",
+                }}
+                onClick={() => set("opportunites", opps.filter((_, idx) => idx !== i))}
+              >
+                ✕ Supprimer
+              </button>
+            </div>
+            
+            {/* Main content grid */}
+            <div style={{ 
+              display: "grid", 
+              gridTemplateColumns: "1fr 1fr", 
+              gap: "14px 24px",
+              marginBottom: 12,
+            }}>
+              <div style={styles.fieldWrap}>
+                <label style={styles.label}>Description</label>
+                <input
+                  value={opp.description}
+                  onChange={(e) => {
+                    const u = [...opps];
+                    u[i] = { ...u[i], description: e.target.value };
+                    set("opportunites", u);
+                  }}
+                  placeholder="Décrire l'opportunité..."
+                  style={styles.input}
+                />
+              </div>
+              
+              <div style={styles.fieldWrap}>
+                <label style={styles.label}>Bénéfice attendu</label>
+                <input
+                  value={opp.benefice}
+                  onChange={(e) => {
+                    const u = [...opps];
+                    u[i] = { ...u[i], benefice: e.target.value };
+                    set("opportunites", u);
+                  }}
+                  placeholder="Ex: -70% temps de mise à jour"
+                  style={styles.input}
+                />
+              </div>
+            </div>
+            
+            {/* Bottom row: Impact, Statut, Échéance */}
+            <div style={{ 
+              display: "grid", 
+              gridTemplateColumns: "1fr 1fr 1fr", 
+              gap: "14px 24px",
+            }}>
+              <div style={styles.fieldWrap}>
+                <label style={styles.label}>Impact</label>
+                <select
+                  value={opp.impact}
+                  onChange={(e) => {
+                    const u = [...opps];
+                    u[i] = { ...u[i], impact: e.target.value };
+                    set("opportunites", u);
+                  }}
+                  style={styles.select}
+                >
+                  {["Fort", "Moyen", "Faible"].map((opt) => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </select>
+              </div>
+              
+              <div style={styles.fieldWrap}>
+                <label style={styles.label}>Statut</label>
+                <div style={{ 
+                  display: "flex", 
+                  alignItems: "center", 
+                  height: 42,
+                  padding: "0 4px",
+                }}>
+                  <span style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: statutStyle.color,
+                    background: statutStyle.bg,
+                    padding: "6px 16px",
+                    borderRadius: 20,
+                    cursor: "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    border: `1px solid ${statutStyle.color}30`,
+                    transition: "all 0.15s",
+                  }}
+                  onClick={() => {
+                    const u = [...opps];
+                    u[i] = { ...u[i], statut: cycleStatut(opp.statut) };
+                    set("opportunites", u);
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = "scale(1.02)";
+                    e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.08)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = "scale(1)";
+                    e.currentTarget.style.boxShadow = "none";
+                  }}
+                  title="Cliquer pour changer le statut"
+                  >
+                    {opp.statut || "Planifié"}
+                    <span style={{ fontSize: 10, opacity: 0.6 }}>↻</span>
+                  </span>
+                </div>
+              </div>
+              
+              <div style={styles.fieldWrap}>
+                <label style={styles.label}>Échéance</label>
+                <input
+                  type="date"
+                  value={opp.echeance || ""}
+                  onChange={(e) => {
+                    const u = [...opps];
+                    u[i] = { ...u[i], echeance: e.target.value };
+                    set("opportunites", u);
+                  }}
+                  style={styles.input}
+                />
+              </div>
+            </div>
+            
+            {/* Responsable - auto-filled, displayed as a badge */}
+            <div style={{ 
+              marginTop: 12, 
+              paddingTop: 10,
+              borderTop: `1px solid ${C.border}`,
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+            }}>
+              <span style={{ fontSize: 11, color: C.muted, fontWeight: 500 }}>Créé par:</span>
+              <span style={{
+                fontSize: 12,
+                fontWeight: 600,
+                color: C.primary,
+                background: `${C.primary}10`,
+                padding: "2px 12px",
+                borderRadius: 12,
+              }}>
+                {opp.responsable || "Atir Zineb"}
+              </span>
+              <span style={{
+                fontSize: 10,
+                color: C.muted,
+                marginLeft: "auto",
+              }}>
+                {opp.dateCreation ? new Date(opp.dateCreation).toLocaleDateString("fr-FR") : new Date().toLocaleDateString("fr-FR")}
+              </span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  )}
+  
+  <div style={{ 
+    marginTop: 12, 
+    fontSize: 12, 
+    color: C.muted, 
+    padding: "8px 12px",
+    background: C.lightBg,
+    borderRadius: 10,
+    border: `1px solid ${C.border}`,
+    display: "flex",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 8,
+  }}>
+    <span style={{ fontWeight: 600 }}>💡 Statuts:</span>
+    <span style={{ 
+      background: "#dbeafe", 
+      color: "#1e40af", 
+      padding: "2px 10px", 
+      borderRadius: 12,
+      fontSize: 10,
+      fontWeight: 700,
+    }}>🟦 Planifié</span>
+    <span style={{ 
+      background: "#fef3c7", 
+      color: "#92400e", 
+      padding: "2px 10px", 
+      borderRadius: 12,
+      fontSize: 10,
+      fontWeight: 700,
+    }}>🟨 En cours</span>
+    <span style={{ 
+      background: "#dcfce7", 
+      color: "#166534", 
+      padding: "2px 10px", 
+      borderRadius: 12,
+      fontSize: 10,
+      fontWeight: 700,
+    }}>✅ Clôturé</span>
+    <span style={{ 
+      fontSize: 10, 
+      color: C.muted,
+      fontStyle: "italic",
+    }}>(Cliquez sur le statut pour le changer)</span>
+  </div>
+</div>
+    );
+  };
+
+  /* ═══════════════════════════════════════════════════════════════
      TAB RENDERS
-  ═══════════════════════════════════════════════════════════════ */
+═══════════════════════════════════════════════════════════════ */
   const renderTab1 = () => (
     <div>
       <SectionHeader num="1" title="Informations Générales" sub="Données d'identification et de responsabilité du processus" />
@@ -1195,7 +1352,12 @@ const validateAll = useCallback(() => {
 
       <div style={styles.divider} />
 
-      <SectionHeader num="1c" title="Historique des révisions" />
+      {/* Opportunities section */}
+      {renderOpportunites()}
+
+      <div style={styles.divider} />
+
+      <SectionHeader num="1d" title="Historique des révisions" />
       <div style={styles.historyPlaceholder}>
         <div style={{ fontSize: 24, marginBottom: 8 }}>📋</div>
         <div style={{ fontWeight: 600, marginBottom: 4 }}>Aucun historique disponible</div>
@@ -1205,261 +1367,179 @@ const validateAll = useCallback(() => {
   );
 
   const renderTab2 = () => (
-  <div>
-    <SectionHeader num="2" title="Éléments Clés du Processus" sub="Flux, ressources, compétences et indicateurs de performance" />
-    <div style={styles.grid2}>
-      <Field label="Période / Mois" fkey="periode" warning={warnings.periode}>
-        <Input 
-          value={form.periode} 
-          onChange={(e) => set("periode", e.target.value)} 
-          placeholder="Ex : Oct → Juin (9 mois)"
-          warning={warnings.periode}
-        />
-      </Field>
-      <Field label="Objectif stratégique" fkey="objectifStrategique" warning={warnings.objectifStrategique}>
-        <Input 
-          value={form.objectifStrategique} 
-          onChange={(e) => set("objectifStrategique", e.target.value)} 
-          placeholder="Lien avec la stratégie globale..."
-          warning={warnings.objectifStrategique}
-        />
-      </Field>
-      <Field label="Clients / Bénéficiaires" fkey="clients" warning={warnings.clients}>
-        <TextArea 
-          value={form.clients} 
-          onChange={(e) => set("clients", e.target.value)} 
-          placeholder="Étudiants, Direction, Entreprises partenaires..." 
-          rows={2}
-          warning={warnings.clients}
-        />
-      </Field>
-      <Field label="Effectifs impliqués" fkey="effectifs" warning={warnings.effectifs}>
-        <TextArea 
-          value={form.effectifs} 
-          onChange={(e) => set("effectifs", e.target.value)} 
-          placeholder="Ex : 12 enseignants, 3 membres administratifs..." 
-          rows={2}
-          warning={warnings.effectifs}
-        />
-      </Field>
-    </div>
-
-    <div style={styles.divider} />
-    <div style={{ marginBottom: 20 }}>
-      <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12 }}>Flux d'entrées / Sorties</div>
-      <div style={styles.fluxBox}>
-        <div>
-          <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 8, textTransform: "uppercase" }}>↙ Entrées</div>
-          <DynamicList items={form.fluxEntrees} onChange={(v) => set("fluxEntrees", v)} placeholder="Flux d'entrée..." />
-        </div>
-        <div style={styles.fluxArrow}>⇄</div>
-        <div>
-          <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 8, textTransform: "uppercase" }}>Sorties ↗</div>
-          <DynamicList items={form.fluxSorties} onChange={(v) => set("fluxSorties", v)} placeholder="Flux de sortie..." />
-        </div>
-      </div>
-    </div>
-
-    <div style={styles.grid2}>
-      <Field label="Compétences clés" fkey="competences" warning={warnings.competences}>
-        <TagInput 
-          tags={form.competences} 
-          onChange={(v) => set("competences", v)} 
-          placeholder="Ajouter une compétence..." 
-        />
-      </Field>
-      <Field label="Ressources matérielles" fkey="ressourcesMat" warning={warnings.ressourcesMat}>
-        <TagInput 
-          tags={form.ressourcesMat} 
-          onChange={(v) => set("ressourcesMat", v)} 
-          placeholder="Équipements, locaux..." 
-        />
-      </Field>
-      <Field label="Ressources logicielles" fkey="ressourcesLog" warning={warnings.ressourcesLog}>
-        <TagInput 
-          tags={form.ressourcesLog} 
-          onChange={(v) => set("ressourcesLog", v)} 
-          placeholder="Logiciels, plateformes..." 
-        />
-      </Field>
-    </div>
-
-    <div style={styles.divider} />
-    <SectionHeader num="2b" title="KPIs — Indicateurs de Performance" sub="Définir les mesures de suivi du processus" />
-    {form.kpis.map((kpi, i) => (
-      <div key={i} style={styles.kpiCard}>
-        <div style={styles.kpiCardHeader}>
-          <span style={styles.kpiCardTitle}>KPI #{i + 1}</span>
-          <button type="button" style={styles.removeCard} onClick={() => set("kpis", form.kpis.filter((_, idx) => idx !== i))}>✕ Supprimer</button>
-        </div>
-        <div style={styles.grid3}>
-          {[
-            { key: "nom", label: "Nom du KPI", placeholder: "Ex : Taux de réussite" },
-            { key: "unite", label: "Unité", placeholder: "%, jours, nombre..." },
-            { key: "valeurCible", label: "Valeur cible", placeholder: "Ex : ≥ 90%" },
-            { key: "seuilAlerte", label: "Seuil d'alerte", placeholder: "Ex : < 75%" },
-            { key: "frequence", label: "Fréquence de collecte", placeholder: "Mensuel, Annuel..." },
-            { key: "responsable", label: "Responsable", placeholder: "Nom ou rôle" },
-          ].map(({ key, label, placeholder }) => (
-            <Field key={key} label={label}>
-              <Input value={kpi[key]} onChange={(e) => { const u = [...form.kpis]; u[i] = { ...u[i], [key]: e.target.value }; set("kpis", u); }} placeholder={placeholder} />
-            </Field>
-          ))}
-        </div>
-      </div>
-    ))}
-    <button type="button" style={styles.addBtn} onClick={() => set("kpis", [...form.kpis, makeKpi()])}>＋ Ajouter un KPI</button>
-  </div>
-);
-
-const renderTab3 = () => (
-  <div>
-    <SectionHeader num="3" title="Contexte et Environnement" sub="Cartographie des processus voisins et facteurs contextuels" />
-    
-    <div style={{ ...styles.fluxBox, marginBottom: 24 }}>
-      <div>
-        <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 8, textTransform: "uppercase" }}>← Processus AMONT</div>
-        <DynamicList items={form.processusAmont} onChange={(v) => set("processusAmont", v)} placeholder="Processus fournisseur..." />
-      </div>
-      <div style={styles.fluxArrow}>⇄</div>
-      <div>
-        <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 8, textTransform: "uppercase" }}>Processus AVAL →</div>
-        <DynamicList items={form.processusAval} onChange={(v) => set("processusAval", v)} placeholder="Processus client..." />
-      </div>
-    </div>
-    
-    <div style={styles.grid2}>
-      <div style={styles.gridFull}>
-        <Field label="Enjeux stratégiques" fkey="enjeuxStrategiques" warning={warnings.enjeuxStrategiques}>
+    <div>
+      <SectionHeader num="2" title="Éléments Clés du Processus" sub="Flux, ressources, compétences et indicateurs de performance" />
+      <div style={styles.grid2}>
+        <Field label="Période / Mois" fkey="periode" warning={warnings.periode}>
+          <Input 
+            value={form.periode} 
+            onChange={(e) => set("periode", e.target.value)} 
+            placeholder="Ex : Oct → Juin (9 mois)"
+            warning={warnings.periode}
+          />
+        </Field>
+        <Field label="Objectif stratégique" fkey="objectifStrategique" warning={warnings.objectifStrategique}>
+          <Input 
+            value={form.objectifStrategique} 
+            onChange={(e) => set("objectifStrategique", e.target.value)} 
+            placeholder="Lien avec la stratégie globale..."
+            warning={warnings.objectifStrategique}
+          />
+        </Field>
+        <Field label="Clients / Bénéficiaires" fkey="clients" warning={warnings.clients}>
           <TextArea 
-            value={form.enjeuxStrategiques} 
-            onChange={(e) => set("enjeuxStrategiques", e.target.value)} 
-            placeholder="Décrire les enjeux liés à ce processus..." 
-            rows={3}
-            warning={warnings.enjeuxStrategiques}
+            value={form.clients} 
+            onChange={(e) => set("clients", e.target.value)} 
+            placeholder="Étudiants, Direction, Entreprises partenaires..." 
+            rows={2}
+            warning={warnings.clients}
+          />
+        </Field>
+        <Field label="Effectifs impliqués" fkey="effectifs" warning={warnings.effectifs}>
+          <TextArea 
+            value={form.effectifs} 
+            onChange={(e) => set("effectifs", e.target.value)} 
+            placeholder="Ex : 12 enseignants, 3 membres administratifs..." 
+            rows={2}
+            warning={warnings.effectifs}
           />
         </Field>
       </div>
-      <Field label="Moyens alloués" fkey="moyensAlloues" warning={warnings.moyensAlloues}>
-        <TagInput 
-          tags={form.moyensAlloues} 
-          onChange={(v) => set("moyensAlloues", v)} 
-          placeholder="Ressources, outils..." 
-        />
-      </Field>
-    </div>
-    
-    <div style={styles.divider} />
-    <div style={{ marginBottom: 20 }}>
-      <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12 }}>⚠ Contraintes</div>
-      <DynamicList items={form.contraintes} onChange={(v) => set("contraintes", v)} placeholder="Contrainte réglementaire, temporelle..." />
-    </div>
-    
-    <div style={styles.divider} />
-    <SectionHeader num="3b" title="Risques identifiés" sub="Probabilité × Gravité = Criticité calculée automatiquement" />
-    {form.risques.map((r, i) => {
-      const crit = parseInt(r.probabilite || 1) * parseInt(r.gravite || 1);
-      const critColor = crit >= 9 ? C.danger : crit >= 4 ? C.warn : "#4caf50";
-      return (
-        <div key={i} style={styles.riskCard}>
-          <div style={styles.kpiCardHeader}>
-            <span style={styles.kpiCardTitle}>
-              Risque #{i + 1}{" "}
-              <span style={{ ...styles.critBadge, background: critColor + "22", color: critColor }}>Criticité : {crit}</span>
-            </span>
-            <button type="button" style={styles.removeCard} onClick={() => set("risques", form.risques.filter((_, idx) => idx !== i))}>✕ Supprimer</button>
+
+      <div style={styles.divider} />
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12 }}>Flux d'entrées / Sorties</div>
+        <div style={styles.fluxBox}>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 8, textTransform: "uppercase" }}>↙ Entrées</div>
+            <DynamicList items={form.fluxEntrees} onChange={(v) => set("fluxEntrees", v)} placeholder="Flux d'entrée..." />
           </div>
-          <div style={styles.grid2}>
-            <div style={styles.gridFull}>
-              <Field label="Description du risque" warning={warnings[`risque_${i}_description`]}>
-                <Input 
-                  value={r.description} 
-                  onChange={(e) => { 
-                    const u = [...form.risques]; 
-                    u[i] = { ...u[i], description: e.target.value }; 
-                    set("risques", u);
-                    // Validate the description
-                    const spellResult = validateFrenchSpelling(e.target.value);
-                    if (!spellResult.isValid && e.target.value.length > 3) {
-                      const unknownWords = spellResult.warnings.slice(0, 3);
-                      setWarnings(prev => ({ 
-                        ...prev, 
-                        [`risque_${i}_description`]: `Mots suspects: ${unknownWords.join(', ')}${spellResult.warnings.length > 3 ? '...' : ''}`
-                      }));
-                    } else {
-                      setWarnings(prev => {
-                        const newWarnings = { ...prev };
-                        delete newWarnings[`risque_${i}_description`];
-                        return newWarnings;
-                      });
-                    }
-                  }} 
-                  placeholder="Décrire le risque identifié..." 
-                />
-              </Field>
-            </div>
-            <Field label="Probabilité (1–3)">
-              <Select value={r.probabilite} onChange={(e) => { const u = [...form.risques]; u[i] = { ...u[i], probabilite: e.target.value }; set("risques", u); }} options={[{ value: "1", label: "1 – Faible" }, { value: "2", label: "2 – Moyenne" }, { value: "3", label: "3 – Élevée" }]} />
-            </Field>
-            <Field label="Gravité (1–3)">
-              <Select value={r.gravite} onChange={(e) => { const u = [...form.risques]; u[i] = { ...u[i], gravite: e.target.value }; set("risques", u); }} options={[{ value: "1", label: "1 – Mineure" }, { value: "2", label: "2 – Modérée" }, { value: "3", label: "3 – Sévère" }]} />
-            </Field>
-            <Field label="Mesure d'atténuation" warning={warnings[`risque_${i}_mesure`]}>
-              <Input 
-                value={r.mesure} 
-                onChange={(e) => { 
-                  const u = [...form.risques]; 
-                  u[i] = { ...u[i], mesure: e.target.value }; 
-                  set("risques", u);
-                  const spellResult = validateFrenchSpelling(e.target.value);
-                  if (!spellResult.isValid && e.target.value.length > 3) {
-                    const unknownWords = spellResult.warnings.slice(0, 3);
-                    setWarnings(prev => ({ 
-                      ...prev, 
-                      [`risque_${i}_mesure`]: `Mots suspects: ${unknownWords.join(', ')}${spellResult.warnings.length > 3 ? '...' : ''}`
-                    }));
-                  } else {
-                    setWarnings(prev => {
-                      const newWarnings = { ...prev };
-                      delete newWarnings[`risque_${i}_mesure`];
-                      return newWarnings;
-                    });
-                  }
-                }} 
-                placeholder="Action préventive ou corrective..." 
-              />
-            </Field>
-            <Field label="Responsable" warning={warnings[`risque_${i}_responsable`]}>
-              <Input 
-                value={r.responsable} 
-                onChange={(e) => { 
-                  const u = [...form.risques]; 
-                  u[i] = { ...u[i], responsable: e.target.value }; 
-                  set("risques", u);
-                  // Validate that it's a name (no numbers)
-                  if (e.target.value && !isValidName(e.target.value)) {
-                    setWarnings(prev => ({ 
-                      ...prev, 
-                      [`risque_${i}_responsable`]: "Le nom ne doit pas contenir de chiffres."
-                    }));
-                  } else {
-                    setWarnings(prev => {
-                      const newWarnings = { ...prev };
-                      delete newWarnings[`risque_${i}_responsable`];
-                      return newWarnings;
-                    });
-                  }
-                }} 
-                placeholder="Nom ou rôle..." 
-              />
-            </Field>
+          <div style={styles.fluxArrow}>⇄</div>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 8, textTransform: "uppercase" }}>Sorties ↗</div>
+            <DynamicList items={form.fluxSorties} onChange={(v) => set("fluxSorties", v)} placeholder="Flux de sortie..." />
           </div>
         </div>
-      );
-    })}
-    <button type="button" style={styles.addBtn} onClick={() => set("risques", [...form.risques, makeRisque()])}>＋ Ajouter un risque</button>
-  </div>
-);
+      </div>
+
+      <div style={styles.grid2}>
+        <Field label="Compétences clés" fkey="competences" warning={warnings.competences}>
+          <TagInput tags={form.competences} onChange={(v) => set("competences", v)} placeholder="Ajouter une compétence..." />
+        </Field>
+        <Field label="Ressources matérielles" fkey="ressourcesMat" warning={warnings.ressourcesMat}>
+          <TagInput tags={form.ressourcesMat} onChange={(v) => set("ressourcesMat", v)} placeholder="Équipements, locaux..." />
+        </Field>
+        <Field label="Ressources logicielles" fkey="ressourcesLog" warning={warnings.ressourcesLog}>
+          <TagInput tags={form.ressourcesLog} onChange={(v) => set("ressourcesLog", v)} placeholder="Logiciels, plateformes..." />
+        </Field>
+      </div>
+
+      <div style={styles.divider} />
+      <SectionHeader num="2b" title="KPIs — Indicateurs de Performance" sub="Définir les mesures de suivi du processus" />
+      {form.kpis.map((kpi, i) => (
+        <div key={i} style={styles.kpiCard}>
+          <div style={styles.kpiCardHeader}>
+            <span style={styles.kpiCardTitle}>KPI #{i + 1}</span>
+            <button type="button" style={styles.removeCard} onClick={() => set("kpis", form.kpis.filter((_, idx) => idx !== i))}>✕ Supprimer</button>
+          </div>
+          <div style={styles.grid3}>
+            {[
+              { key: "nom", label: "Nom du KPI", placeholder: "Ex : Taux de réussite" },
+              { key: "unite", label: "Unité", placeholder: "%, jours, nombre..." },
+              { key: "valeurCible", label: "Valeur cible", placeholder: "Ex : ≥ 90%" },
+              { key: "seuilAlerte", label: "Seuil d'alerte", placeholder: "Ex : < 75%" },
+              { key: "frequence", label: "Fréquence de collecte", placeholder: "Mensuel, Annuel..." },
+              { key: "responsable", label: "Responsable", placeholder: "Nom ou rôle" },
+            ].map(({ key, label, placeholder }) => (
+              <Field key={key} label={label}>
+                <Input value={kpi[key]} onChange={(e) => { const u = [...form.kpis]; u[i] = { ...u[i], [key]: e.target.value }; set("kpis", u); }} placeholder={placeholder} />
+              </Field>
+            ))}
+          </div>
+        </div>
+      ))}
+      <button type="button" style={styles.addBtn} onClick={() => set("kpis", [...form.kpis, makeKpi()])}>＋ Ajouter un KPI</button>
+    </div>
+  );
+
+  const renderTab3 = () => (
+    <div>
+      <SectionHeader num="3" title="Contexte et Environnement" sub="Cartographie des processus voisins et facteurs contextuels" />
+      
+      <div style={{ ...styles.fluxBox, marginBottom: 24 }}>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 8, textTransform: "uppercase" }}>← Processus AMONT</div>
+          <DynamicList items={form.processusAmont} onChange={(v) => set("processusAmont", v)} placeholder="Processus fournisseur..." />
+        </div>
+        <div style={styles.fluxArrow}>⇄</div>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 8, textTransform: "uppercase" }}>Processus AVAL →</div>
+          <DynamicList items={form.processusAval} onChange={(v) => set("processusAval", v)} placeholder="Processus client..." />
+        </div>
+      </div>
+      
+      <div style={styles.grid2}>
+        <div style={styles.gridFull}>
+          <Field label="Enjeux stratégiques" fkey="enjeuxStrategiques" warning={warnings.enjeuxStrategiques}>
+            <TextArea 
+              value={form.enjeuxStrategiques} 
+              onChange={(e) => set("enjeuxStrategiques", e.target.value)} 
+              placeholder="Décrire les enjeux liés à ce processus..." 
+              rows={3}
+              warning={warnings.enjeuxStrategiques}
+            />
+          </Field>
+        </div>
+        <Field label="Moyens alloués" fkey="moyensAlloues" warning={warnings.moyensAlloues}>
+          <TagInput tags={form.moyensAlloues} onChange={(v) => set("moyensAlloues", v)} placeholder="Ressources, outils..." />
+        </Field>
+      </div>
+      
+      <div style={styles.divider} />
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12 }}>⚠ Contraintes</div>
+        <DynamicList items={form.contraintes} onChange={(v) => set("contraintes", v)} placeholder="Contrainte réglementaire, temporelle..." />
+      </div>
+      
+      <div style={styles.divider} />
+      <SectionHeader num="3b" title="Risques identifiés" sub="Probabilité × Gravité = Criticité calculée automatiquement" />
+      {form.risques.map((r, i) => {
+        const crit = parseInt(r.probabilite || 1) * parseInt(r.gravite || 1);
+        const critColor = crit >= 9 ? C.danger : crit >= 4 ? C.warn : "#4caf50";
+        return (
+          <div key={i} style={styles.riskCard}>
+            <div style={styles.kpiCardHeader}>
+              <span style={styles.kpiCardTitle}>
+                Risque #{i + 1}{" "}
+                <span style={{ ...styles.critBadge, background: critColor + "22", color: critColor }}>Criticité : {crit}</span>
+              </span>
+              <button type="button" style={styles.removeCard} onClick={() => set("risques", form.risques.filter((_, idx) => idx !== i))}>✕ Supprimer</button>
+            </div>
+            <div style={styles.grid2}>
+              <div style={styles.gridFull}>
+                <Field label="Description du risque">
+                  <Input value={r.description} onChange={(e) => { const u = [...form.risques]; u[i] = { ...u[i], description: e.target.value }; set("risques", u); }} placeholder="Décrire le risque identifié..." />
+                </Field>
+              </div>
+              <Field label="Probabilité (1–3)">
+                <Select value={r.probabilite} onChange={(e) => { const u = [...form.risques]; u[i] = { ...u[i], probabilite: e.target.value }; set("risques", u); }} options={[{ value: "1", label: "1 – Faible" }, { value: "2", label: "2 – Moyenne" }, { value: "3", label: "3 – Élevée" }]} />
+              </Field>
+              <Field label="Gravité (1–3)">
+                <Select value={r.gravite} onChange={(e) => { const u = [...form.risques]; u[i] = { ...u[i], gravite: e.target.value }; set("risques", u); }} options={[{ value: "1", label: "1 – Mineure" }, { value: "2", label: "2 – Modérée" }, { value: "3", label: "3 – Sévère" }]} />
+              </Field>
+              <Field label="Mesure d'atténuation">
+                <Input value={r.mesure} onChange={(e) => { const u = [...form.risques]; u[i] = { ...u[i], mesure: e.target.value }; set("risques", u); }} placeholder="Action préventive ou corrective..." />
+              </Field>
+              <Field label="Responsable">
+                <Input value={r.responsable} onChange={(e) => { const u = [...form.risques]; u[i] = { ...u[i], responsable: e.target.value }; set("risques", u); }} placeholder="Nom ou rôle..." />
+              </Field>
+            </div>
+          </div>
+        );
+      })}
+      <button type="button" style={styles.addBtn} onClick={() => set("risques", [...form.risques, makeRisque()])}>＋ Ajouter un risque</button>
+    </div>
+  );
 
   const renderTab4 = () => (
     <div>
@@ -1718,16 +1798,13 @@ const renderTab3 = () => (
         <div style={styles.main}>
           {/* ── Topbar ── */}
           <div style={styles.topbar}>
-            {/* Left: breadcrumb */}
             <div style={styles.breadcrumb}>
               <span style={{ cursor: "pointer" }} onClick={() => navigate("/processus")}>Fiches Processus</span>
               <span style={{ color: C.border }}>›</span>
               <span style={styles.breadcrumbActive}>{isEdit ? "Modifier le processus" : "Nouveau processus"}</span>
             </div>
 
-            {/* Right: same design as MainContent topbar */}
             <div style={styles.topbarRight}>
-              {/* Field edit mode toggle */}
               <button
                 type="button"
                 onClick={() => setFieldEditMode((v) => !v)}
@@ -1742,7 +1819,6 @@ const renderTab3 = () => (
                 {fieldEditMode ? "✓ Mode édition champs" : "⚙ Personnaliser champs"}
               </button>
 
-              {/* Globe / Language */}
               <div className="icon-btn-form" style={styles.iconBtn}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="1.8" strokeLinecap="round">
                   <circle cx="12" cy="12" r="10" />
@@ -1751,7 +1827,6 @@ const renderTab3 = () => (
                 <span style={{ fontSize: 12, fontWeight: 600, color: "#555" }}>FR</span>
               </div>
 
-              {/* Bell */}
               <div
                 className="icon-btn-form"
                 style={{ ...styles.iconBtn, cursor: "pointer" }}
@@ -1764,7 +1839,6 @@ const renderTab3 = () => (
                 {unreadCount > 0 && <span style={styles.nDot} />}
               </div>
 
-              {/* User chip */}
               <div className="u-chip-form" style={styles.uChip} onClick={() => navigate("/parametres")}>
                 <div style={styles.uAv}>AZ</div>
                 <div>
@@ -1778,7 +1852,6 @@ const renderTab3 = () => (
             </div>
           </div>
 
-          {/* ── Scrollable content ── */}
           <div style={styles.content}>
             {/* Header card */}
             <div style={styles.headerCard}>

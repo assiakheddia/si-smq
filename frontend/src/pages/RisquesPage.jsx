@@ -13,17 +13,23 @@ const C = {
 /* ══ données initiales ══ */
 const INIT_RISQUES = [
   { id: "R-001", titre: "Retard de révision documentaire", processus: "Gestion PFE",      probabilite: 3, gravite: 4, statut: "Ouvert",   responsable: "Haddadou",  echeance: "2026-05-30", mesure: "Mise en place d'un calendrier de révision" },
-  { id: "R-002", titre: "Non-conformité fournisseur",       processus: "Contrôle Qualité", probabilite: 2, gravite: 5, statut: "En cours",  responsable: "Meziani",   echeance: "2026-06-15", mesure: "Audit fournisseur planifié" },
+  { id: "R-002", titre: "Non-conformité fournisseur",       processus: "Contrôle Qualité", probabilite: 2, gravite: 5, statut: "Ouvert",   responsable: "Meziani",   echeance: "2026-06-15", mesure: "Audit fournisseur planifié" },
   { id: "R-003", titre: "Perte de compétences clés",        processus: "Formation ISO",    probabilite: 2, gravite: 3, statut: "Traité",    responsable: "Kaci",      echeance: "2026-06-01", mesure: "Plan de formation et tutorat" },
   { id: "R-004", titre: "Défaillance équipement labo",      processus: "Audit Labo",       probabilite: 4, gravite: 4, statut: "Ouvert",   responsable: "Bensalem",  echeance: "2026-05-25", mesure: "Contrat de maintenance préventive" },
-  { id: "R-005", titre: "Données qualité incomplètes",      processus: "Gestion PFE",      probabilite: 3, gravite: 3, statut: "En cours",  responsable: "Haddadou",  echeance: "2026-06-10", mesure: "Formulaires standardisés déployés" },
+  { id: "R-005", titre: "Données qualité incomplètes",      processus: "Gestion PFE",      probabilite: 3, gravite: 3, statut: "Ouvert",   responsable: "Haddadou",  echeance: "2026-06-10", mesure: "Formulaires standardisés déployés" },
   { id: "R-006", titre: "Dépassement délai audit interne",  processus: "Audit Interne",    probabilite: 2, gravite: 2, statut: "Traité",    responsable: "Meziani",   echeance: "2026-06-05", mesure: "Rappels automatiques paramétrés" },
+  { id: "R-007", titre: "Non-conformité documentation",     processus: "Documentation",    probabilite: 4, gravite: 5, statut: "Ouvert",   responsable: "Kaci",      echeance: "2026-06-20", mesure: "Révision complète du système documentaire" },
+  { id: "R-008", titre: "Retard formation personnel",       processus: "Formation ISO",    probabilite: 5, gravite: 4, statut: "Ouvert",   responsable: "Haddadou",  echeance: "2026-06-25", mesure: "Plan de formation accéléré" },
+  { id: "R-009", titre: "Défaut de traçabilité",           processus: "Contrôle Qualité", probabilite: 3, gravite: 5, statut: "Traité",    responsable: "Meziani",   echeance: "2026-05-28", mesure: "Système de traçabilité déployé" },
 ];
 
 const INIT_OPPORTUNITES = [
-  { id: "O-001", titre: "Digitalisation des fiches processus",  impact: "Fort",  statut: "En cours",  responsable: "Meziani" },
-  { id: "O-002", titre: "Certification ISO 9001 version 2025",  impact: "Fort",  statut: "Planifié",  responsable: "Haddadou" },
-  { id: "O-003", titre: "Automatisation des rapports qualité",  impact: "Moyen", statut: "Planifié",  responsable: "Kaci" },
+  { id: "O-001", titre: "Digitalisation des fiches processus", processus: "Gestion PFE", impact: "Fort", statut: "En cours", responsable: "Meziani", auteur: "Auditeur Interne", dateCreation: "2026-01-15" },
+  { id: "O-002", titre: "Certification ISO 9001 version 2025", processus: "Contrôle Qualité", impact: "Fort", statut: "Planifié", responsable: "Haddadou", auteur: "Direction", dateCreation: "2026-02-10" },
+  { id: "O-003", titre: "Automatisation des rapports qualité", processus: "Gestion PFE", impact: "Moyen", statut: "Planifié", responsable: "Kaci", auteur: "Préparateur", dateCreation: "2026-03-05" },
+  { id: "O-004", titre: "Mise à jour des procédures qualité", processus: "Audit Labo", impact: "Moyen", statut: "En cours", responsable: "Bensalem", auteur: "Auditeur Interne", dateCreation: "2026-01-20" },
+  { id: "O-005", titre: "Formation continue des équipes", processus: "Formation ISO", impact: "Fort", statut: "En cours", responsable: "Kaci", auteur: "Auditeur Externe", dateCreation: "2026-02-28" },
+  { id: "O-006", titre: "Système de suivi des indicateurs qualité", processus: "Contrôle Qualité", impact: "Moyen", statut: "Planifié", responsable: "Meziani", auteur: "Préparateur", dateCreation: "2026-03-15" },
 ];
 
 /* ══ helpers criticité ══ */
@@ -36,7 +42,6 @@ function niveauCrit(c) {
 }
 function statutStyle(s) {
   if (s === "Ouvert")   return { color: "#991b1b", bg: "#fee2e2" };
-  if (s === "En cours") return { color: "#92400e", bg: "#fef3c7" };
   return                       { color: "#166534", bg: "#dcfce7" };
 }
 function fmtDate(d) {
@@ -117,7 +122,6 @@ function RisqueModal({ onClose, onSave, nextId }) {
         boxShadow: "0 28px 70px rgba(0,0,0,0.22)",
         fontFamily: "'Plus Jakarta Sans', sans-serif",
       }}>
-        {/* header modal */}
         <div style={{
           padding: "20px 26px 16px",
           borderBottom: `1px solid ${C.border}`,
@@ -141,7 +145,6 @@ function RisqueModal({ onClose, onSave, nextId }) {
         </div>
 
         <div style={{ padding: "22px 26px", display: "flex", flexDirection: "column", gap: 18 }}>
-          {/* Criticité en temps réel */}
           <div style={{
             background: nc.bg, border: `1.5px solid ${nc.color}30`,
             borderRadius: 12, padding: "12px 16px",
@@ -157,7 +160,6 @@ function RisqueModal({ onClose, onSave, nextId }) {
             </div>
           </div>
 
-          {/* Titre */}
           <Field label="Intitulé du risque" required>
             <input
               value={form.titre}
@@ -168,7 +170,6 @@ function RisqueModal({ onClose, onSave, nextId }) {
             {errors.titre && <span style={{ fontSize: 11, color: C.danger }}>{errors.titre}</span>}
           </Field>
 
-          {/* Processus */}
           <Field label="Processus concerné" required>
             <div style={{ position: "relative" }}>
               <select
@@ -177,7 +178,7 @@ function RisqueModal({ onClose, onSave, nextId }) {
                 style={{ ...inputStyle, appearance: "none", cursor: "pointer", borderColor: errors.processus ? C.danger : C.border }}
               >
                 <option value="">— Sélectionner un processus —</option>
-                {["Gestion PFE", "Contrôle Qualité", "Formation ISO", "Audit Labo", "Audit Interne", "Gestion Labo", "Sécurité Labo"].map((p) => (
+                {["Gestion PFE", "Contrôle Qualité", "Formation ISO", "Audit Labo", "Audit Interne", "Gestion Labo", "Sécurité Labo", "Documentation"].map((p) => (
                   <option key={p}>{p}</option>
                 ))}
               </select>
@@ -188,7 +189,6 @@ function RisqueModal({ onClose, onSave, nextId }) {
             {errors.processus && <span style={{ fontSize: 11, color: C.danger }}>{errors.processus}</span>}
           </Field>
 
-          {/* Probabilité + Gravité sliders */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
             <Field label="Probabilité (P)">
               <div style={{ background: C.softBg, borderRadius: 10, border: `1.5px solid ${C.border}`, padding: "10px 14px" }}>
@@ -226,7 +226,6 @@ function RisqueModal({ onClose, onSave, nextId }) {
             </Field>
           </div>
 
-          {/* Mesure de maîtrise */}
           <Field label="Mesure de maîtrise">
             <textarea
               value={form.mesure}
@@ -237,7 +236,6 @@ function RisqueModal({ onClose, onSave, nextId }) {
             />
           </Field>
 
-          {/* Responsable + Échéance */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
             <Field label="Responsable" required>
               <input
@@ -259,10 +257,9 @@ function RisqueModal({ onClose, onSave, nextId }) {
             </Field>
           </div>
 
-          {/* Statut initial */}
           <Field label="Statut initial">
             <div style={{ display: "flex", gap: 8 }}>
-              {["Ouvert", "En cours"].map((s) => (
+              {["Ouvert", "Traité"].map((s) => (
                 <button key={s} onClick={() => set("statut", s)} style={{
                   flex: 1, padding: "9px 0", borderRadius: 9,
                   border: `1.5px solid ${form.statut === s ? C.primary : C.border}`,
@@ -277,7 +274,6 @@ function RisqueModal({ onClose, onSave, nextId }) {
           </Field>
         </div>
 
-        {/* footer modal */}
         <div style={{
           padding: "16px 26px 22px",
           borderTop: `1px solid ${C.border}`,
@@ -366,13 +362,17 @@ function MatriceRisque({ risques }) {
 export default function RisquesPage() {
   const navigate = useNavigate();
   const [risques, setRisques] = useState(INIT_RISQUES);
-  const [opps] = useState(INIT_OPPORTUNITES);
+  const [opps, setOpps] = useState(INIT_OPPORTUNITES);
   const [tab, setTab] = useState(0);
   const [filter, setFilter] = useState("Tous");
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [showNotifs, setShowNotifs] = useState(false);
   const [unread] = useState(() => getUnreadCount());
+
+  // Filters for Opportunities tab
+  const [processFilter, setProcessFilter] = useState("Tous");
+  const [actorFilter, setActorFilter] = useState("Tous");
 
   const nextId = `R-${String(risques.length + 1).padStart(3, "0")}`;
 
@@ -388,13 +388,42 @@ export default function RisquesPage() {
     return matchSearch && matchFilter;
   });
 
-  const kpi = [
-    { label: "Risques identifiés", value: risques.length,                                       color: "#1e40af", bg: "#dbeafe" },
-    { label: "Ouverts",            value: risques.filter((r) => r.statut === "Ouvert").length,   color: "#991b1b", bg: "#fee2e2" },
-    { label: "En traitement",      value: risques.filter((r) => r.statut === "En cours").length, color: "#92400e", bg: "#fef3c7" },
-    { label: "Traités",            value: risques.filter((r) => r.statut === "Traité").length,   color: "#166534", bg: "#dcfce7" },
-    { label: "Criticité moy.",     value: risques.length ? Math.round(risques.reduce((s, r) => s + criticite(r.probabilite, r.gravite), 0) / risques.length) : 0, color: "#6b21a8", bg: "#f3e8ff" },
-  ];
+  // Filter opportunities
+  const filteredOpps = opps.filter((o) => {
+    const matchProcess = processFilter === "Tous" || o.processus === processFilter;
+    const matchActor = actorFilter === "Tous" || o.auteur === actorFilter;
+    return matchProcess && matchActor;
+  });
+
+  // Get unique processes for filter
+  const uniqueProcesses = ["Tous", ...new Set(opps.map(o => o.processus))];
+  const uniqueActors = ["Tous", ...new Set(opps.map(o => o.auteur))];
+
+  // Data for charts
+  const risquesParProcessus = {};
+  risques.forEach(r => {
+    risquesParProcessus[r.processus] = (risquesParProcessus[r.processus] || 0) + 1;
+  });
+  const processusLabels = Object.keys(risquesParProcessus);
+  const processusValues = Object.values(risquesParProcessus);
+
+  const risquesParNiveau = {
+    "Critique": 0, "Élevé": 0, "Modéré": 0, "Faible": 0
+  };
+  risques.forEach(r => {
+    const nc = niveauCrit(criticite(r.probabilite, r.gravite));
+    risquesParNiveau[nc.label] = (risquesParNiveau[nc.label] || 0) + 1;
+  });
+
+  const tauxTraitement = Math.round((risques.filter(r => r.statut === "Traité").length / risques.length) * 100);
+
+  // Actor style mapping
+  const actorStyles = {
+    "Préparateur": { color: "#1e40af", bg: "#dbeafe" },
+    "Auditeur Interne": { color: "#991b1b", bg: "#fee2e2" },
+    "Auditeur Externe": { color: "#166534", bg: "#dcfce7" },
+    "Direction": { color: "#92400e", bg: "#fef3c7" },
+  };
 
   return (
     <>
@@ -409,7 +438,6 @@ export default function RisquesPage() {
         .rq-u-chip { display:flex; align-items:center; gap:8px; background:#f3f5f7; border:1px solid #e8eaed; border-radius:11px; padding:4px 10px 4px 5px; cursor:pointer; transition:background 0.15s; }
         .rq-u-chip:hover { background:#ebeef1; }
         .rq-u-av { width:28px; height:28px; border-radius:8px; background:linear-gradient(135deg,#5ecf7a,#2d9e5f); display:flex; align-items:center; justify-content:center; font-family:'Outfit',sans-serif; font-weight:900; font-size:10px; color:#152b21; }
-        .rq-kpi { display:grid; grid-template-columns:repeat(5,1fr); gap:clamp(10px,1.2vw,14px); margin-bottom:clamp(16px,2vw,22px); }
         .rq-card { background:#fff; border-radius:clamp(14px,1.5vw,18px); overflow:hidden; box-shadow:0 1px 6px rgba(0,0,0,0.06); animation:fadeUp 0.4s ease 0.1s both; }
         .rq-row:hover td { background:#f8fcf9 !important; }
         .rq-tbl { width:100%; border-collapse:collapse; min-width:700px; }
@@ -417,8 +445,23 @@ export default function RisquesPage() {
         .rq-tbl tbody td { padding:11px 16px; font-size:13px; color:#374151; border-top:1px solid #f0f2f4; font-family:'Plus Jakarta Sans',sans-serif; }
         .rq-filter-btn { padding:6px 13px; border-radius:9px; border:1.5px solid #e8eaed; background:white; color:#6b7280; cursor:pointer; font-size:12px; font-weight:600; font-family:'Plus Jakarta Sans',sans-serif; transition:all 0.15s; }
         .rq-filter-btn.active { border-color:#1e3d2f; background:#1e3d2f; color:white; }
-        @media (max-width:1200px) { .rq-kpi { grid-template-columns:repeat(3,1fr); } }
-        @media (max-width:768px)  { .rq-kpi { grid-template-columns:repeat(2,1fr); } }
+        .rq-chart-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:18px; margin-bottom:24px; }
+        .rq-chart-card { background:#fff; border-radius:16px; padding:20px 24px; border:1px solid ${C.border}; animation:fadeUp 0.3s ease; }
+        .rq-chart-title { font-size:13px; font-weight:700; color:${C.muted}; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:16px; }
+        .rq-bar-container { display:flex; align-items:flex-end; justify-content:space-around; height:140px; gap:8px; }
+        .rq-bar { flex:1; display:flex; flex-direction:column; align-items:center; gap:6px; }
+        .rq-bar-fill { width:100%; max-width:32px; border-radius:6px 6px 0 0; transition:height 0.6s cubic-bezier(0.4,0,0.2,1); }
+        .rq-bar-label { font-size:10px; color:${C.muted}; text-align:center; font-weight:600; }
+        .rq-bar-value { font-size:12px; font-weight:800; color:${C.text}; }
+        .rq-donut-legend { display:flex; flex-direction:column; gap:6px; }
+        .rq-legend-item { display:flex; align-items:center; gap:8px; font-size:12px; color:${C.text}; }
+        .rq-legend-dot { width:10px; height:10px; border-radius:4px; flex-shrink:0; }
+        .rq-filter-row { display:flex; align-items:center; flex-wrap:wrap; gap:10px; padding:14px 20px 12px; border-bottom:1px solid #f0f2f4; }
+        .rq-filter-select { padding:6px 12px; border-radius:9px; border:1.5px solid #e8eaed; background:white; color:#374151; font-size:12px; font-weight:500; font-family:'Plus Jakarta Sans',sans-serif; cursor:pointer; outline:none; }
+        .rq-filter-select:focus { border-color:${C.primary}; }
+        .rq-actor-badge { display:inline-block; padding:2px 8px; border-radius:12px; font-size:10px; font-weight:700; }
+        @media (max-width:1024px) { .rq-chart-grid { grid-template-columns:1fr; } }
+        @media (max-width:768px) { .rq-chart-grid { grid-template-columns:1fr; } }
       `}</style>
 
       {showModal && <RisqueModal onClose={() => setShowModal(false)} onSave={handleSave} nextId={nextId} />}
@@ -486,25 +529,104 @@ export default function RisquesPage() {
           </button>
         </div>
 
-        {/* ── KPIs ── */}
-        <div className="rq-kpi">
-          {kpi.map((k, i) => (
-            <div key={i} style={{
-              background: "#fff", borderRadius: 16, padding: "18px 20px",
-              boxShadow: "0 1px 6px rgba(0,0,0,0.06)",
-              display: "flex", alignItems: "center", gap: 14,
-              animation: `fadeUp 0.35s ease ${0.05 + i * 0.05}s both`,
-              border: `1px solid ${k.bg}`,
-            }}>
-              <div style={{ width: 44, height: 44, borderRadius: 12, background: k.bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                <span style={{ width: 12, height: 12, borderRadius: "50%", background: k.color, display: "block" }} />
+        {/* ── Charts Grid ── */}
+        <div className="rq-chart-grid">
+          {/* Chart 1: Répartition par Niveau de Criticité */}
+          <div className="rq-chart-card">
+            <div className="rq-chart-title">Criticité des risques</div>
+            <div style={{ display: "flex", justifyContent: "space-around", alignItems: "center", height: 140 }}>
+              <div style={{ position: "relative", width: 100, height: 100 }}>
+                <svg viewBox="0 0 120 120" style={{ width: "100%", height: "100%" }}>
+                  {(() => {
+                    const total = Object.values(risquesParNiveau).reduce((a, b) => a + b, 0);
+                    const colors = { "Critique": "#991b1b", "Élevé": "#92400e", "Modéré": "#1e40af", "Faible": "#166534" };
+                    let startAngle = 0;
+                    const segments = [];
+                    Object.entries(risquesParNiveau).forEach(([label, value]) => {
+                      if (value === 0) return;
+                      const percentage = value / total;
+                      const endAngle = startAngle + percentage * 2 * Math.PI;
+                      const x1 = 60 + 50 * Math.cos(startAngle);
+                      const y1 = 60 + 50 * Math.sin(startAngle);
+                      const x2 = 60 + 50 * Math.cos(endAngle);
+                      const y2 = 60 + 50 * Math.sin(endAngle);
+                      const largeArc = percentage > 0.5 ? 1 : 0;
+                      segments.push(
+                        <path key={label} d={`M 60 60 L ${x1} ${y1} A 50 50 0 ${largeArc} 1 ${x2} ${y2} Z`} fill={colors[label]} />
+                      );
+                      startAngle = endAngle;
+                    });
+                    return segments;
+                  })()}
+                  <circle cx="60" cy="60" r="24" fill="white" />
+                  <text x="60" y="58" textAnchor="middle" fontSize="16" fontWeight="800" fill="#111" fontFamily="'Outfit',sans-serif">
+                    {risques.length}
+                  </text>
+                  <text x="60" y="74" textAnchor="middle" fontSize="9" fill="#6b7280" fontFamily="'Plus Jakarta Sans',sans-serif">total</text>
+                </svg>
               </div>
-              <div>
-                <div style={{ fontFamily: "'Outfit',sans-serif", fontWeight: 900, fontSize: 26, color: "#111", lineHeight: 1 }}>{k.value}</div>
-                <div style={{ fontSize: 12, fontWeight: 600, color: "#6b7280", marginTop: 3 }}>{k.label}</div>
+              <div className="rq-donut-legend">
+                {Object.entries(risquesParNiveau).map(([label, value]) => {
+                  const colors = { "Critique": "#991b1b", "Élevé": "#92400e", "Modéré": "#1e40af", "Faible": "#166534" };
+                  return value > 0 ? (
+                    <div key={label} className="rq-legend-item">
+                      <span className="rq-legend-dot" style={{ background: colors[label] }} />
+                      <span>{label}</span>
+                      <span style={{ fontWeight: 700, marginLeft: "auto" }}>{value}</span>
+                    </div>
+                  ) : null;
+                })}
               </div>
             </div>
-          ))}
+          </div>
+
+          {/* Chart 2: Bar Chart - Risques par Processus */}
+          <div className="rq-chart-card">
+            <div className="rq-chart-title">Risques par processus</div>
+            <div className="rq-bar-container">
+              {processusLabels.slice(0, 6).map((label, i) => {
+                const maxVal = Math.max(...processusValues, 1);
+                const height = (processusValues[i] / maxVal) * 110 + 10;
+                const colors = ["#2D604F", "#77D58F", "#3b82f6", "#f59e0b", "#8b5cf6", "#ef4444"];
+                return (
+                  <div key={label} className="rq-bar">
+                    <div className="rq-bar-value">{processusValues[i]}</div>
+                    <div className="rq-bar-fill" style={{ height: `${height}px`, background: colors[i % colors.length] }} />
+                    <div className="rq-bar-label" style={{ fontSize: "9px" }}>{label.length > 15 ? label.slice(0, 12) + "..." : label}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Chart 3: Taux de Traitement */}
+          <div className="rq-chart-card">
+            <div className="rq-chart-title">Taux de traitement</div>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 140 }}>
+              <div style={{ position: "relative", width: 110, height: 110, marginBottom: 8 }}>
+                <svg viewBox="0 0 120 120" style={{ width: "100%", height: "100%" }}>
+                  <circle cx="60" cy="60" r="46" fill="none" stroke="#eaf5eb" strokeWidth="10" />
+                  <circle cx="60" cy="60" r="46" fill="none" stroke="#77D58F" strokeWidth="10" strokeLinecap="round"
+                    strokeDasharray={`${tauxTraitement * 2.89} ${(100 - tauxTraitement) * 2.89}`}
+                    strokeDashoffset="0" transform="rotate(-90 60 60)" />
+                  <text x="60" y="56" textAnchor="middle" fontSize="28" fontWeight="900" fill="#1a2e22" fontFamily="'Outfit',sans-serif">
+                    {tauxTraitement}%
+                  </text>
+                  <text x="60" y="74" textAnchor="middle" fontSize="10" fill="#6b7280" fontFamily="'Plus Jakarta Sans',sans-serif">traités</text>
+                </svg>
+              </div>
+              <div style={{ display: "flex", gap: 24 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#fee2e2", border: "2px solid #991b1b" }} />
+                  <span style={{ fontSize: 12, color: C.muted }}>Ouverts: {risques.filter(r => r.statut === "Ouvert").length}</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#dcfce7", border: "2px solid #166534" }} />
+                  <span style={{ fontSize: 12, color: C.muted }}>Traités: {risques.filter(r => r.statut === "Traité").length}</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* ── Tabs ── */}
@@ -528,13 +650,11 @@ export default function RisquesPage() {
           {tab === 0 && (
             <>
               <div style={{ padding: "14px 20px 12px", display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10, borderBottom: "1px solid #f0f2f4" }}>
-                {/* search */}
                 <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#f3f5f7", border: "1px solid #e8eaed", borderRadius: 10, padding: "7px 13px", flex: 1, minWidth: 160, maxWidth: 300 }}>
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#c4c8d1" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M16.5 16.5L21 21" /></svg>
                   <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher un risque…" style={{ border: "none", background: "transparent", outline: "none", fontSize: 12.5, color: "#333", width: "100%", fontFamily: "'Plus Jakarta Sans',sans-serif" }} />
                 </div>
-                {/* filters */}
-                {["Tous", "Ouvert", "En cours", "Traité"].map((f) => (
+                {["Tous", "Ouvert", "Traité"].map((f) => (
                   <button key={f} className={`rq-filter-btn${filter === f ? " active" : ""}`} onClick={() => setFilter(f)}>{f}</button>
                 ))}
                 <div style={{ marginLeft: "auto", fontSize: 12, color: "#9ca3af" }}>
@@ -594,12 +714,10 @@ export default function RisquesPage() {
           {/* ── TAB 1 : Matrice ── */}
           {tab === 1 && (
             <div style={{ padding: "24px 28px", display: "grid", gridTemplateColumns: "auto 1fr", gap: 28, alignItems: "start" }}>
-              {/* matrice */}
               <div>
                 <div style={{ fontWeight: 700, fontSize: 14, color: C.text, marginBottom: 4 }}>Matrice Probabilité × Gravité</div>
                 <div style={{ fontSize: 12, color: C.muted, marginBottom: 16 }}>Les cercles indiquent le nombre de risques par cellule</div>
                 <MatriceRisque risques={risques} />
-                {/* légende */}
                 <div style={{ display: "flex", gap: 14, marginTop: 18, flexWrap: "wrap" }}>
                   {[
                     { label: "Critique  ≥ 12", color: "#991b1b", bg: "#fee2e2" },
@@ -615,7 +733,6 @@ export default function RisquesPage() {
                 </div>
               </div>
 
-              {/* liste par niveau */}
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                 {["Critique", "Élevé", "Modéré", "Faible"].map((niveau) => {
                   const list = risques.filter((r) => niveauCrit(criticite(r.probabilite, r.gravite)).label === niveau);
@@ -655,7 +772,6 @@ export default function RisquesPage() {
           {/* ── TAB 2 : Opportunités ── */}
           {tab === 2 && (
             <div style={{ padding: "24px 28px", display: "flex", flexDirection: "column", gap: 20 }}>
-              {/* référence normative */}
               <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 12, padding: "14px 18px", display: "flex", gap: 12, alignItems: "flex-start" }}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#92400e" strokeWidth="1.8" strokeLinecap="round" style={{ flexShrink: 0, marginTop: 1 }}>
                   <circle cx="12" cy="12" r="10" /><path d="M12 8v4M12 16h.01" />
@@ -668,29 +784,71 @@ export default function RisquesPage() {
                 </div>
               </div>
 
-              {/* tableau opportunités */}
+              {/* Filter row for Opportunities */}
+              <div className="rq-filter-row">
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2"><path d="M4 4h16v2H4V4zM4 10h12v2H4v-2zM4 16h8v2H4v-2z" /></svg>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: C.muted }}>Filtres:</span>
+                </div>
+                <select
+                  className="rq-filter-select"
+                  value={processFilter}
+                  onChange={(e) => setProcessFilter(e.target.value)}
+                >
+                  {uniqueProcesses.map((p) => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
+                <select
+                  className="rq-filter-select"
+                  value={actorFilter}
+                  onChange={(e) => setActorFilter(e.target.value)}
+                >
+                  {uniqueActors.map((a) => (
+                    <option key={a} value={a}>{a}</option>
+                  ))}
+                </select>
+                <div style={{ marginLeft: "auto", fontSize: 12, color: "#9ca3af" }}>
+                  <b style={{ color: "#374151" }}>{filteredOpps.length}</b> opportunité{filteredOpps.length !== 1 ? "s" : ""}
+                </div>
+              </div>
+
               <div>
-                <div style={{ fontWeight: 700, fontSize: 14, color: C.text, marginBottom: 14 }}>Opportunités identifiées</div>
                 <table className="rq-tbl">
                   <thead>
                     <tr>
-                      {["ID", "Opportunité", "Impact attendu", "Responsable", "Statut"].map((h) => <th key={h}>{h}</th>)}
+                      {["ID", "Opportunité", "Processus", "Impact", "Responsable", "Auteur", "Statut", "Date création"].map((h) => <th key={h}>{h}</th>)}
                     </tr>
                   </thead>
                   <tbody>
-                    {opps.map((o, i) => {
-                      const ic = o.impact === "Fort" ? { color: "#166534", bg: "#dcfce7" } : { color: "#1e40af", bg: "#dbeafe" };
-                      const sc = o.statut === "En cours" ? { color: "#92400e", bg: "#fef3c7" } : { color: "#1e40af", bg: "#dbeafe" };
+                    {filteredOpps.map((o, i) => {
+                      const ic = o.impact === "Fort" ? { color: "#166534", bg: "#dcfce7" } : o.impact === "Moyen" ? { color: "#1e40af", bg: "#dbeafe" } : { color: "#92400e", bg: "#fef3c7" };
+                      const sc = o.statut === "En cours" ? { color: "#92400e", bg: "#fef3c7" } : o.statut === "Planifié" ? { color: "#1e40af", bg: "#dbeafe" } : { color: "#166534", bg: "#dcfce7" };
+                      const ac = actorStyles[o.auteur] || { color: "#6b7280", bg: "#f3f4f6" };
                       return (
                         <tr key={i} className="rq-row">
                           <td style={{ fontWeight: 700, color: "#9ca3af", fontSize: 12 }}>{o.id}</td>
                           <td style={{ fontWeight: 600, color: "#111" }}>{o.titre}</td>
+                          <td style={{ color: "#6b7280" }}>{o.processus}</td>
                           <td><span style={{ fontSize: 11, fontWeight: 700, color: ic.color, background: ic.bg, padding: "2px 8px", borderRadius: 20 }}>{o.impact}</span></td>
                           <td style={{ color: "#6b7280" }}>{o.responsable}</td>
+                          <td>
+                            <span className="rq-actor-badge" style={{ color: ac.color, background: ac.bg }}>
+                              {o.auteur}
+                            </span>
+                          </td>
                           <td><span style={{ fontSize: 11, fontWeight: 700, color: sc.color, background: sc.bg, padding: "2px 8px", borderRadius: 20 }}>{o.statut}</span></td>
+                          <td style={{ color: "#9ca3af", fontSize: 12 }}>{fmtDate(o.dateCreation)}</td>
                         </tr>
                       );
                     })}
+                    {filteredOpps.length === 0 && (
+                      <tr>
+                        <td colSpan={8} style={{ textAlign: "center", padding: "40px", color: C.muted, fontSize: 13 }}>
+                          Aucune opportunité trouvée pour ces filtres.
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>

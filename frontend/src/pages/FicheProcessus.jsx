@@ -3520,7 +3520,7 @@ export default function FicheProcessus() {
                     { num: processus.risques.length, lbl: "Risques" },
                     { 
                       num: `${processus.niveauMaturite || 0}%`, 
-                      lbl: "Niveau de maturité",
+                      lbl: "Niveau de Conformité ISO 9001",
                     },
                   ].map((k) => (
                     <div key={k.lbl} style={S.kpiBox}>
