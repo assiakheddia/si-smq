@@ -2,6 +2,14 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import logo from "../../assets/Vector.svg";
 
+/* ── role definitions ── */
+const ROLES = [
+  { id: "preparateur",      label: "Préparateur",       sub: "Gestion des processus",    color: "#2D604F", path: "/dashboard",    initials: "PR" },
+  { id: "auditeur-interne", label: "Auditeur Interne",  sub: "Révision & validation",    color: "#1e40af", path: "/ai/dashboard", initials: "AI" },
+  { id: "direction",        label: "Direction",          sub: "Supervision stratégique",  color: "#7c3aed", path: "/dir/dashboard",initials: "DR" },
+  { id: "auditeur-externe", label: "Auditeur Externe",  sub: "Audit ISO externe",        color: "#b45309", path: "/ae/dashboard", initials: "AE" },
+];
+
 
 const LogoPlaceholder = () => (
   <div className="flex flex-col items-center gap-3">
@@ -85,27 +93,23 @@ export default function Login() {
   const [showPwd, setShowPwd] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [selectedRole, setSelectedRole] = useState(null);
+  const [step, setStep] = useState("role"); // "role" | "credentials"
 
-  // ── Fausse authentification ──────────────────────────────────────
-  // Remplacez cette logique par votre vrai appel API le moment venu.
-  const FAKE_CREDENTIALS = { email: "admin@veridia.dz", password: "Veridia2025!" };
+  const handleRoleSelect = (role) => {
+    setSelectedRole(role);
+    setStep("credentials");
+    setError("");
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
     setError("");
-
-    if (!email || !password) {
-      setError("Veuillez remplir tous les champs.");
-      return;
-    }
-
+    if (!email || !password) { setError("Veuillez remplir tous les champs."); return; }
     setLoading(true);
     setTimeout(() => {
-      if (
-        email === FAKE_CREDENTIALS.email &&
-        password === FAKE_CREDENTIALS.password
-      ) {
-        navigate("/dashboard");
+      if (email.includes("@") && password.length >= 6) {
+        navigate(selectedRole.path);
       } else {
         setError("Identifiants incorrects. Vérifiez votre email et mot de passe.");
         setLoading(false);
@@ -115,7 +119,7 @@ export default function Login() {
 
   const handleGoogle = () => {
     setLoading(true);
-    setTimeout(() => navigate("/dashboard"), 1200);
+    setTimeout(() => navigate(selectedRole ? selectedRole.path : "/dashboard"), 1200);
   };
 
   return (
@@ -239,18 +243,59 @@ export default function Login() {
 
           {/* En-tête formulaire */}
           <div>
-            <h2
-              className="text-3xl font-bold"
-              style={{ color: "#2D604F" }}
-            >
-              Connexion
+            <h2 className="text-3xl font-bold" style={{ color: "#2D604F" }}>
+              {step === "role" ? "Sélectionnez votre rôle" : "Connexion"}
             </h2>
             <p className="mt-1 text-sm" style={{ color: "#6B7280" }}>
-              Bienvenue sur QualiaFlow — accès réservé aux utilisateurs autorisés.
+              {step === "role"
+                ? "Choisissez votre profil pour accéder à votre espace."
+                : `Connectez-vous en tant que ${selectedRole?.label}`}
             </p>
           </div>
 
-          {/* Message d'erreur */}
+          {/* Role selection step */}
+          {step === "role" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {ROLES.map((role) => (
+                <button
+                  key={role.id}
+                  onClick={() => handleRoleSelect(role)}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 14,
+                    padding: "14px 16px", borderRadius: 12,
+                    border: "1.5px solid #E5E7EB", background: "#fff",
+                    cursor: "pointer", textAlign: "left", transition: "all 0.15s",
+                    boxShadow: "0 1px 4px rgba(0,0,0,0.04)",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = role.color;
+                    e.currentTarget.style.boxShadow = `0 4px 12px ${role.color}22`;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = "#E5E7EB";
+                    e.currentTarget.style.boxShadow = "0 1px 4px rgba(0,0,0,0.04)";
+                  }}
+                >
+                  <div style={{
+                    width: 42, height: 42, borderRadius: 10, flexShrink: 0,
+                    background: role.color, display: "flex", alignItems: "center",
+                    justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 13,
+                    fontFamily: "'Outfit', sans-serif",
+                  }}>
+                    {role.initials}
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{role.label}</div>
+                    <div style={{ fontSize: 12, color: "#6B7280", marginTop: 1 }}>{role.sub}</div>
+                  </div>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round"><path d="M9 18l6-6-6-6"/></svg>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Credentials step */}
+          {step === "credentials" && (<>
           {error && (
             <div
               className="flex items-start gap-3 px-4 py-3 rounded-xl text-sm"
@@ -447,6 +492,16 @@ export default function Login() {
               Continuer avec Google
             </button>
           </form>
+
+          {/* Back to role selection */}
+          <button
+            onClick={() => { setStep("role"); setError(""); }}
+            style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", cursor: "pointer", color: "#6B7280", fontSize: 13, margin: "4px auto 0" }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M15 18l-6-6 6-6"/></svg>
+            Changer de rôle
+          </button>
+          </>)}
 
           {/* Note d'information */}
           <p className="text-center text-xs" style={{ color: "#9CA3AF" }}>

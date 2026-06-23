@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import NotificationsPanel, { getUnreadCount } from "../components/NotificationsPanel.jsx";
+import NotificationsPanel, { getUnreadCount } from "../../components/NotificationsPanel.jsx";
 
 const C = { dark: "#1e3d2f", primary: "#2D604F", accent: "#77D58F", lightBg: "#eaf5eb", white: "#FAFAFA", border: "#d4e9d7", text: "#1a2e22", muted: "#6b8c75" };
 

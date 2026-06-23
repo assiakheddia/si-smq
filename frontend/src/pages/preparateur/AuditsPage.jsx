@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import NotificationsPanel, {
   getUnreadCount,
-} from "../components/NotificationsPanel.jsx";
+} from "../../components/NotificationsPanel.jsx";
 
 /* ── statuts ──────────────────────────────────────────────────────────── */
 const STATUTS = {
