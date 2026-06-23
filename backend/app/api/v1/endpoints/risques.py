@@ -20,7 +20,6 @@ CurrentUser = Annotated[Utilisateur, Depends(get_current_user)]
 def get_heatmap(
     processus_code: Optional[str] = Query(None),
     db: Session = Depends(get_db),
-    current_user: CurrentUser = None,
 ):
     return risque_service.get_heatmap(db, processus_code)
 
@@ -28,7 +27,6 @@ def get_heatmap(
 @router.get("/", response_model=List[RisqueResponse])
 def lister_risques(
     db: Session = Depends(get_db),
-    current_user: CurrentUser = None,
     processus_code: Optional[str] = Query(None),
     statut: Optional[str] = Query(None),
     criticite: Optional[str] = Query(None),

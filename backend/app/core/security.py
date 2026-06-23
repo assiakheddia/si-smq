@@ -238,18 +238,8 @@ def get_current_user(
 def get_current_active_admin(
     current_user: Annotated[Utilisateur, Depends(get_current_user)],
 ) -> Utilisateur:
-    """
-    Dépendance FastAPI : vérifie que l'utilisateur courant est admin.
-
-    Usage :
-        @router.delete("/{id}")
-        def supprimer(admin: Annotated[Utilisateur, Depends(get_current_active_admin)]):
-            ...
-
-    Raises:
-        HTTPException 403 — rôle insuffisant
-    """
-    if not current_user.peut("administrer"):
+    from app.models.utilisateur import RoleEnum
+    if current_user.role != RoleEnum.admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Accès réservé aux administrateurs.",
@@ -260,14 +250,8 @@ def get_current_active_admin(
 def get_current_pilote_ou_admin(
     current_user: Annotated[Utilisateur, Depends(get_current_user)],
 ) -> Utilisateur:
-    """
-    Dépendance FastAPI : vérifie que l'utilisateur peut valider
-    (rôles : admin, pilote).
-
-    Utilisé pour : validation diagnostics, validation documents,
-    transitions workflow avancées.
-    """
-    if not current_user.peut("valider"):
+    from app.models.utilisateur import RoleEnum
+    if current_user.role not in (RoleEnum.admin, RoleEnum.pilote):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Accès réservé aux pilotes et administrateurs.",

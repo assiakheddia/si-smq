@@ -21,6 +21,31 @@ export function clearTokens() {
   localStorage.removeItem("current_user");
 }
 
+let _refreshing = null;
+
+async function tryRefresh() {
+  if (_refreshing) return _refreshing;
+  _refreshing = (async () => {
+    const refreshToken = localStorage.getItem("refresh_token");
+    if (!refreshToken) throw new Error("no refresh token");
+    const res = await fetch(`${BASE}/auth/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+    if (!res.ok) throw new Error("refresh failed");
+    const data = await res.json();
+    setTokens(data.access_token, data.refresh_token, {
+      id: data.utilisateur_id,
+      nom_complet: data.nom_complet,
+      email: data.email,
+      role: data.role,
+    });
+    return data.access_token;
+  })().finally(() => { _refreshing = null; });
+  return _refreshing;
+}
+
 async function request(method, path, body) {
   const headers = { "Content-Type": "application/json" };
   const token = getToken();
@@ -33,9 +58,30 @@ async function request(method, path, body) {
   });
 
   if (res.status === 401) {
-    clearTokens();
-    window.location.href = "/login";
-    return;
+    let refreshedToken = null;
+    try {
+      refreshedToken = await tryRefresh();
+    } catch {
+      clearTokens();
+      if (window.location.pathname !== "/login") window.location.replace("/login");
+      throw new Error("Session expirée");
+    }
+    const retryRes = await fetch(`${BASE}${path}`, {
+      method,
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${refreshedToken}` },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+    if (retryRes.status === 401) {
+      clearTokens();
+      if (window.location.pathname !== "/login") window.location.replace("/login");
+      throw new Error("Session expirée");
+    }
+    const retryData = await retryRes.json().catch(() => null);
+    if (!retryRes.ok) {
+      const msg = retryData?.detail ?? `Erreur ${retryRes.status}`;
+      throw new Error(Array.isArray(msg) ? msg[0]?.msg : msg);
+    }
+    return retryData;
   }
 
   const data = await res.json().catch(() => null);

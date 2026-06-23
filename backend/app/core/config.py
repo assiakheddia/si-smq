@@ -184,6 +184,25 @@ class Settings(BaseSettings):
         ),
     )
 
+    # -----------------------------------------------------------------------
+    # §3b — Google OAuth
+    # -----------------------------------------------------------------------
+
+    GOOGLE_CLIENT_ID: str = Field(
+        default="",
+        description="Google OAuth 2.0 Client ID (depuis Google Cloud Console).",
+    )
+
+    GOOGLE_CLIENT_SECRET: str = Field(
+        default="",
+        description="Google OAuth 2.0 Client Secret.",
+    )
+
+    FRONTEND_URL: str = Field(
+        default="http://localhost:5173",
+        description="URL du frontend (pour les redirections OAuth).",
+    )
+
     @field_validator("SECRET_KEY", mode="after")
     @classmethod
     def secret_key_non_defaut_en_production(cls, v: str) -> str:

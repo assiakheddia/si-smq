@@ -77,7 +77,8 @@ class Utilisateur(Base):
     # -------------------------------------------------------------------------
     # Authentification
     # -------------------------------------------------------------------------
-    hashed_password = Column(String(255), nullable=False)
+    hashed_password = Column(String(255), nullable=True)  # Null pour les comptes Google OAuth
+    google_id = Column(String(100), nullable=True, unique=True, index=True)
 
     # Sécurité brute-force
     tentatives_echouees   = Column(Integer, default=0, nullable=False)

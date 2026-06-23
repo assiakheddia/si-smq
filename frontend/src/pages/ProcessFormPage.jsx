@@ -620,7 +620,7 @@ export default function ProcessFormPage() {
         await api.put(`/processus/${id}`, payload);
         showToast("Brouillon enregistré ✓");
       } else {
-        const created = await api.post("/processus", payload);
+        const created = await api.post("/processus/", payload);
         showToast("Brouillon enregistré ✓");
         navigate(`/processus/${created.id}`, { replace: true });
       }
@@ -645,7 +645,7 @@ export default function ProcessFormPage() {
       if (isEdit) {
         await api.put(`/processus/${id}`, payload);
       } else {
-        const created = await api.post("/processus", payload);
+        const created = await api.post("/processus/", payload);
         processusId = created.id;
       }
 
@@ -654,7 +654,7 @@ export default function ProcessFormPage() {
         const risquesACreer = form.risques.filter((r) => r.description.trim());
         await Promise.allSettled(
           risquesACreer.map((r) =>
-            api.post("/risques", {
+            api.post("/risques/", {
               titre:            r.description.trim(),
               description:      r.description.trim(),
               probabilite:      parseInt(r.probabilite    || 1),

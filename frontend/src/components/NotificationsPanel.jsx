@@ -1,10 +1,14 @@
 import { useState, useEffect, useRef } from "react";
 
 const TYPE_STYLE = {
-  publish:    { icon: "🚀", color: "#166534", bg: "#dcfce7", label: "Publication" },
-  diagnostic: { icon: "🔬", color: "#1e40af", bg: "#dbeafe", label: "Diagnostic" },
-  audit:      { icon: "📧", color: "#92400e", bg: "#fef3c7", label: "Audit" },
-  info:       { icon: "ℹ️",  color: "#374151", bg: "#f3f4f6", label: "Info" },
+  publish:    { color: "#166534", bg: "#dcfce7", label: "Publication",
+    icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg> },
+  diagnostic: { color: "#1e40af", bg: "#dbeafe", label: "Diagnostic",
+    icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg> },
+  audit:      { color: "#92400e", bg: "#fef3c7", label: "Audit",
+    icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> },
+  info:       { color: "#374151", bg: "#f3f4f6", label: "Info",
+    icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> },
 };
 
 function timeSince(iso) {
@@ -37,19 +41,7 @@ export default function NotificationsPanel({ onClose }) {
   useEffect(() => {
     try {
       const stored = JSON.parse(localStorage.getItem("smq_notifications") || "[]");
-      // Seed demo notifications if empty
-      if (stored.length === 0) {
-        const demos = [
-          { id: "n_demo1", type: "publish", title: "Processus publié", message: "Le processus 'Gestion PFE' a été publié avec succès.", timestamp: new Date(Date.now() - 3600000).toISOString(), read: false },
-          { id: "n_demo2", type: "diagnostic", title: "Diagnostic SMQ complété", message: "L'analyse du processus 'Audit Labo' a identifié 3 dysfonctionnements.", timestamp: new Date(Date.now() - 86400000).toISOString(), read: false },
-          { id: "n_demo3", type: "audit", title: "Fiche envoyée à l'auditeur", message: "La fiche a été transmise à meziani@esi.dz pour confirmation.", timestamp: new Date(Date.now() - 172800000).toISOString(), read: true },
-          { id: "n_demo4", type: "audit", title: "Recommandations reçues", message: "L'auditeur Meziani a soumis ses recommandations pour 'Contrôle Qualité'.", timestamp: new Date(Date.now() - 259200000).toISOString(), read: true },
-        ];
-        localStorage.setItem("smq_notifications", JSON.stringify(demos));
-        setNotifs(demos);
-      } else {
-        setNotifs(stored);
-      }
+      setNotifs(stored);
     } catch {}
   }, []);
 
@@ -123,7 +115,12 @@ export default function NotificationsPanel({ onClose }) {
       <div style={{ overflowY: "auto", flex: 1 }}>
         {notifs.length === 0 ? (
           <div style={{ padding: "40px 20px", textAlign: "center", color: "#9ca3af" }}>
-            <div style={{ fontSize: 32, marginBottom: 8 }}>🔔</div>
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                <path d="M13.73 21a2 2 0 01-3.46 0"/>
+              </svg>
+            </div>
             <div style={{ fontWeight: 600 }}>Aucune notification</div>
           </div>
         ) : (
@@ -142,7 +139,7 @@ export default function NotificationsPanel({ onClose }) {
                 onMouseEnter={(e) => e.currentTarget.style.background = "#f8fffe"}
                 onMouseLeave={(e) => e.currentTarget.style.background = n.read ? "#fff" : "#f8fffe"}
               >
-                <div style={{ width: 36, height: 36, borderRadius: 10, background: ts.bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: ts.bg, display: "flex", alignItems: "center", justifyContent: "center", color: ts.color, flexShrink: 0 }}>
                   {ts.icon}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -169,7 +166,7 @@ export default function NotificationsPanel({ onClose }) {
       {notifs.length > 0 && (
         <div style={{ padding: "10px 18px", borderTop: "1px solid #f0f2f4", textAlign: "center" }}>
           <button
-            onClick={() => { const u = []; setNotifs(u); localStorage.setItem("smq_notifications", "[]"); }}
+            onClick={() => { setNotifs([]); localStorage.setItem("smq_notifications", "[]"); }}
             style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, color: "#9ca3af" }}
           >
             Effacer toutes les notifications

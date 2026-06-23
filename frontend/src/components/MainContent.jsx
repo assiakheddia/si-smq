@@ -357,7 +357,7 @@ export default function MainContent({ collapsed }) {
   /* Fetch on mount */
   useEffect(() => {
     setLoading(true);
-    api.get("/processus")
+    api.get("/processus/")
       .then((items) => setData((items || []).map(normalize)))
       .catch((err)  => setApiError(err.message))
       .finally(()   => setLoading(false));

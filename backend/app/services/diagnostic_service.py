@@ -174,7 +174,7 @@ def lister_diagnostics(
     if auditeur_id:
         q = q.filter(DiagnosticISO.auditeur_id == auditeur_id)
 
-    q = q.order_by(DiagnosticISO.date_creation.desc())
+    q = q.order_by(DiagnosticISO.date_diagnostic.desc())
     total = q.count()
     items = q.offset((page - 1) * taille_page).limit(taille_page).all()
 
@@ -580,7 +580,7 @@ def get_rapport_maturite(db: Session, diagnostic_id: int) -> dict:
         "niveau_global": diagnostic.niveau_global,
         "statut": diagnostic.statut,
         "auditeur": diagnostic.auditeur.email if diagnostic.auditeur else None,
-        "date_creation": diagnostic.date_creation,
+        "date_creation": diagnostic.date_diagnostic,
         "synthese_sections": synthese_sections,
         "total_ecarts_majeurs": sum(s["ecarts_majeurs"] for s in synthese_sections),
         "total_ecarts_mineurs": sum(s["ecarts_mineurs"] for s in synthese_sections),

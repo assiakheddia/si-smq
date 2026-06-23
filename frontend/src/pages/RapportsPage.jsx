@@ -1,38 +1,59 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import NotificationsPanel, { getUnreadCount } from "../components/NotificationsPanel.jsx";
+import { api, getCurrentUser } from "../lib/api.js";
 
 const C = { dark: "#1e3d2f", primary: "#2D604F", accent: "#77D58F", lightBg: "#eaf5eb", white: "#FAFAFA", border: "#d4e9d7", text: "#1a2e22", muted: "#6b8c75" };
 
-const REPORTS = [
-  { id: 1, titre: "Rapport d'audit — Gestion PFE",       type: "Audit",       date: "2026-04-30", auteur: "Meziani Karim", statut: "Finalisé",  pages: 12 },
-  { id: 2, titre: "Rapport ISO 9001 — Bilan mensuel",     type: "Conformité",  date: "2026-05-01", auteur: "Atir Zineb",   statut: "Finalisé",  pages: 8  },
-  { id: 3, titre: "Tableau de bord performance SMQ",      type: "Performance", date: "2026-05-05", auteur: "Bensalem Sara", statut: "Brouillon", pages: 6  },
-  { id: 4, titre: "Rapport d'audit — Contrôle Qualité",  type: "Audit",       date: "2026-05-08", auteur: "Haddadou Ali", statut: "En révision", pages: 14 },
-  { id: 5, titre: "Rapport KPI trimestriel",              type: "Performance", date: "2026-05-10", auteur: "Atir Zineb",   statut: "Brouillon", pages: 10 },
-  { id: 6, titre: "Plan d'action qualité 2026",           type: "Conformité",  date: "2026-04-15", auteur: "Kaci Nadia",  statut: "Finalisé",  pages: 20 },
-];
+/* ── SVG icons ── */
+const ClipboardIcon = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>;
+const CheckCircleIcon = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>;
+const RefreshIcon = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>;
+const BarChartIcon = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>;
+const DownloadIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>;
+const FileIcon = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>;
+const FlashIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>;
+const InboxIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg>;
 
-const TYPE_COLOR = {
-  Audit:       { bg: "#dbeafe", color: "#1e40af" },
-  Conformité:  { bg: "#dcfce7", color: "#166534" },
-  Performance: { bg: "#fef3c7", color: "#92400e" },
+/* ── type / statut maps ── */
+const TYPE_LABEL = {
+  procedure: "Procédure", rapport: "Rapport", politique: "Politique",
+  plan: "Plan", enregistrement: "Enregistrement", formulaire: "Formulaire",
+  instruction: "Instruction", charte: "Charte", manuel: "Manuel",
+  preuve_action: "Preuve", preuve_conformite: "Conformité", autre: "Autre",
 };
-
+const TYPE_COLOR = {
+  rapport:         { bg: "#dbeafe", color: "#1e40af" },
+  procedure:       { bg: "#dcfce7", color: "#166534" },
+  politique:       { bg: "#dcfce7", color: "#166534" },
+  plan:            { bg: "#fef3c7", color: "#92400e" },
+  enregistrement:  { bg: "#dbeafe", color: "#1e40af" },
+  formulaire:      { bg: "#f3e8ff", color: "#6b21a8" },
+  instruction:     { bg: "#dcfce7", color: "#166534" },
+  preuve_conformite: { bg: "#dcfce7", color: "#166534" },
+  preuve_action:   { bg: "#fef3c7", color: "#92400e" },
+  autre:           { bg: "#f3f4f6", color: "#6b7280" },
+};
+const STATUT_LABEL = {
+  brouillon: "Brouillon", en_revue: "En révision",
+  approuve: "Finalisé", valide: "Finalisé", obsolete: "Obsolète", archive: "Archivé",
+};
 const STATUT_COLOR = {
   "Finalisé":    { bg: "#dcfce7", color: "#166534" },
   "En révision": { bg: "#fef3c7", color: "#92400e" },
   "Brouillon":   { bg: "#f3f4f6", color: "#6b7280" },
+  "Archivé":     { bg: "#f3f4f6", color: "#374151" },
+  "Obsolète":    { bg: "#fee2e2", color: "#991b1b" },
 };
 
 const ISO_CLAUSES = [
-  { code: "4", label: "Contexte de l'organisation", score: 82 },
-  { code: "5", label: "Leadership",                  score: 90 },
-  { code: "6", label: "Planification",               score: 75 },
-  { code: "7", label: "Support",                     score: 88 },
-  { code: "8", label: "Réalisation",                 score: 71 },
-  { code: "9", label: "Évaluation des performances", score: 84 },
-  { code: "10", label: "Amélioration",               score: 68 },
+  { code: "4", label: "Contexte de l'organisation", score: 0 },
+  { code: "5", label: "Leadership",                  score: 0 },
+  { code: "6", label: "Planification",               score: 0 },
+  { code: "7", label: "Support",                     score: 0 },
+  { code: "8", label: "Réalisation",                 score: 0 },
+  { code: "9", label: "Évaluation des performances", score: 0 },
+  { code: "10", label: "Amélioration",               score: 0 },
 ];
 
 function MiniBar({ value, color }) {
@@ -41,9 +62,14 @@ function MiniBar({ value, color }) {
       <div style={{ flex: 1, height: 8, background: "#f0f2f4", borderRadius: 99, overflow: "hidden" }}>
         <div style={{ height: "100%", width: `${value}%`, background: color, borderRadius: 99, transition: "width 1s ease" }} />
       </div>
-      <span style={{ fontSize: 12, fontWeight: 700, color, minWidth: 36 }}>{value}%</span>
+      <span style={{ fontSize: 12, fontWeight: 700, color, minWidth: 36 }}>{value > 0 ? `${value}%` : "—"}</span>
     </div>
   );
+}
+
+function getInitials(name) {
+  if (!name) return "??";
+  return name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
 }
 
 export default function RapportsPage() {
@@ -53,13 +79,57 @@ export default function RapportsPage() {
   const [showNotifs, setShowNotifs] = useState(false);
   const [unread, setUnread] = useState(0);
   const [exportToast, setExportToast] = useState(null);
+  const [documents, setDocuments] = useState([]);
+  const [isoScores, setIsoScores] = useState(ISO_CLAUSES);
+  const [globalScore, setGlobalScore] = useState(0);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => { setUnread(getUnreadCount()); }, []);
+  const user = getCurrentUser();
+  const initials = getInitials(user?.nom_complet);
 
-  const filtered = REPORTS.filter((r) => {
+  useEffect(() => {
+    setUnread(getUnreadCount());
+    Promise.all([
+      api.get("/documents/").catch(() => []),
+      api.get("/diagnostics/").catch(() => []),
+    ]).then(([docs, diags]) => {
+      setDocuments(Array.isArray(docs) ? docs : []);
+      if (Array.isArray(diags) && diags.length > 0) {
+        const validDiags = diags.filter(d => d.score_global > 0);
+        if (validDiags.length > 0) {
+          const avg = Math.round(validDiags.reduce((s, d) => s + d.score_global, 0) / validDiags.length);
+          setGlobalScore(avg);
+          const latest = [...validDiags].sort((a, b) => new Date(b.date_diagnostic) - new Date(a.date_diagnostic))[0];
+          if (latest) {
+            api.get(`/diagnostics/${latest.id}/rapport`).then(r => {
+              if (r?.synthese_par_section?.length) {
+                const byCode = {};
+                r.synthese_par_section.forEach(s => { byCode[s.code_section] = Math.round(s.score_section); });
+                setIsoScores(ISO_CLAUSES.map(cl => ({ ...cl, score: byCode[cl.code] ?? 0 })));
+              }
+            }).catch(() => {});
+          }
+        }
+      }
+    }).finally(() => setLoading(false));
+  }, []);
+
+  const mapDoc = (d) => ({
+    id: d.id,
+    titre: d.titre,
+    type: d.type || "autre",
+    typeLabel: TYPE_LABEL[d.type] || "Document",
+    date: d.date_creation ? d.date_creation.split("T")[0] : "—",
+    auteur: d.auteur ? `${d.auteur.prenom} ${d.auteur.nom}` : "—",
+    statut: STATUT_LABEL[d.statut] || d.statut || "Brouillon",
+  });
+
+  const docs = documents.map(mapDoc);
+
+  const filtered = docs.filter((r) => {
     const q = search.toLowerCase();
     const matchSearch = !q || r.titre.toLowerCase().includes(q) || r.auteur.toLowerCase().includes(q);
-    const matchType = typeFilter === "Tous" || r.type === typeFilter;
+    const matchType = typeFilter === "Tous" || r.typeLabel === typeFilter;
     return matchSearch && matchType;
   });
 
@@ -68,7 +138,21 @@ export default function RapportsPage() {
     setTimeout(() => setExportToast(null), 2500);
   };
 
-  const globalScore = Math.round(ISO_CLAUSES.reduce((s, c) => s + c.score, 0) / ISO_CLAUSES.length);
+  const kpiData = [
+    { icon: <ClipboardIcon />, label: "Total documents", value: docs.length, color: "#1e3d2f", bg: "#dcfce7" },
+    { icon: <CheckCircleIcon />, label: "Finalisés", value: docs.filter(d => d.statut === "Finalisé").length, color: "#22c55e", bg: "#dcfce7" },
+    { icon: <RefreshIcon />, label: "En révision", value: docs.filter(d => d.statut === "En révision").length, color: "#f59e0b", bg: "#fef3c7" },
+    { icon: <BarChartIcon />, label: "Score global ISO", value: globalScore > 0 ? `${globalScore}%` : "—", color: "#8b5cf6", bg: "#f3e8ff" },
+  ];
+
+  const TYPE_FILTERS = ["Tous", "Rapport", "Procédure", "Politique", "Plan"];
+
+  const QUICK_GEN = [
+    { label: "Rapport d'audit complet", desc: "Tous les audits avec scores", icon: <ClipboardIcon /> },
+    { label: "Bilan ISO mensuel",       desc: "Conformité clause par clause", icon: <BarChartIcon /> },
+    { label: "Tableau KPI SMQ",         desc: "Indicateurs de performance", icon: <RefreshIcon /> },
+    { label: "Plan d'action qualité",   desc: "Dysfonctionnements & actions", icon: <CheckCircleIcon /> },
+  ];
 
   return (
     <>
@@ -91,8 +175,8 @@ export default function RapportsPage() {
 
       {showNotifs && <NotificationsPanel onClose={() => setShowNotifs(false)} />}
       {exportToast && (
-        <div style={{ position: "fixed", bottom: 28, right: 28, background: C.primary, color: "#fff", borderRadius: 12, padding: "14px 22px", fontSize: 14, fontWeight: 600, boxShadow: "0 8px 32px rgba(0,0,0,0.18)", zIndex: 9999, animation: "fadeUp 0.3s ease" }}>
-          📥 {exportToast}
+        <div style={{ position: "fixed", bottom: 28, right: 28, background: C.primary, color: "#fff", borderRadius: 12, padding: "14px 22px", fontSize: 14, fontWeight: 600, boxShadow: "0 8px 32px rgba(0,0,0,0.18)", zIndex: 9999, animation: "fadeUp 0.3s ease", display: "flex", alignItems: "center", gap: 8 }}>
+          <InboxIcon /> {exportToast}
         </div>
       )}
 
@@ -105,21 +189,16 @@ export default function RapportsPage() {
             <span style={{ color: C.text, fontWeight: 600 }}>Rapports</span>
           </div>
           <div className="rap-tb-r">
-            <div className="rap-icon-btn">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="1.8" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><path d="M2 12h20M12 2a15.3 15.3 0 010 20M12 2a15.3 15.3 0 000 20" /></svg>
-              <span style={{ fontSize: 12, fontWeight: 600, color: "#555" }}>FR</span>
-            </div>
             <div className="rap-icon-btn" onClick={() => setShowNotifs((v) => !v)} style={{ cursor: "pointer" }}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="1.8" strokeLinecap="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 01-3.46 0" /></svg>
               {unread > 0 && <span className="rap-n-dot" />}
             </div>
             <div className="rap-u-chip" onClick={() => navigate("/parametres")}>
-              <div className="rap-u-av">AZ</div>
+              <div className="rap-u-av">{initials}</div>
               <div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: "#111", fontFamily: "'Plus Jakarta Sans',sans-serif" }}>Atir Zineb</div>
-                <div style={{ fontSize: 10, color: "#9ca3af" }}>Admin</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#111", fontFamily: "'Plus Jakarta Sans',sans-serif" }}>{user?.nom_complet || "Utilisateur"}</div>
+                <div style={{ fontSize: 10, color: "#9ca3af" }}>{user?.role || ""}</div>
               </div>
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 3.5l3 3 3-3" stroke="#9ca3af" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
             </div>
           </div>
         </div>
@@ -131,27 +210,24 @@ export default function RapportsPage() {
             <div style={{ fontSize: 13, color: "#9ca3af", marginTop: 4 }}>Analyses, exports et bilans du système qualité</div>
           </div>
           <div style={{ display: "flex", gap: 10 }}>
-            <button onClick={() => handleExport("PDF", "Bilan SMQ")} style={{ display: "flex", alignItems: "center", gap: 8, background: "#fee2e2", border: "1.5px solid #fca5a5", borderRadius: 11, padding: "10px 18px", cursor: "pointer", color: "#991b1b", fontSize: 13, fontWeight: 700, fontFamily: "'Plus Jakarta Sans',sans-serif", transition: "transform 0.15s" }}
+            <button onClick={() => handleExport("PDF", "Bilan SMQ")}
+              style={{ display: "flex", alignItems: "center", gap: 8, background: "#fee2e2", border: "1.5px solid #fca5a5", borderRadius: 11, padding: "10px 18px", cursor: "pointer", color: "#991b1b", fontSize: 13, fontWeight: 700, fontFamily: "'Plus Jakarta Sans',sans-serif", transition: "transform 0.15s" }}
               onMouseEnter={(e) => e.currentTarget.style.transform = "translateY(-2px)"} onMouseLeave={(e) => e.currentTarget.style.transform = "none"}>
-              📄 Export PDF
+              <DownloadIcon /> Export PDF
             </button>
-            <button onClick={() => handleExport("Excel", "Bilan SMQ")} style={{ display: "flex", alignItems: "center", gap: 8, background: "linear-gradient(135deg, #2d9e5f, #1e6b42)", border: "none", borderRadius: 11, padding: "10px 18px", cursor: "pointer", color: "white", fontSize: 13, fontWeight: 700, fontFamily: "'Plus Jakarta Sans',sans-serif", boxShadow: "0 4px 14px rgba(45,158,95,0.35)", transition: "transform 0.15s" }}
+            <button onClick={() => handleExport("Excel", "Bilan SMQ")}
+              style={{ display: "flex", alignItems: "center", gap: 8, background: "linear-gradient(135deg, #2d9e5f, #1e6b42)", border: "none", borderRadius: 11, padding: "10px 18px", cursor: "pointer", color: "white", fontSize: 13, fontWeight: 700, fontFamily: "'Plus Jakarta Sans',sans-serif", boxShadow: "0 4px 14px rgba(45,158,95,0.35)", transition: "transform 0.15s" }}
               onMouseEnter={(e) => e.currentTarget.style.transform = "translateY(-2px)"} onMouseLeave={(e) => e.currentTarget.style.transform = "none"}>
-              📊 Export Excel
+              <BarChartIcon /> Export Excel
             </button>
           </div>
         </div>
 
-        {/* Summary KPIs */}
+        {/* KPI cards */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14, marginBottom: 22, animation: "fadeUp 0.35s ease 0.08s both" }}>
-          {[
-            { icon: "📋", label: "Total rapports", value: REPORTS.length, color: "#1e3d2f" },
-            { icon: "✅", label: "Finalisés", value: REPORTS.filter((r) => r.statut === "Finalisé").length, color: "#22c55e" },
-            { icon: "🔄", label: "En révision", value: REPORTS.filter((r) => r.statut === "En révision").length, color: "#f59e0b" },
-            { icon: "📊", label: "Score global ISO", value: `${globalScore}%`, color: "#8b5cf6" },
-          ].map(({ icon, label, value, color }) => (
+          {kpiData.map(({ icon, label, value, color, bg }) => (
             <div key={label} style={{ background: "#fff", borderRadius: 16, padding: "18px 20px", display: "flex", alignItems: "center", gap: 14, boxShadow: "0 1px 6px rgba(0,0,0,0.06)" }}>
-              <div style={{ width: 46, height: 46, borderRadius: 13, background: `${color}15`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>{icon}</div>
+              <div style={{ width: 46, height: 46, borderRadius: 13, background: bg, display: "flex", alignItems: "center", justifyContent: "center", color, flexShrink: 0 }}>{icon}</div>
               <div>
                 <div style={{ fontFamily: "'Outfit',sans-serif", fontWeight: 900, fontSize: 26, color: "#111", lineHeight: 1 }}>{value}</div>
                 <div style={{ fontSize: 12, fontWeight: 600, color: "#6b7280", marginTop: 3 }}>{label}</div>
@@ -161,7 +237,7 @@ export default function RapportsPage() {
         </div>
 
         <div className="rap-grid">
-          {/* Reports list */}
+          {/* Documents list */}
           <div>
             <div className="rap-card" style={{ animationDelay: "0.1s" }}>
               <div style={{ padding: "16px 22px 14px", borderBottom: "1px solid #f0f2f4", display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
@@ -170,29 +246,37 @@ export default function RapportsPage() {
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#c4c8d1" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M16.5 16.5L21 21" /></svg>
                   <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher…" style={{ border: "none", background: "transparent", outline: "none", fontSize: 12.5, color: "#333", width: 140, fontFamily: "'Plus Jakarta Sans',sans-serif" }} />
                 </div>
-                {["Tous", "Audit", "Conformité", "Performance"].map((f) => (
+                {TYPE_FILTERS.map((f) => (
                   <button key={f} onClick={() => setTypeFilter(f)} style={{ padding: "5px 12px", borderRadius: 8, border: `1.5px solid ${typeFilter === f ? C.dark : "#e8eaed"}`, background: typeFilter === f ? C.dark : "white", color: typeFilter === f ? "white" : "#6b7280", cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
                     {f}
                   </button>
                 ))}
               </div>
 
-              {filtered.map((r, i) => {
-                const ts = TYPE_COLOR[r.type];
-                const ss = STATUT_COLOR[r.statut];
+              {loading ? (
+                <div style={{ padding: "40px", textAlign: "center", color: C.muted }}>Chargement…</div>
+              ) : filtered.length === 0 ? (
+                <div style={{ padding: "40px", textAlign: "center", color: C.muted }}>
+                  <div style={{ display: "flex", justifyContent: "center", marginBottom: 12 }}>
+                    <FileIcon />
+                  </div>
+                  Aucun document trouvé.
+                </div>
+              ) : filtered.map((r, i) => {
+                const ts = TYPE_COLOR[r.type] || { bg: "#f3f4f6", color: "#6b7280" };
+                const ss = STATUT_COLOR[r.statut] || { bg: "#f3f4f6", color: "#6b7280" };
                 return (
-                  <div key={r.id} className="rap-row" style={{ padding: "14px 22px", borderBottom: "1px solid #f0f2f4", display: "flex", alignItems: "center", gap: 14, animationDelay: `${i * 0.04}s`, cursor: "pointer" }}>
-                    <div style={{ width: 40, height: 40, borderRadius: 10, background: ts.bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>
-                      {r.type === "Audit" ? "📋" : r.type === "Conformité" ? "🏆" : "📊"}
+                  <div key={r.id} className="rap-row" style={{ padding: "14px 22px", borderBottom: "1px solid #f0f2f4", display: "flex", alignItems: "center", gap: 14, cursor: "pointer" }}>
+                    <div style={{ width: 40, height: 40, borderRadius: 10, background: ts.bg, display: "flex", alignItems: "center", justifyContent: "center", color: ts.color, flexShrink: 0 }}>
+                      <FileIcon />
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontWeight: 600, color: "#111", fontSize: 13, marginBottom: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.titre}</div>
                       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                        <span style={{ ...ts, padding: "2px 9px", borderRadius: 20, fontSize: 11, fontWeight: 700 }}>{r.type}</span>
+                        <span style={{ ...ts, padding: "2px 9px", borderRadius: 20, fontSize: 11, fontWeight: 700 }}>{r.typeLabel}</span>
                         <span style={{ ...ss, padding: "2px 9px", borderRadius: 20, fontSize: 11, fontWeight: 700 }}>{r.statut}</span>
                         <span style={{ fontSize: 11, color: "#9ca3af" }}>par {r.auteur}</span>
                         <span style={{ fontSize: 11, color: "#9ca3af" }}>· {r.date}</span>
-                        <span style={{ fontSize: 11, color: "#9ca3af" }}>· {r.pages} pages</span>
                       </div>
                     </div>
                     <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
@@ -210,13 +294,15 @@ export default function RapportsPage() {
             <div className="rap-card" style={{ animationDelay: "0.15s" }}>
               <div style={{ padding: "18px 22px", background: `linear-gradient(135deg, ${C.primary}, #3a7a62)`, color: "#fff" }}>
                 <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Conformité ISO 9001</div>
-                <div style={{ fontSize: 12, opacity: 0.75 }}>Score par clause</div>
-                <div style={{ fontSize: 36, fontWeight: 900, fontFamily: "'Outfit',sans-serif", marginTop: 10 }}>{globalScore}%</div>
+                <div style={{ fontSize: 12, opacity: 0.75 }}>Score par section</div>
+                <div style={{ fontSize: 36, fontWeight: 900, fontFamily: "'Outfit',sans-serif", marginTop: 10 }}>
+                  {globalScore > 0 ? `${globalScore}%` : "—"}
+                </div>
                 <div style={{ fontSize: 12, opacity: 0.8 }}>Score global de conformité</div>
               </div>
               <div style={{ padding: "16px 22px" }}>
-                {ISO_CLAUSES.map((cl) => {
-                  const color = cl.score >= 80 ? "#22c55e" : cl.score >= 65 ? "#f59e0b" : "#ef4444";
+                {isoScores.map((cl) => {
+                  const color = cl.score >= 80 ? "#22c55e" : cl.score >= 65 ? "#f59e0b" : cl.score > 0 ? "#ef4444" : "#d1d5db";
                   return (
                     <div key={cl.code} style={{ marginBottom: 14 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
@@ -226,29 +312,33 @@ export default function RapportsPage() {
                     </div>
                   );
                 })}
+                {isoScores.every(c => c.score === 0) && (
+                  <div style={{ fontSize: 12, color: C.muted, textAlign: "center", paddingTop: 8 }}>
+                    Aucun diagnostic disponible
+                  </div>
+                )}
               </div>
             </div>
 
-            {/* Quick export card */}
+            {/* Quick generate */}
             <div className="rap-card" style={{ marginTop: 16, padding: "20px 22px", animationDelay: "0.2s" }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: "#111", marginBottom: 16 }}>⚡ Génération rapide</div>
-              {[
-                { label: "Rapport d'audit complet", desc: "Tous les audits avec scores", icon: "📋" },
-                { label: "Bilan ISO mensuel",       desc: "Conformité clause par clause", icon: "🏆" },
-                { label: "Tableau KPI SMQ",         desc: "Indicateurs de performance", icon: "📊" },
-                { label: "Plan d'action qualité",   desc: "Dysfonctionnements & actions", icon: "⚙️" },
-              ].map(({ label, desc, icon }) => (
-                <div key={label} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderRadius: 10, border: `1px solid ${C.border}`, marginBottom: 8, cursor: "pointer", transition: "all 0.15s" }}
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#111", marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ color: C.primary }}><FlashIcon /></span>
+                Génération rapide
+              </div>
+              {QUICK_GEN.map(({ label, desc, icon }) => (
+                <div key={label}
+                  style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderRadius: 10, border: `1px solid ${C.border}`, marginBottom: 8, cursor: "pointer", transition: "all 0.15s" }}
                   onMouseEnter={(e) => { e.currentTarget.style.background = "#f0fdf4"; e.currentTarget.style.borderColor = C.accent; }}
                   onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.borderColor = C.border; }}
                   onClick={() => handleExport("PDF", label)}
                 >
-                  <span style={{ fontSize: 18 }}>{icon}</span>
+                  <span style={{ color: C.primary }}>{icon}</span>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 12, fontWeight: 700, color: C.text }}>{label}</div>
                     <div style={{ fontSize: 11, color: C.muted }}>{desc}</div>
                   </div>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.muted} strokeWidth="2" strokeLinecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+                  <DownloadIcon />
                 </div>
               ))}
             </div>

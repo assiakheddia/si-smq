@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { getCurrentUser } from "./lib/api";
 import Login from "./pages/login.jsx";
+import GoogleCallback from "./pages/GoogleCallback.jsx";
 import MainContent from "./components/MainContent.jsx";
 import Sidebar from "./components/Sidebar.jsx";
 import ProcessFormPage from "./pages/ProcessFormPage.jsx";
@@ -10,6 +12,13 @@ import RapportsPage from "./pages/RapportsPage.jsx";
 import ParametresPage from "./pages/ParametresPage.jsx";
 import DashboardPage from "./pages/DashboardPage.jsx";
 import RisquesPage from "./pages/RisquesPage.jsx";
+
+function PrivateRoute({ children }) {
+  const user = getCurrentUser();
+  const token = localStorage.getItem("access_token");
+  if (!token || !user) return <Navigate to="/login" replace />;
+  return children;
+}
 
 function AppLayout({ children }) {
   const [collapsed, setCollapsed] = useState(false);
@@ -29,15 +38,16 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<Login />} />
-        <Route path="/dashboard" element={<AppLayout><DashboardPage /></AppLayout>} />
-        <Route path="/processus" element={<AppLayout><MainContent /></AppLayout>} />
-        <Route path="/processus/new" element={<AppLayout><ProcessFormPage /></AppLayout>} />
-        <Route path="/processus/:id" element={<AppLayout><ProcessFormPage /></AppLayout>} />
-        <Route path="/fiche-processus/:id" element={<AppLayout><FicheProcessus /></AppLayout>} />
-        <Route path="/risques" element={<AppLayout><RisquesPage /></AppLayout>} />
-        <Route path="/audits" element={<AppLayout><AuditsPage /></AppLayout>} />
-        <Route path="/rapports" element={<AppLayout><RapportsPage /></AppLayout>} />
-        <Route path="/parametres" element={<AppLayout><ParametresPage /></AppLayout>} />
+        <Route path="/auth/callback" element={<GoogleCallback />} />
+        <Route path="/dashboard" element={<PrivateRoute><AppLayout><DashboardPage /></AppLayout></PrivateRoute>} />
+        <Route path="/processus" element={<PrivateRoute><AppLayout><MainContent /></AppLayout></PrivateRoute>} />
+        <Route path="/processus/new" element={<PrivateRoute><AppLayout><ProcessFormPage /></AppLayout></PrivateRoute>} />
+        <Route path="/processus/:id" element={<PrivateRoute><AppLayout><ProcessFormPage /></AppLayout></PrivateRoute>} />
+        <Route path="/fiche-processus/:id" element={<PrivateRoute><AppLayout><FicheProcessus /></AppLayout></PrivateRoute>} />
+        <Route path="/risques" element={<PrivateRoute><AppLayout><RisquesPage /></AppLayout></PrivateRoute>} />
+        <Route path="/audits" element={<PrivateRoute><AppLayout><AuditsPage /></AppLayout></PrivateRoute>} />
+        <Route path="/rapports" element={<PrivateRoute><AppLayout><RapportsPage /></AppLayout></PrivateRoute>} />
+        <Route path="/parametres" element={<PrivateRoute><AppLayout><ParametresPage /></AppLayout></PrivateRoute>} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>
