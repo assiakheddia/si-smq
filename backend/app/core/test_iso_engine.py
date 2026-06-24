@@ -1,27 +1,22 @@
 """
-test_iso_engine.py — Tests du moteur ISO 9001 intelligent
-==========================================================
-Lancer : python test_iso_engine.py
+test_fiche_processus.py — Test de l'adaptateur fiche processus → iso_engine
+=============================================================================
+Lancer : python test_fiche_processus.py
 
-Teste 4 scénarios clés :
-  1. Pratique SUPÉRIEURE à l'exigence (rapport hebdo vs mensuel)
-  2. Pratique TROMPEUSE (document existe mais non utilisé)
-  3. Exigence ABSENTE (écart majeur)
-  4. Cohérence INTER-CLAUSES (objectifs définis mais non mesurés)
+Teste le diagnostic d'une fiche processus complète via l'ISO Engine.
 """
 
 import asyncio
+import os
 import json
 
 from iso_engine import (
-    analyser_conformite_clause,
-    analyser_action_corrective,
-    evaluer_risque_intelligent,
-    score_to_niveau,
-    calcul_rpn,
-    rpn_to_criticite,
-    transition_action_valide,
+    analyser_fiche_processus,
+    extraire_observations_depuis_fiche,
+    extraire_preuves_depuis_fiche,
+    clauses_prioritaires_depuis_fiche,
     TypeEcart,
+    NiveauMaturite,
 )
 
 # ── couleurs terminal ──────────────────────────────────────────────────────
@@ -29,293 +24,185 @@ GREEN  = "\033[92m"
 RED    = "\033[91m"
 YELLOW = "\033[93m"
 BLUE   = "\033[94m"
+CYAN   = "\033[96m"
 BOLD   = "\033[1m"
 RESET  = "\033[0m"
 
-def titre(texte: str):
-    print(f"\n{BOLD}{BLUE}{'═'*60}{RESET}")
+def titre(texte):
+    print(f"\n{BOLD}{BLUE}{'═'*65}{RESET}")
     print(f"{BOLD}{BLUE}  {texte}{RESET}")
-    print(f"{BOLD}{BLUE}{'═'*60}{RESET}")
+    print(f"{BOLD}{BLUE}{'═'*65}{RESET}")
 
-def ok(texte: str):
-    print(f"  {GREEN}✓ {texte}{RESET}")
-
-def ko(texte: str):
-    print(f"  {RED}✗ {texte}{RESET}")
-
-def info(texte: str):
-    print(f"  {YELLOW}→ {texte}{RESET}")
-
-def afficher_evaluation(eval_result):
-    print(f"\n  Score       : {BOLD}{eval_result.score:.2f}{RESET} ({eval_result.niveau.value})")
-    print(f"  Type écart  : {BOLD}{eval_result.type_ecart.value.upper()}{RESET}")
-    print(f"  Confiance   : {eval_result.confiance_ia:.0%}")
-    if eval_result.intention_comprise:
-        print(f"\n  [Étape 1 — Intention]\n  {eval_result.intention_comprise}")
-    if eval_result.analyse_pratiques:
-        print(f"\n  [Étape 2 — Analyse]\n  {eval_result.analyse_pratiques}")
-    if eval_result.impacts_croises and eval_result.impacts_croises != "Aucune incohérence détectée":
-        print(f"\n  [Étape 3 — Croisements]\n  {eval_result.impacts_croises}")
-    if eval_result.verdict_justifie:
-        print(f"\n  [Étape 4 — Verdict]\n  {eval_result.verdict_justifie}")
-    if eval_result.ecarts_identifies:
-        print(f"\n  Écarts identifiés :")
-        for e in eval_result.ecarts_identifies:
-            print(f"    • {e}")
-    if eval_result.recommandations:
-        print(f"\n  Recommandations :")
-        for r in eval_result.recommandations:
-            print(f"    → {r}")
+def ok(texte):   print(f"  {GREEN}✓ {texte}{RESET}")
+def ko(texte):   print(f"  {RED}✗ {texte}{RESET}")
+def info(texte): print(f"  {YELLOW}→ {texte}{RESET}")
 
 
-# ── tests statiques (sans IA) ──────────────────────────────────────────────
+# ── unique fiche de test (Fiche Complète) ──────────────────────────────────
 
-def test_statiques():
-    titre("TESTS STATIQUES — sans IA")
-
-    # RPN
-    rpn = calcul_rpn(5, 8, 3)
-    assert rpn == 120, f"RPN attendu 120, obtenu {rpn}"
-    ok(f"calcul_rpn(5,8,3) = {rpn} → {rpn_to_criticite(rpn).value}")
-
-    assert rpn_to_criticite(250).value == "critique"
-    assert rpn_to_criticite(120).value == "eleve"
-    assert rpn_to_criticite(60).value  == "modere"
-    assert rpn_to_criticite(30).value  == "faible"
-    ok("rpn_to_criticite — tous les seuils OK")
-
-    # Transitions
-    assert transition_action_valide("planifiee", "en_cours")   == True
-    assert transition_action_valide("planifiee", "efficace")   == False
-    assert transition_action_valide("terminee",  "efficace")   == True
-    assert transition_action_valide("efficace",  "planifiee")  == False
-    assert transition_action_valide("inefficace","planifiee")  == True
-    ok("transition_action_valide — toutes les transitions OK")
-
-    # Score → niveau
-    assert score_to_niveau(0.0).value  == "inexistant"
-    assert score_to_niveau(0.25).value == "initial"
-    assert score_to_niveau(0.60).value == "defini"
-    assert score_to_niveau(0.95).value == "gere"
-    assert score_to_niveau(1.0).value  == "optimise"
-    ok("score_to_niveau — tous les paliers OK")
-
-    print(f"\n  {GREEN}{BOLD}Tous les tests statiques passent.{RESET}")
-
-
-# ── tests IA ──────────────────────────────────────────────────────────────
-
-async def test_pratique_superieure():
-    """
-    Scénario : la clause 9.1 demande une surveillance régulière.
-    L'organisme produit des rapports HEBDOMADAIRES alors que mensuel serait suffisant.
-    Résultat attendu : CONFORME ou SUPERIEUR, score >= 0.90
-    """
-    titre("TEST 1 — Pratique SUPÉRIEURE à l'exigence")
-    info("Clause 9.1 — surveillance régulière")
-    info("Exigence implicite : mesure périodique des KPIs")
-    info("Pratique observée  : rapports hebdomadaires (plus fréquent que nécessaire)")
-
-    result = await analyser_conformite_clause(
-        clause_id="9.1",
-        observations=(
-            "L'organisme produit chaque semaine un rapport de performance automatisé "
-            "couvrant tous les KPIs des processus. Ce rapport est distribué à tous les pilotes "
-            "et discuté en réunion opérationnelle hebdomadaire. La satisfaction client est "
-            "mesurée trimestriellement via une enquête structurée avec analyse des résultats."
-        ),
-        preuves_fournies=[
-            "52 rapports hebdomadaires produits sur l'année écoulée",
-            "Tableau de bord automatisé avec 8 KPIs par processus",
-            "Résultats enquête satisfaction client Q1-Q4 avec analyse de tendance",
-            "PV des réunions opérationnelles hebdomadaires mentionnant les KPIs",
+FICHE_COMPLETE = {
+    "section_1_general": {
+        "designation": "Processus Achats",
+        "pilote": "Karim Benali",
+        "objectif": "Garantir l'approvisionnement en matériaux conformes aux spécifications techniques dans les délais requis",
+        "structures_concernees": "Direction Achats, Qualité, Production",
+        "type": "Réalisation",
+    },
+    "section_2_elements_cles": {
+        "delai_global": "5 days",
+        "cout_estime": "Budget annuel : 12M DA",
+        "entrees": [
+            {"elements": "Bon de commande validé", "provenance_processus": "Processus Production"},
+            {"elements": "Cahier des charges technique", "provenance_processus": "Processus Conception"},
         ],
-        contexte_processus={
-            "nom": "Pilotage de la performance",
-            "type": "mesure",
-            "pilote": "Directeur Qualité",
-        },
-    )
-
-    afficher_evaluation(result)
-
-    # Vérification
-    if result.type_ecart in (TypeEcart.CONFORME, TypeEcart.SUPERIEUR) and result.score >= 0.88:
-        ok(f"CORRECT — pratique supérieure reconnue (score={result.score:.2f}, type={result.type_ecart.value})")
-    else:
-        ko(f"PROBLÈME — pratique supérieure non reconnue (score={result.score:.2f}, type={result.type_ecart.value})")
-        info("Le moteur aurait dû reconnaître que hebdomadaire > mensuel = conforme voire supérieur")
-
-
-async def test_document_non_utilise():
-    """
-    Scénario : la politique qualité existe et est affichée,
-    mais les employés ne la connaissent pas.
-    Résultat attendu : MINEUR ou MAJEUR — le document seul ne suffit pas.
-    """
-    titre("TEST 2 — Document existe mais n'est pas utilisé")
-    info("Clause 5.2 — politique qualité")
-    info("Piège classique : document formel mais intention non satisfaite")
-
-    result = await analyser_conformite_clause(
-        clause_id="5.2",
-        observations=(
-            "La politique qualité est affichée dans le hall d'entrée et sur l'intranet. "
-            "Elle est datée et signée par le directeur général. "
-            "Lors des entretiens terrain avec 5 employés de production, aucun n'a pu "
-            "expliquer ce qu'elle contient ni comment son travail y contribue. "
-            "La dernière formation qualité remonte à 3 ans."
-        ),
-        preuves_fournies=[
-            "Politique qualité datée 2023, signée DG",
-            "Capture d'écran intranet montrant la politique",
-            "Affichage photo dans le hall d'entrée",
+        "sorties": [
+            {"livrables": "Matériaux réceptionnés et contrôlés", "destination_processus": "Processus Production"},
+            {"livrables": "Fiche de réception signée", "destination_processus": "Processus Qualité"},
         ],
-        contexte_processus={
-            "nom": "Management de la qualité",
-            "type": "management",
-        },
-    )
-
-    afficher_evaluation(result)
-
-    if result.type_ecart in (TypeEcart.MINEUR, TypeEcart.MAJEUR):
-        ok(f"CORRECT — document formel sans réalité opérationnelle détecté (type={result.type_ecart.value})")
-    else:
-        ko(f"PROBLÈME — le moteur a accepté un document non utilisé comme conforme (type={result.type_ecart.value})")
-        info("Le moteur aurait dû détecter que la communication n'a pas atteint les employés")
-
-
-async def test_exigence_absente():
-    """
-    Scénario : aucun registre des risques, aucune action planifiée.
-    Résultat attendu : MAJEUR, score < 0.40
-    """
-    titre("TEST 3 — Exigence ABSENTE (écart majeur attendu)")
-    info("Clause 6.1 — gestion des risques")
-    info("Scénario : organisme qui n'a jamais formalisé ses risques")
-
-    result = await analyser_conformite_clause(
-        clause_id="6.1",
-        observations=(
-            "L'organisme n'a pas de registre des risques formalisé. "
-            "Le responsable qualité indique que 'les risques sont connus des managers' "
-            "mais aucun document n'existe. Aucune action préventive n'est planifiée. "
-            "Les incidents passés ne sont pas analysés sous l'angle risque."
-        ),
-        preuves_fournies=[
-            "Aucun document fourni pour cette clause",
+        "clients": "Direction Production, Direction Qualité",
+        "effectifs": "4 agents acheteurs, 1 responsable",
+        "competences": "Négociation, droit des contrats, contrôle qualité fournisseur",
+        "kpis": [
+            {"nom": "Taux de livraison dans les délais", "cible": "95%", "frequence": "mensuel"},
+            {"nom": "Taux de non-conformité fournisseur", "cible": "< 2%", "frequence": "mensuel"},
+            {"nom": "Délai moyen de traitement commande", "cible": "3 jours", "frequence": "hebdomadaire"},
         ],
-        contexte_processus={
-            "nom": "Management de la qualité",
-            "type": "management",
-        },
-    )
-
-    afficher_evaluation(result)
-
-    if result.type_ecart == TypeEcart.MAJEUR and result.score < 0.40:
-        ok(f"CORRECT — écart majeur détecté (score={result.score:.2f})")
-    else:
-        ko(f"PROBLÈME — écart majeur non détecté (score={result.score:.2f}, type={result.type_ecart.value})")
-
-
-async def test_coherence_inter_clauses():
-    """
-    Scénario : §6.2 semble OK (objectifs définis) mais §9.1 est faible (pas de mesure).
-    Le moteur doit détecter l'incohérence : des objectifs non mesurés ne servent à rien.
-    """
-    titre("TEST 4 — Incohérence INTER-CLAUSES")
-    info("Clause 6.2 — objectifs qualité")
-    info("Contexte : §9.1 a un score faible (0.30) — les KPIs ne sont pas mesurés")
-    info("Attendu  : le moteur signale que des objectifs sans mesure = objectifs fictifs")
-
-    result = await analyser_conformite_clause(
-        clause_id="6.2",
-        observations=(
-            "L'organisme a défini 5 objectifs qualité SMART documentés dans un plan annuel. "
-            "Chaque objectif a un responsable et une échéance. "
-            "Cependant, aucun tableau de bord n'est mis à jour — les indicateurs associés "
-            "n'ont pas été mesurés depuis le début de l'année."
-        ),
-        preuves_fournies=[
-            "Plan des objectifs qualité 2025 avec 5 objectifs SMART",
-            "Responsables et échéances assignés pour chaque objectif",
+    },
+    "section_3_contexte": {
+        "processus_voisins": "Processus Production (client), Processus Qualité (contrôle), Processus Finance (paiement)",
+        "enjeux": "Maîtrise des coûts, fiabilité des fournisseurs, conformité réglementaire des produits achetés",
+        "moyens_alloues": "ERP SAP, véhicule de livraison, espace de stockage 500m²",
+        "contraintes": "Délais clients serrés, fournisseurs locaux limités",
+        "risques": [
+            {"libelle": "Rupture de stock fournisseur principal", "criticite": "eleve"},
+            {"libelle": "Non-conformité des matériaux livrés", "criticite": "critique"},
+            {"libelle": "Retard de livraison", "criticite": "modere"},
         ],
-        contexte_processus={
-            "nom": "Planification qualité",
-            "type": "management",
-        },
-        scores_autres_clauses={
-            "9.1": 0.30,   # KPIs non mesurés — incohérence à détecter
-            "5.2": 0.85,
-            "6.1": 0.75,
-        },
-    )
+    },
+    "section_4_informations_documentees": {
+        "documents": [
+            {"titre": "Procédure d'achat PA-001", "format_support": "PDF", "approuve": True, "est_enregistrement": False},
+            {"titre": "Critères d'évaluation fournisseurs", "format_support": "Excel", "approuve": True, "est_enregistrement": False},
+            {"titre": "Bon de commande type", "format_support": "Word", "approuve": True, "est_enregistrement": True},
+            {"titre": "Fiche de réception", "format_support": "PDF", "approuve": True, "est_enregistrement": True},
+        ],
+    },
+    "section_5_dysfonctionnements": {
+        "historique": [
+            {
+                "description": "Livraison de matériaux hors spécification en mars 2024",
+                "consequences": "Arrêt production 2 jours, perte 800k DA",
+                "causes": "Absence de contrôle à réception, fournisseur non qualifié",
+                "ameliorations": "Mise en place check-list réception, qualification obligatoire des fournisseurs",
+            },
+        ],
+    },
+    "section_6_modelisation": {
+        "taches_chronologiques": [
+            "Réception besoin",
+            "Consultation fournisseurs",
+            "Analyse offres",
+            "Validation commande",
+            "Suivi livraison",
+            "Contrôle réception",
+            "Enregistrement",
+        ],
+    },
+}
 
-    afficher_evaluation(result)
 
-    # Le score doit être pénalisé par l'incohérence inter-clauses
-    if result.score < 0.75:
-        ok(f"CORRECT — incohérence inter-clauses détectée, score pénalisé ({result.score:.2f})")
-    else:
-        info(f"Score obtenu : {result.score:.2f} — vérifier si l'impact croisé est mentionné dans le raisonnement")
+# ── affichage des résultats avec gestion d'erreur ROUGE ────────────────────
 
-    if result.impacts_croises and "9.1" in result.impacts_croises:
-        ok("Référence à §9.1 trouvée dans les impacts croisés")
-    if result.clauses_impactees:
-        ok(f"Clauses impactées signalées : {result.clauses_impactees}")
+def afficher_resultats(resultats: dict, nom_fiche: str):
+    if not resultats:
+        print(f"\n{RED}{BOLD}✗ CRITICAL ERROR : Le serveur d'IA n'a renvoyé aucune donnée.{RESET}")
+        return []
+
+    print(f"\n  {BOLD}Clauses analysées pour '{nom_fiche}' :{RESET}")
+
+    scores = []
+    for clause_id, eval_r in sorted(resultats.items()):
+        # Si le résultat contient un indicateur de crash ou une erreur système
+        if hasattr(eval_r, 'type_ecart') and eval_r.type_ecart.value.upper() in ["CRITIQUE", "ERREUR", "ERROR"]:
+            print(f"\n  {RED}{BOLD}§{clause_id:<6} [SERVEUR IA DOWN / RATE LIMIT EXCEEDED]{RESET}")
+            if hasattr(eval_r, 'ecarts_identifies'):
+                for e in eval_r.ecarts_identifies:
+                    print(f"    {RED}{BOLD}⚠ {e}{RESET}")
+            continue
+
+        couleur = GREEN if eval_r.score >= 0.75 else (YELLOW if eval_r.score >= 0.50 else RED)
+        barre = "█" * int(eval_r.score * 10) + "░" * (10 - int(eval_r.score * 10))
+        
+        print(
+            f"\n  {BOLD}§{clause_id:<6} {barre} {couleur}{eval_r.score:.2f}{RESET} "
+            f"[{eval_r.type_ecart.value.upper():<12}] {eval_r.niveau.value}"
+        )
+
+        # Écarts
+        if eval_r.ecarts_identifies:
+            for e in eval_r.ecarts_identifies:
+                print(f"    {YELLOW}⚠ {e}{RESET}")
+
+        # Recommandations
+        if eval_r.recommandations:
+            for r in eval_r.recommandations:
+                print(f"    {GREEN}→ {r}{RESET}")
+
+        scores.append(eval_r.score)
+
+    if scores:
+        moyenne = sum(scores) / len(scores)
+        couleur = GREEN if moyenne >= 0.75 else (YELLOW if moyenne >= 0.50 else RED)
+        print(f"\n  {BOLD}Score moyen : {couleur}{moyenne:.2f}{RESET}")
+
+    return scores
 
 
-async def test_action_corrective():
-    """
-    Scénario : action corrective qui traite le symptôme, pas la cause racine.
-    """
-    titre("TEST 5 — Action corrective symptôme vs cause racine")
-    info("§10.2 — l'action proposée corrige le symptôme uniquement")
+# ── test unique ────────────────────────────────────────────────────────────
 
-    result = await analyser_action_corrective(
-        description_nc="Livraisons clients en retard — 30% des commandes livrées hors délai ce trimestre",
-        cause_racine="Sous-effectif chronique en période de pic d'activité — les plannings ne sont pas ajustés",
-        action_proposee="Envoyer des excuses aux clients concernés et offrir une remise de 10%",
-    )
+async def test_fiche_complete():
+    titre("TEST UNIQUE — Diagnostic Fiche Processus Complète")
+    info("Analyse du Processus Achats via le moteur d'IA")
 
-    print(f"\n  Traite cause racine  : {BOLD}{result.get('traite_cause_racine')}{RESET}")
-    print(f"  Risque récurrence    : {BOLD}{result.get('risque_recurrence')}{RESET}")
-    print(f"  Raisonnement         : {result.get('raisonnement')}")
-    if result.get("ameliorations_suggerees"):
-        print(f"\n  Améliorations suggérées :")
-        for a in result["ameliorations_suggerees"]:
-            print(f"    → {a}")
+    try:
+        resultats = await analyser_fiche_processus(FICHE_COMPLETE)
+        
+        # Détection d'un dictionnaire d'erreur ou d'un fallback renvoyé par l'engine
+        if not resultats or "erreur" in str(resultats).lower() or "429" in str(resultats):
+            raise ConnectionError("Le serveur d'IA est surchargé (Rate Limit 429) ou injoignable.")
 
-    if not result.get("traite_cause_racine") and result.get("risque_recurrence") in ("modere", "eleve"):
-        ok("CORRECT — action symptôme détectée, récurrence signalée")
-    else:
-        ko("PROBLÈME — action symptôme non détectée comme insuffisante")
+        scores = afficher_resultats(resultats, "Processus Achats")
+
+        if "6.1" in resultats and resultats["6.1"].score >= 0.70:
+            ok("§6.1 validé avec succès par l'IA.")
+        if "9.1" in resultats and resultats["9.1"].score >= 0.70:
+            ok("§9.1 validé avec succès par l'IA.")
+
+    except Exception as e:
+        print(f"\n{RED}{BOLD}═"*65)
+        print(f"❌ ERREUR SERVEUR IA : LE DIAGNOSTIC A ÉCHOUÉ")
+        print(f"Détail du problème : {e}")
+        print(f"═"*65 + f"{RESET}\n")
 
 
 # ── main ──────────────────────────────────────────────────────────────────
 
 async def main():
-    print(f"\n{BOLD}ISO ENGINE v2 — Suite de tests{RESET}")
-    print("Tests statiques d'abord, puis tests IA (nécessitent connexion API)\n")
+    print(f"\n{BOLD}SI-SMQ : MOTEUR DE DIAGNOSTIC ISO 9001{RESET}\n")
 
-    # 1. Tests statiques — toujours
-    test_statiques()
+    # Vérification de la clé API
+    api_key = os.environ.get("GROQ_API_KEY", "") or os.environ.get("GEMINI_API_KEY", "")
+    if not api_key:
+        print(f"{RED}{BOLD}❌ CONFIGURATION MANQUANTE : Aucune clé API trouvée.{RESET}")
+        print(f"Utilise : {YELLOW}$env:GROQ_API_KEY='gsk_...'{RESET} avant de lancer le script.")
+        return
 
-    # 2. Tests IA
-    print(f"\n{YELLOW}Lancement des tests IA — appels à l'API Anthropic...{RESET}")
-    print(f"{YELLOW}(peut prendre 10-30 secondes par test){RESET}\n")
+    print(f"{YELLOW}Envoi de la fiche à l'IA... (Patienter 5-10 secondes){RESET}")
+    await test_fiche_complete()
 
-    await test_pratique_superieure()
-    await test_document_non_utilise()
-    await test_exigence_absente()
-    await test_coherence_inter_clauses()
-    await test_action_corrective()
-
-    print(f"\n{BOLD}{GREEN}{'═'*60}{RESET}")
-    print(f"{BOLD}{GREEN}  Tests terminés.{RESET}")
-    print(f"{BOLD}{GREEN}{'═'*60}{RESET}\n")
+    print(f"\n{BOLD}{BLUE}═"*65)
+    print(f"  Fin de la session de test.")
+    print(f"═"*65 + f"{RESET}\n")
 
 
 if __name__ == "__main__":

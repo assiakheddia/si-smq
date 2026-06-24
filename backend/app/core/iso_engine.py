@@ -28,6 +28,9 @@ from typing import Any
 import os
 from urllib import response
 import httpx
+from dotenv import load_dotenv
+
+load_dotenv() 
 
 logger = logging.getLogger(__name__)
 
@@ -36,9 +39,9 @@ logger = logging.getLogger(__name__)
 # 1. RÉFÉRENTIEL ISO 9001:2015 — intention explicite pour chaque exigence
 # ---------------------------------------------------------------------------
 # Chaque exigence porte :
-#   - "lettre"       : ce que le texte dit littéralement
-#   - "intention"    : POURQUOI cette exigence existe
-#   - "satisfait_si" : exemples de pratiques équivalentes ou supérieures
+#   - "lettre"         : ce que le texte dit littéralement
+#   - "intention"      : POURQUOI cette exigence existe
+#   - "satisfait_si"   : exemples de pratiques équivalentes ou supérieures
 #   - "insuffisant_si" : pratiques qui semblent conformes mais ne le sont pas
 #
 # C'est ce mapping lettre<->intention qui rend le moteur intelligent.
@@ -334,7 +337,7 @@ ISO_CLAUSES: dict[str, dict] = {
         "exigences": [
             {
                 "id": "6.1.a",
-                "lettre": "Identifier les risques et opportunités",
+                "lettre": "Identify les risques et opportunités",
                 "intention": (
                     "Les risques doivent couvrir les processus, les objectifs qualité ET le contexte. "
                     "Les opportunités sont souvent oubliées — absence = écart mineur seulement. "
@@ -355,7 +358,7 @@ ISO_CLAUSES: dict[str, dict] = {
                 "id": "6.1.b",
                 "lettre": "Planifier des actions et en évaluer l'efficacité",
                 "intention": (
-                    "Chaque risque significatif doit avoir UNE ACTION planifiée "
+                    "Chaque risque élastique doit avoir UNE ACTION planifiée "
                     "avec un responsable et une échéance. "
                     "L'évaluation d'efficacité peut être simple : le risque s'est-il matérialisé ?"
                 ),
@@ -379,7 +382,7 @@ ISO_CLAUSES: dict[str, dict] = {
         "section": 6,
         "intention_globale": (
             "Les objectifs qualité doivent être MESURABLES et SUIVIS — pas des vœux pieux. "
-            "Un objectif 'améliorer la satisfaction client' sans indicateur = non-conforme. "
+            "Un objectif 'améliorer la satisfaction client' sans indicator = non-conforme. "
             "'Atteindre 90% de satisfaction client au T3' = conforme."
         ),
         "exigences": [
@@ -572,6 +575,37 @@ ISO_CLAUSES: dict[str, dict] = {
         "poids": 0.9,
         "clauses_liees": ["4.4", "8.5", "8.6"],
     },
+    "8.5": {
+        "titre": "Production et prestation de service",
+        "section": 8,
+        "intention_globale": (
+            "Assurer l'exécution des opérations de production et de service sous conditions maîtrisées. "
+            "Cela englobe la traçabilité, la préservation des livrables et les activités après livraison."
+        ),
+        "exigences": [
+            {
+                "id": "8.5.a",
+                "lettre": "Maîtriser la production et la prestation de service",
+                "intention": (
+                    "Mettre à disposition des informations documentées définissant les caractéristiques "
+                    "des produits/services et l'utilisation d'infrastructures adéquates."
+                ),
+                "satisfait_si": [
+                    "Fiches d'instructions au poste de travail",
+                    "Planning de production respecté et ajusté",
+                    "Équipements de mesure calibrés et vérifiés",
+                ],
+                "insuffisant_si": [
+                    "Opérations critiques réalisées de mémoire sans standard",
+                    "Utilisation d'outils ou d'outillages non vérifiés",
+                ],
+                "bloquant_si_absent": True,
+            },
+        ],
+        "preuves_attendues": ["Ordres de fabrication", "Fiches de suivi", "Certificats d'étalonnage"],
+        "poids": 1.0,
+        "clauses_liees": ["7.1", "8.1", "8.6"],
+    },
     "9.1": {
         "titre": "Surveillance, mesure, analyse et évaluation",
         "section": 9,
@@ -701,104 +735,62 @@ ISO_CLAUSES: dict[str, dict] = {
             {
                 "id": "9.3.b",
                 "lettre": "Produire des décisions et actions comme éléments de sortie",
-                "intention": (
-                    "La revue doit déboucher sur DES DÉCISIONS documentées. "
-                    "Une revue sans aucune action décidée = organisme en pilotage automatique = écart."
-                ),
+                "intention": "La revue doit déboucher sur DES DÉCISIONS documentées.",
                 "satisfait_si": [
-                    "Actions décidées en revue, tracées dans un plan d'actions",
-                    "Suivi des actions de la revue précédente en début de revue",
+                    "Plan d'actions stratégiques post-revue daté avec affectation des ressources",
                 ],
                 "insuffisant_si": [
-                    "PV de revue sans aucune action décidée",
-                    "Actions décidées mais non tracées ni suivies",
+                    "PV de réunion descriptif sans aucun plan d'action validé",
                 ],
                 "bloquant_si_absent": True,
             },
         ],
-        "preuves_attendues": ["PV de revue de direction complet", "Tableau de bord présenté", "Plan d'actions issu de la revue"],
-        "poids": 0.9,
-        "clauses_liees": ["5.1", "9.1", "10.3"],
+        "preuves_attendues": ["Compte rendu / PV de revue de direction", "Plan d'actions stratégiques"],
+        "poids": 1.0,
+        "clauses_liees": ["5.1", "6.2", "10.1"],
     },
     "10.2": {
         "titre": "Non-conformité et action corrective",
         "section": 10,
         "intention_globale": (
-            "Quand quelque chose ne va pas, l'organisme doit RÉAGIR et APPRENDRE. "
-            "ISO 9001 demande d'aller à la CAUSE RACINE — pas juste corriger le symptôme. "
-            "Un organisme qui traite les NC rapidement mais toujours les mêmes = cause racine non traitée = écart."
+            "Réagir aux non-conformités, éliminer leurs causes racines pour éviter qu'elles ne se "
+            "reproduisent, et évaluer l'efficacité des actions entreprises."
         ),
         "exigences": [
             {
                 "id": "10.2.a",
-                "lettre": "Réagir, analyser les causes racines, mettre en œuvre des actions correctives",
+                "lettre": "Réagir à la non-conformité et maîtriser les conséquences",
                 "intention": (
-                    "3 niveaux obligatoires : (1) correction immédiate, "
-                    "(2) analyse causale (POURQUOI), "
-                    "(3) action corrective pour éviter la récurrence."
+                    "Lorsqu'un problème survient, il faut agir immédiatement pour limiter les dégâts (isolement, correction)."
                 ),
                 "satisfait_si": [
-                    "Fiche NC avec correction + analyse causale + action corrective",
-                    "Méthode causale appliquée (5M, 5 pourquoi, etc.)",
+                    "Traitement immédiat du produit non conforme",
+                    "Information immédiate du client impacté",
                 ],
                 "insuffisant_si": [
-                    "NC traitées sans analyse causale (symptôme uniquement)",
-                    "Mêmes NC récurrentes sans traitement de la cause racine",
+                    "Attendre l'audit pour traiter un dysfonctionnement connu",
                 ],
                 "bloquant_si_absent": True,
             },
             {
                 "id": "10.2.b",
-                "lettre": "Vérifier l'efficacité des actions correctives",
+                "lettre": "Évaluer l'opportunité d'une action pour éliminer les causes",
                 "intention": (
-                    "APRÈS mise en œuvre : vérifier que le problème ne s'est pas reproduit. "
-                    "La vérification peut être un suivi indicateur, un re-audit, ou une observation terrain."
+                    "Rechercher le POURQUOI (méthode des 5 Pourquoi, Ishikawa) pour mettre en place une action corrective durable."
                 ),
                 "satisfait_si": [
-                    "Critères d'efficacité définis dans la fiche NC",
-                    "Taux de récurrence des NC mesuré et en diminution",
+                    "Analyse des causes documentée sur les réclamations majeures",
+                    "Actions correctives enregistrées avec indicateur de suivi",
                 ],
                 "insuffisant_si": [
-                    "Aucune vérification d'efficacité réalisée",
+                    "Faire une action corrective superficielle qui ne traite pas la cause réelle",
                 ],
-                "bloquant_si_absent": False,
+                "bloquant_si_absent": True,
             },
         ],
-        "preuves_attendues": ["Registre des non-conformités", "Fiches NC avec analyse causale"],
+        "preuves_attendues": ["Fiches de non-conformité", "Analyses de causes racines", "Plan d'actions correctives"],
         "poids": 1.0,
-        "clauses_liees": ["8.7", "9.2", "10.3"],
-    },
-    "10.3": {
-        "titre": "Amélioration continue",
-        "section": 10,
-        "intention_globale": (
-            "L'amélioration continue est l'ADN de ISO 9001. "
-            "L'auditeur cherche une DYNAMIQUE — est-ce que les choses s'améliorent vraiment ? "
-            "Des indicateurs en progression, des NC en diminution = preuve vivante. "
-            "Un plan d'amélioration sur papier sans résultats = insuffisant."
-        ),
-        "exigences": [
-            {
-                "id": "10.3.a",
-                "lettre": "Améliorer en permanence la pertinence, l'adéquation et l'efficacité du SMQ",
-                "intention": (
-                    "PERMANENCE = pas un projet ponctuel, une culture. "
-                    "Les preuves sont dans les tendances des indicateurs, les actions réalisées."
-                ),
-                "satisfait_si": [
-                    "Indicateurs de performance en progression sur 2+ cycles",
-                    "Actions d'amélioration réalisées et bénéfices mesurés",
-                ],
-                "insuffisant_si": [
-                    "Indicateurs stagnants ou dégradés sans plan de correction",
-                    "SMQ figé depuis sa mise en place sans évolution",
-                ],
-                "bloquant_si_absent": False,
-            },
-        ],
-        "preuves_attendues": ["Tendances KPIs sur 2+ périodes", "Bilan des actions d'amélioration"],
-        "poids": 0.8,
-        "clauses_liees": ["9.1", "9.3", "10.2"],
+        "clauses_liees": ["6.1", "9.1", "9.2"],
     },
 }
 
@@ -971,71 +963,48 @@ RÈGLE 5 — CALIBRAGE DES ÉCARTS
 Règle de réponse : UNIQUEMENT du JSON valide. Aucun texte avant ou après. Langue : français professionnel."""
 
 
-async def _appel_gemini(prompt: str, max_tokens: int = 8192) -> dict:
-    """Appelle l'API de Groq (remplace Gemini pour éviter le blocage de région)."""
-    
-    # 🚨 1. VA SUR console.groq.com POUR CRÉER UNE CLÉ
-    # 🚨 2. COLLE TA CLÉ GROQ ICI (elle doit commencer par "gsk_")
-    api_key = "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"
-    
-    if not api_key or api_key.startswith("AIza"):
-        print("🚨 ATTENTION: Tu as laissé la clé Google ! Il faut une clé Groq (gsk_...)")
-        return {"error": "Clé API invalide"}
+async def _appel_gemini(prompt: str, max_tokens: int = 2000) -> dict:
+    api_key = os.environ.get("GROQ_API_KEY", "")
+    if not api_key:
+        raise ISOEngineError("Clé GROQ_API_KEY manquante")
 
-    # L'URL et les headers spécifiques à Groq (format OpenAI)
     url = "https://api.groq.com/openai/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
 
-    # Le payload adapté pour Groq
-    # Le payload adapté pour Groq
     payload = {
-        "model": "llama-3.3-70b-versatile",  # <--- MODIFIE JUSTE CETTE LIGNE
+        "model": "llama-3.3-70b-versatile",
         "messages": [
-            {
-                "role": "system", 
-                "content": "Tu es un auditeur expert ISO 9001. Tu dois obligatoirement répondre avec un objet JSON valide."
-            },
-            {"role": "user", "content": prompt}
+            {"role": "system", "content": _SYSTEM_PROMPT_AUDITEUR},
+            {"role": "user",   "content": prompt},
         ],
-        "response_format": {"type": "json_object"},
+        "max_tokens": 8192,
         "temperature": 0.1,
-        "max_tokens": max_tokens
+        "response_format": {"type": "json_object"},  # Force JSON pur
     }
 
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(url, headers=headers, json=payload)
-            
-            # Affichage pour t'aider à débugger
-            print(f"🚀 Status code Groq : {response.status_code}")
-            
+            response = await client.post(
+                url,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+            )
             response.raise_for_status()
-            res_json = response.json()
-
-            # L'extraction du texte est un peu différente avec Groq/OpenAI
-            texte = res_json["choices"][0]["message"]["content"].strip()
-
-            # Nettoyage markdown de sécurité
-            if texte.startswith("```"):
-                texte = texte.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-
+            data = response.json()
+            texte = data["choices"][0]["message"]["content"].strip()
             return json.loads(texte)
 
     except json.JSONDecodeError as e:
-        print(f"\n🚨 ERREUR JSON : Le modèle n'a pas renvoyé un JSON valide ({e})\n")
-        return {"error": f"JSON invalide : {e}"}
-        
+        raise ISOEngineError(f"JSON invalide : {e}")
     except httpx.HTTPStatusError as e:
-        print(f"\n🚨 ERREUR API GROQ : {e.response.status_code} - {e.response.text}\n")
-        return {"error": f"Erreur API Groq: {e.response.status_code}"}
-        
+        raise ISOEngineError(f"Erreur API Groq : {e.response.status_code}")
+    except ISOEngineError:
+        raise
     except Exception as e:
-        print(f"\n🚨 AUTRE ERREUR : {str(e)}\n")
-        return {"error": str(e)}
-    
+        raise ISOEngineError(str(e))
+       
     
 class ISOEngineError(Exception):
     pass
@@ -1436,8 +1405,247 @@ Réponds avec ce JSON exact :
         return []
 
 
+
 # ---------------------------------------------------------------------------
-# 7. UTILITAIRES
+# 7. ADAPTATEUR FICHE PROCESSUS → iso_engine
+# ---------------------------------------------------------------------------
+
+def extraire_observations_depuis_fiche(fiche: dict) -> str:
+    s1 = fiche.get("section_1_general", {})
+    s2 = fiche.get("section_2_elements_cles", {})
+    s3 = fiche.get("section_3_contexte", {})
+    s4 = fiche.get("section_4_informations_documentees", {})
+    s5 = fiche.get("section_5_dysfonctionnements", {})
+    s6 = fiche.get("section_6_modelisation", {})
+    lignes = []
+
+    pilote = s1.get("pilote", "Non assigné")
+    lignes.append(f"PROCESSUS : {s1.get('designation', 'Non renseigné')} (type: {s1.get('type', '?')})")
+    lignes.append(f"PILOTE : {pilote}")
+    lignes.append(f"OBJECTIF : {s1.get('objectif', 'Non renseigné')}")
+    if s1.get("structures_concernees"):
+        lignes.append(f"STRUCTURES CONCERNÉES : {s1['structures_concernees']}")
+
+    kpis = s2.get("kpis", [])
+    if kpis:
+        kpi_str = ", ".join([f"{k['nom']} (cible: {k['cible']}, fréquence: {k['frequence']})" for k in kpis])
+        lignes.append(f"KPIs DÉFINIS ET ACTIFS : {kpi_str}")
+    else:
+        lignes.append("KPIs : Aucun indicateur actif défini pour ce processus.")
+
+    entrees = s2.get("entrees", [])
+    sorties = s2.get("sorties", [])
+    if entrees:
+        lignes.append(f"ENTRÉES : {', '.join([e['elements'] for e in entrees])}")
+    if sorties:
+        lignes.append(f"SORTIES/LIVRABLES : {', '.join([s['livrables'] for s in sorties])}")
+    if s2.get("competences_cles"):
+        lignes.append(f"COMPÉTENCES CLÉS REQUISES : {s2['competences_cles']}")
+    if s2.get("effectifs_impliques"):
+        lignes.append(f"EFFECTIFS IMPLIQUÉS : {s2['effectifs_impliques']}")
+
+    risques = s3.get("risques", [])
+    if risques:
+        risques_str = " | ".join([f"{r['libelle']} (criticité: {r['criticite']})" for r in risques])
+        lignes.append(f"RISQUES IDENTIFIÉS : {risques_str}")
+    else:
+        lignes.append("RISQUES : Aucun risque formalisé pour ce processus.")
+    if s3.get("enjeux"):
+        lignes.append(f"ENJEUX : {s3['enjeux']}")
+    if s3.get("contraintes"):
+        lignes.append(f"CONTRAINTES : {s3['contraintes']}")
+    if s3.get("processus_voisins"):
+        lignes.append(f"PROCESSUS VOISINS (interactions) : {s3['processus_voisins']}")
+    if s3.get("moyens_alloues"):
+        lignes.append(f"MOYENS ALLOUÉS : {s3['moyens_alloues']}")
+
+    docs = s4.get("documents", [])
+    docs_valides = [d for d in docs if d.get("approuve")]
+    enregistrements = [d for d in docs if d.get("est_enregistrement")]
+    if docs_valides:
+        lignes.append(f"DOCUMENTS VALIDÉS : {', '.join([d['titre'] for d in docs_valides])}")
+    else:
+        lignes.append("DOCUMENTS : Aucun document validé associé à ce processus.")
+    if enregistrements:
+        lignes.append(f"ENREGISTREMENTS : {', '.join([d['titre'] for d in enregistrements])}")
+
+    dysf = s5.get("historique", [])
+    if dysf:
+        dysf_str = " | ".join([
+            f"{d['description']} (causes: {d.get('causes', '?')}, améliorations: {d.get('ameliorations', '?')})"
+            for d in dysf[:3]
+        ])
+        lignes.append(f"DYSFONCTIONNEMENTS HISTORIQUES : {dysf_str}")
+    else:
+        lignes.append("DYSFONCTIONNEMENTS : Aucun dysfonctionnement enregistré.")
+
+    taches = s6.get("taches_chronologiques", [])
+    if taches:
+        lignes.append(f"TÂCHES (ordre chronologique) : {' -> '.join(taches)}")
+    else:
+        lignes.append("MODÉLISATION : Aucune tâche séquencée définie.")
+
+    return "\n".join(lignes)
+
+
+def extraire_preuves_depuis_fiche(fiche: dict) -> list[str]:
+    preuves = []
+    s1 = fiche.get("section_1_general", {})
+    s2 = fiche.get("section_2_elements_cles", {})
+    s3 = fiche.get("section_3_contexte", {})
+    s4 = fiche.get("section_4_informations_documentees", {})
+    s5 = fiche.get("section_5_dysfonctionnements", {})
+    s6 = fiche.get("section_6_modelisation", {})
+
+    pilote = s1.get("pilote", "Non assigné")
+    if pilote and pilote != "Non assigné":
+        preuves.append(f"Pilote du processus nommé : {pilote}")
+    else:
+        preuves.append("ABSENCE : Aucun pilote assigné")
+
+    if s1.get("objectif"):
+        preuves.append(f"Objectif formalisé : {s1['objectif']}")
+
+    kpis = s2.get("kpis", [])
+    if kpis:
+        for k in kpis:
+            preuves.append(f"KPI actif : '{k['nom']}' — cible {k['cible']}, mesuré {k['frequence']}")
+    else:
+        preuves.append("ABSENCE : Aucun KPI actif — performance non mesurée")
+
+    entrees = s2.get("entrees", [])
+    sorties = s2.get("sorties", [])
+    if entrees and sorties:
+        preuves.append(f"Entrées/sorties documentées ({len(entrees)} entrées, {len(sorties)} sorties)")
+    else:
+        preuves.append("ABSENCE : Entrées et sorties non définies")
+
+    if s2.get("competences_cles"):
+        preuves.append(f"Compétences clés identifiées : {s2['competences_cles']}")
+
+    risques = s3.get("risques", [])
+    if risques:
+        critiques = [r for r in risques if r.get("criticite") in ("critique", "eleve", "élevé")]
+        preuves.append(f"Registre des risques : {len(risques)} risque(s) dont {len(critiques)} critique(s)")
+    else:
+        preuves.append("ABSENCE : Aucun risque formalisé — §6.1 non couvert")
+
+    if s3.get("processus_voisins"):
+        preuves.append(f"Interactions avec processus voisins définies")
+    else:
+        preuves.append("ABSENCE : Interactions avec autres processus non définies")
+
+    if s3.get("moyens_alloues"):
+        preuves.append(f"Moyens alloués documentés")
+
+    docs = s4.get("documents", [])
+    docs_valides = [d for d in docs if d.get("approuve")]
+    if docs_valides:
+        preuves.append(f"{len(docs_valides)} document(s) validé(s) : {', '.join([d['titre'] for d in docs_valides])}")
+    else:
+        preuves.append("ABSENCE : Aucun document validé — §7.5 non démontré")
+
+    enregistrements = [d for d in docs if d.get("est_enregistrement")]
+    if enregistrements:
+        preuves.append(f"{len(enregistrements)} enregistrement(s) de preuve identifié(s)")
+
+    dysf = s5.get("historique", [])
+    if dysf:
+        avec_ameliorations = [d for d in dysf if d.get("ameliorations")]
+        preuves.append(f"{len(dysf)} dysfonctionnement(s) — {len(avec_ameliorations)} avec améliorations documentées")
+
+    taches = s6.get("taches_chronologiques", [])
+    if taches:
+        preuves.append(f"Processus modélisé en {len(taches)} tâches séquencées")
+    else:
+        preuves.append("ABSENCE : Aucune modélisation — séquence opérationnelle non définie")
+
+    return preuves
+
+
+def clauses_prioritaires_depuis_fiche(fiche: dict) -> list[str]:
+    s1 = fiche.get("section_1_general", {})
+    s2 = fiche.get("section_2_elements_cles", {})
+    s3 = fiche.get("section_3_contexte", {})
+    s4 = fiche.get("section_4_informations_documentees", {})
+    s5 = fiche.get("section_5_dysfonctionnements", {})
+
+    clauses = set(["4.4", "5.3"])  # toujours
+
+    if not s1.get("pilote") or s1.get("pilote") == "Non assigné":
+        clauses.update(["4.4", "5.3"])
+
+    if not s2.get("kpis"):
+        clauses.update(["9.1", "6.2"])
+    else:
+        clauses.add("9.1")
+
+    clauses.add("6.1")
+
+    docs = s4.get("documents", [])
+    if not docs or not any(d.get("approuve") for d in docs):
+        clauses.add("7.5")
+
+    if s5.get("historique"):
+        clauses.add("10.2")
+
+    if s2.get("competences_cles"):
+        clauses.add("7.2")
+
+    type_proc = s1.get("type", "").lower()
+    if "management" in type_proc:
+        clauses.update(["4.1", "4.2", "5.1", "5.2", "9.3"])
+    elif "réalisation" in type_proc or "realisation" in type_proc:
+        clauses.update(["8.1", "8.5"])
+    elif "soutien" in type_proc or "support" in type_proc:
+        clauses.update(["7.1", "7.2"])
+
+    return sorted(clauses)
+
+
+async def analyser_fiche_processus(
+    fiche: dict,
+    scores_autres_clauses: dict[str, float] | None = None,
+) -> dict:
+    """
+    Point d'entrée principal depuis diagnostic_service.py.
+
+    Reçoit la fiche (6 sections) et retourne {clause_id: EvaluationClause}.
+
+    Usage :
+        fiche = extraire_fiche_processus_contexte(db, processus_id)
+        resultats = await analyser_fiche_processus(fiche)
+        # resultats["4.4"].score, resultats["6.1"].type_ecart, etc.
+    """
+    observations = extraire_observations_depuis_fiche(fiche)
+    preuves = extraire_preuves_depuis_fiche(fiche)
+    clauses_a_analyser = clauses_prioritaires_depuis_fiche(fiche)
+
+    contexte_processus = {
+        "nom": fiche.get("section_1_general", {}).get("designation", ""),
+        "type": fiche.get("section_1_general", {}).get("type", ""),
+        "pilote": fiche.get("section_1_general", {}).get("pilote", ""),
+        "objectif": fiche.get("section_1_general", {}).get("objectif", ""),
+    }
+
+    resultats: dict = {}
+    for clause_id in clauses_a_analyser:
+        try:
+            eval_result = await analyser_conformite_clause(
+                clause_id=clause_id,
+                observations=observations,
+                preuves_fournies=preuves,
+                contexte_processus=contexte_processus,
+                scores_autres_clauses=scores_autres_clauses,
+            )
+            resultats[clause_id] = eval_result
+        except Exception as e:
+            logger.error(f"Erreur analyse clause {clause_id} : {e}")
+
+    return resultats
+
+# ---------------------------------------------------------------------------
+# 8. UTILITAIRES
 # ---------------------------------------------------------------------------
 
 def clauses_applicables_par_type_processus(type_processus: str) -> list[str]:
