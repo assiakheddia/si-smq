@@ -9,11 +9,11 @@ Ajouts par rapport à la version initiale :
   - back_populates complets vers tous les modèles du SI-SMQ
   - Matrice de permissions par rôle documentée ici (référence pour les services)
 
-Rôles et périmètres :
-  admin        → accès total, gestion des utilisateurs, configuration
-  pilote       → pilote un ou plusieurs processus, valide diagnostics/actions
-  contributeur → saisie de données (mesures KPI, avancement actions)
-  auditeur     → lecture seule + création de diagnostics, sans modification
+Rôles et périmètres (alignés sur les espaces applicatifs du frontend) :
+  direction        → accès total, supervision stratégique, gestion des utilisateurs
+  preparateur       → pilote un ou plusieurs processus, saisit diagnostics/risques/actions/KPI
+  auditeur_interne  → audits internes : évalue, valide les diagnostics, lève des actions
+  auditeur_externe  → audit ISO externe : évalue les processus, lecture étendue, pas de validation
 """
 
 import enum
@@ -38,25 +38,25 @@ class RoleEnum(str, enum.Enum):
 
     Matrice de permissions (appliquée dans les services, pas en DB) :
 
-    Ressource              │ admin │ pilote │ contributeur │ auditeur
-    ───────────────────────┼───────┼────────┼──────────────┼─────────
-    Utilisateurs           │  CRUD │   R    │      R       │    R
-    Processus              │  CRUD │  RU    │      R       │    R
-    DiagnosticISO          │  CRUD │  CRU   │      R       │   CR
-    DiagnosticClause       │  CRUD │  CRU   │      R       │   CR
-    Risque                 │  CRUD │  CRUD  │     CRU      │    R
-    Action                 │  CRUD │  CRUD  │     CRU      │    R
-    Indicateur             │  CRUD │  CRU   │      R       │    R
-    MesureKPI              │  CRUD │  CRUD  │      C       │    R
-    Document               │  CRUD │  CRUD  │      C       │    R
-    ClauseISO              │  CRU  │   R    │      R       │    R
+    Ressource              │direction│preparateur│auditeur_interne│auditeur_externe
+    ───────────────────────┼─────────┼───────────┼────────────────┼─────────────────
+    Utilisateurs           │   CRUD  │     R     │       R        │        R
+    Processus              │   CRUD  │     RU    │       R        │        R
+    DiagnosticISO          │   CRUD  │    CRU    │      CRU       │       CR
+    DiagnosticClause       │   CRUD  │    CRU    │      CRU       │       CR
+    Risque                 │   CRUD  │    CRUD   │       CR       │        R
+    Action                 │   CRUD  │    CRUD   │       CR       │        R
+    Indicateur              │   CRUD  │    CRU    │       R        │        R
+    MesureKPI               │   CRUD  │    CRUD   │       R        │        R
+    Document                │   CRUD  │    CRUD   │       R        │        R
+    ClauseISO                │   CRU   │     R     │       R        │        R
 
     Légende : C=Create R=Read U=Update D=Delete
     """
-    admin        = "admin"
-    pilote       = "pilote"
-    contributeur = "contributeur"
-    auditeur     = "auditeur"
+    preparateur      = "preparateur"
+    auditeur_interne = "auditeur_interne"
+    auditeur_externe = "auditeur_externe"
+    direction        = "direction"
 
 
 # =============================================================================
@@ -94,7 +94,7 @@ class Utilisateur(Base):
     # -------------------------------------------------------------------------
     # Rôle et statut
     # -------------------------------------------------------------------------
-    role     = Column(SAEnum(RoleEnum), default=RoleEnum.contributeur, nullable=False)
+    role     = Column(SAEnum(RoleEnum), default=RoleEnum.preparateur, nullable=False)
     est_actif = Column(Boolean, default=True, nullable=False)
     # False = compte désactivé (pas supprimé — conservation des traces)
 
@@ -206,30 +206,30 @@ class Utilisateur(Base):
                      "indicateur" | "mesure" | "document" | "utilisateur"
 
         Exemple :
-          user.peut("update", "diagnostic")  → True si pilote ou admin
-          user.peut("delete", "risque")      → True si admin uniquement
+          user.peut("update", "diagnostic")  → True si preparateur, auditeur_interne ou direction
+          user.peut("delete", "risque")      → True si direction uniquement
         """
         _PERMISSIONS: dict[str, dict[str, set[str]]] = {
-            RoleEnum.admin: {
+            RoleEnum.direction: {
                 "create": {"*"},
                 "read":   {"*"},
                 "update": {"*"},
                 "delete": {"*"},
             },
-            RoleEnum.pilote: {
+            RoleEnum.preparateur: {
                 "create": {"diagnostic", "risque", "action", "mesure", "document"},
                 "read":   {"*"},
                 "update": {"processus", "diagnostic", "risque", "action",
                            "indicateur", "mesure", "document"},
                 "delete": {"risque", "action", "mesure", "document"},
             },
-            RoleEnum.contributeur: {
-                "create": {"risque", "action", "mesure"},
+            RoleEnum.auditeur_interne: {
+                "create": {"diagnostic", "action"},
                 "read":   {"*"},
-                "update": {"risque", "action", "mesure"},
+                "update": {"diagnostic", "action"},
                 "delete": set(),
             },
-            RoleEnum.auditeur: {
+            RoleEnum.auditeur_externe: {
                 "create": {"diagnostic"},
                 "read":   {"*"},
                 "update": set(),

@@ -1,6 +1,13 @@
 import { useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { getCurrentUser } from "./lib/api";
+
+const ROLE_HOME = {
+  preparateur:      "/dashboard",
+  auditeur_interne: "/ai/dashboard",
+  auditeur_externe: "/ae/dashboard",
+  direction:        "/dir/dashboard",
+};
 import Login from "./pages/auth/login.jsx";
 import GoogleCallback from "./pages/GoogleCallback.jsx";
 import MainContent from "./components/MainContent.jsx";
@@ -37,6 +44,13 @@ import DirReports from "./pages/direction/StrategicReports.jsx";
 function AppLayout({ children, role }) {
   const [collapsed, setCollapsed] = useState(false);
   const sidebarWidth = collapsed ? 64 : 220;
+
+  const user = getCurrentUser();
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.role !== role) {
+    return <Navigate to={ROLE_HOME[user.role] || "/login"} replace />;
+  }
+
   return (
     <div style={{ minHeight: "100vh", background: "#eaf5eb" }}>
       <style>{`.app-content { margin-left: ${sidebarWidth}px; transition: margin-left 0.25s ease; } @media (max-width: 768px) { .app-content { margin-left: 0; } }`}</style>
@@ -65,17 +79,17 @@ export default function App() {
         <Route path="/parametres" element={<AppLayout role="preparateur"><ParametresPage /></AppLayout>} />
 
         {/* ── Auditeur Interne routes ── */}
-        <Route path="/ai/dashboard" element={<AppLayout role="auditeur-interne"><AIDashboard /></AppLayout>} />
-        <Route path="/ai/review" element={<AppLayout role="auditeur-interne"><AIReviewFiches /></AppLayout>} />
-        <Route path="/ai/improvements" element={<AppLayout role="auditeur-interne"><AIImprovements /></AppLayout>} />
-        <Route path="/ai/validation" element={<AppLayout role="auditeur-interne"><AIValidation /></AppLayout>} />
+        <Route path="/ai/dashboard" element={<AppLayout role="auditeur_interne"><AIDashboard /></AppLayout>} />
+        <Route path="/ai/review" element={<AppLayout role="auditeur_interne"><AIReviewFiches /></AppLayout>} />
+        <Route path="/ai/improvements" element={<AppLayout role="auditeur_interne"><AIImprovements /></AppLayout>} />
+        <Route path="/ai/validation" element={<AppLayout role="auditeur_interne"><AIValidation /></AppLayout>} />
 
         {/* ── Auditeur Externe routes ── */}
-        <Route path="/ae/dashboard" element={<AppLayout role="auditeur-externe"><AEDashboard /></AppLayout>} />
-        <Route path="/ae/audits" element={<AppLayout role="auditeur-externe"><AEAssignedAudits /></AppLayout>} />
-        <Route path="/ae/evaluation" element={<AppLayout role="auditeur-externe"><AEEvaluation /></AppLayout>} />
-        <Route path="/ae/nonconformites" element={<AppLayout role="auditeur-externe"><AENonConformities /></AppLayout>} />
-        <Route path="/ae/rapport" element={<AppLayout role="auditeur-externe"><AEReport /></AppLayout>} />
+        <Route path="/ae/dashboard" element={<AppLayout role="auditeur_externe"><AEDashboard /></AppLayout>} />
+        <Route path="/ae/audits" element={<AppLayout role="auditeur_externe"><AEAssignedAudits /></AppLayout>} />
+        <Route path="/ae/evaluation" element={<AppLayout role="auditeur_externe"><AEEvaluation /></AppLayout>} />
+        <Route path="/ae/nonconformites" element={<AppLayout role="auditeur_externe"><AENonConformities /></AppLayout>} />
+        <Route path="/ae/rapport" element={<AppLayout role="auditeur_externe"><AEReport /></AppLayout>} />
 
         {/* ── Direction routes ── */}
         <Route path="/dir/dashboard" element={<AppLayout role="direction"><DirDashboard /></AppLayout>} />

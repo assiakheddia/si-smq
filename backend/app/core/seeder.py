@@ -120,7 +120,7 @@ def seed_admin_user(db: Session) -> None:
         email="admin@si-smq.local",
         nom="Administrateur",
         prenom="SI-SMQ",
-        role=RoleEnum.admin,
+        role=RoleEnum.direction,
         est_actif=True,
         hashed_password=hash_password("my_password"),
     )
@@ -178,60 +178,67 @@ def seed_demo_data(db: Session) -> None:
     directeur = Utilisateur(
         email="directeur@si-smq.local",
         nom="Boumediene", prenom="Mourad",
-        role=RoleEnum.admin, est_actif=True,
+        role=RoleEnum.direction, est_actif=True,
         departement="Direction", poste="Directeur du Laboratoire",
         hashed_password=hash_password("demo1234"),
     )
     resp_qualite = Utilisateur(
         email="leila.bensalem@si-smq.local",
         nom="Bensalem", prenom="Leila",
-        role=RoleEnum.pilote, est_actif=True,
+        role=RoleEnum.preparateur, est_actif=True,
         departement="Qualité", poste="Responsable Qualité & SMQ",
         hashed_password=hash_password("demo1234"),
     )
-    auditeur = Utilisateur(
+    auditeur_interne = Utilisateur(
         email="karim.hadj@si-smq.local",
         nom="Hadj", prenom="Karim",
-        role=RoleEnum.auditeur, est_actif=True,
+        role=RoleEnum.auditeur_interne, est_actif=True,
         departement="Audit", poste="Auditeur Interne",
+        hashed_password=hash_password("demo1234"),
+    )
+    auditeur_externe = Utilisateur(
+        email="sofia.amrani@si-smq.local",
+        nom="Amrani", prenom="Sofia",
+        role=RoleEnum.auditeur_externe, est_actif=True,
+        departement="Cabinet Certification ISO", poste="Auditrice ISO 9001 Externe",
         hashed_password=hash_password("demo1234"),
     )
     chef_equipe = Utilisateur(
         email="ahmed.benali@si-smq.local",
         nom="Benali", prenom="Ahmed",
-        role=RoleEnum.contributeur, est_actif=True,
+        role=RoleEnum.preparateur, est_actif=True,
         departement="Équipe Génie Logiciel", poste="Chef d'Équipe de Recherche",
         hashed_password=hash_password("demo1234"),
     )
     dir_these = Utilisateur(
         email="nadia.ferhat@si-smq.local",
         nom="Ferhat", prenom="Nadia",
-        role=RoleEnum.contributeur, est_actif=True,
+        role=RoleEnum.preparateur, est_actif=True,
         departement="Équipe Systèmes Distribués", poste="Directrice de Thèse",
         hashed_password=hash_password("demo1234"),
     )
     comptable = Utilisateur(
         email="fatima.kaci@si-smq.local",
         nom="Kaci", prenom="Fatima",
-        role=RoleEnum.contributeur, est_actif=True,
+        role=RoleEnum.preparateur, est_actif=True,
         departement="Administration", poste="Responsable Financière",
         hashed_password=hash_password("demo1234"),
     )
     doctorant1 = Utilisateur(
         email="yacine.tlemcani@si-smq.local",
         nom="Tlemcani", prenom="Yacine",
-        role=RoleEnum.contributeur, est_actif=True,
+        role=RoleEnum.preparateur, est_actif=True,
         departement="Équipe Systèmes Distribués", poste="Doctorant — 3e année",
         hashed_password=hash_password("demo1234"),
     )
     doctorant2 = Utilisateur(
         email="amira.saadi@si-smq.local",
         nom="Saadi", prenom="Amira",
-        role=RoleEnum.contributeur, est_actif=True,
+        role=RoleEnum.preparateur, est_actif=True,
         departement="Équipe Génie Logiciel", poste="Doctorante — 1re année",
         hashed_password=hash_password("demo1234"),
     )
-    db.add_all([directeur, resp_qualite, auditeur, chef_equipe, dir_these, comptable, doctorant1, doctorant2])
+    db.add_all([directeur, resp_qualite, auditeur_interne, auditeur_externe, chef_equipe, dir_these, comptable, doctorant1, doctorant2])
     db.flush()
 
     # =========================================================================
@@ -417,7 +424,7 @@ def seed_demo_data(db: Session) -> None:
     diags = [
         # PROC-LABO — audit global annuel
         DiagnosticISO(
-            processus_id=proc_labo.id, auditeur_id=auditeur.id,
+            processus_id=proc_labo.id, auditeur_id=auditeur_interne.id,
             reference="DIAG-2024-LABO-001", score_global=68.0,
             niveau_global=_niveau_maturite(68.0),
             statut=StatutDiagnostic.valide, periode_couverte="2024-ANNUEL",
@@ -426,7 +433,7 @@ def seed_demo_data(db: Session) -> None:
             commentaire_global="Première évaluation. Processus achats et KPI non formalisés.",
         ),
         DiagnosticISO(
-            processus_id=proc_labo.id, auditeur_id=auditeur.id,
+            processus_id=proc_labo.id, auditeur_id=auditeur_interne.id,
             reference="DIAG-2025-LABO-001", score_global=74.0,
             niveau_global=_niveau_maturite(74.0),
             statut=StatutDiagnostic.valide, periode_couverte="2025-ANNUEL",
@@ -436,7 +443,7 @@ def seed_demo_data(db: Session) -> None:
         ),
         # PROC-LABO-ACHAT
         DiagnosticISO(
-            processus_id=proc_achat.id, auditeur_id=auditeur.id,
+            processus_id=proc_achat.id, auditeur_id=auditeur_interne.id,
             reference="DIAG-2025-ACHAT-001", score_global=58.0,
             niveau_global=_niveau_maturite(58.0),
             statut=StatutDiagnostic.valide, periode_couverte="2025-T1",
@@ -445,7 +452,7 @@ def seed_demo_data(db: Session) -> None:
             commentaire_global="Délais acceptables. Absence de tableau de suivi formalisé. Seuil d'appel d'offres méconnu des équipes.",
         ),
         DiagnosticISO(
-            processus_id=proc_achat.id, auditeur_id=auditeur.id,
+            processus_id=proc_achat.id, auditeur_id=auditeur_interne.id,
             reference="DIAG-2025-ACHAT-002", score_global=62.0,
             niveau_global=_niveau_maturite(62.0),
             statut=StatutDiagnostic.soumis, periode_couverte="2025-T2",
@@ -455,7 +462,7 @@ def seed_demo_data(db: Session) -> None:
         ),
         # PROC-LABO-BUDGET
         DiagnosticISO(
-            processus_id=proc_budget.id, auditeur_id=auditeur.id,
+            processus_id=proc_budget.id, auditeur_id=auditeur_interne.id,
             reference="DIAG-2025-BUDGET-001", score_global=82.0,
             niveau_global=_niveau_maturite(82.0),
             statut=StatutDiagnostic.valide, periode_couverte="2025-ANNUEL",
@@ -465,7 +472,7 @@ def seed_demo_data(db: Session) -> None:
         ),
         # PROC-DOC — audit global semestriel
         DiagnosticISO(
-            processus_id=proc_doc.id, auditeur_id=auditeur.id,
+            processus_id=proc_doc.id, auditeur_id=auditeur_interne.id,
             reference="DIAG-2024-DOC-001", score_global=60.0,
             niveau_global=_niveau_maturite(60.0),
             statut=StatutDiagnostic.valide, periode_couverte="2024-S2",
@@ -474,7 +481,7 @@ def seed_demo_data(db: Session) -> None:
             commentaire_global="Suivi doctoral insuffisant. 40% des rapports S2 non déposés. Processus soutenance non documenté.",
         ),
         DiagnosticISO(
-            processus_id=proc_doc.id, auditeur_id=auditeur.id,
+            processus_id=proc_doc.id, auditeur_id=auditeur_interne.id,
             reference="DIAG-2025-DOC-001", score_global=67.0,
             niveau_global=_niveau_maturite(67.0),
             statut=StatutDiagnostic.valide, periode_couverte="2025-S1",
@@ -484,7 +491,7 @@ def seed_demo_data(db: Session) -> None:
         ),
         # PROC-DOC-AVANCEMENT
         DiagnosticISO(
-            processus_id=proc_avancement.id, auditeur_id=auditeur.id,
+            processus_id=proc_avancement.id, auditeur_id=auditeur_interne.id,
             reference="DIAG-2025-AVANC-001", score_global=60.0,
             niveau_global=_niveau_maturite(60.0),
             statut=StatutDiagnostic.soumis, periode_couverte="2025-S1",
@@ -494,7 +501,7 @@ def seed_demo_data(db: Session) -> None:
         ),
         # PROC-DOC-SOUTENANCE
         DiagnosticISO(
-            processus_id=proc_soutenance.id, auditeur_id=auditeur.id,
+            processus_id=proc_soutenance.id, auditeur_id=auditeur_interne.id,
             reference="DIAG-2025-SOUT-001", score_global=55.0,
             niveau_global=_niveau_maturite(55.0),
             statut=StatutDiagnostic.brouillon, periode_couverte="2025-S1",
@@ -704,7 +711,7 @@ def seed_demo_data(db: Session) -> None:
         ),
         Action(
             processus_id=proc_avancement.id,
-            responsable_id=resp_qualite.id, verificateur_id=auditeur.id,
+            responsable_id=resp_qualite.id, verificateur_id=auditeur_interne.id,
             reference="ACT-2025-AVANC-002",
             titre="Créer le canevas standardisé de rapport semestriel d'avancement",
             description=(
@@ -736,7 +743,7 @@ def seed_demo_data(db: Session) -> None:
         # — PROC-DOC (global) —
         Action(
             processus_id=proc_doc.id,
-            responsable_id=resp_qualite.id, verificateur_id=auditeur.id,
+            responsable_id=resp_qualite.id, verificateur_id=auditeur_interne.id,
             reference="ACT-2025-DOC-001",
             titre="Réaliser l'audit interne S1 du processus d'encadrement doctoral",
             description=(

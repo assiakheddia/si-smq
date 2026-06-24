@@ -1,12 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Topbar from "../../components/Topbar.jsx";
-
-const INITIAL_FICHES = [
-  { id: 1, name: "Formation du personnel", owner: "Hadj Ali Farida", cycles: 3, obsResolved: 4, totalObs: 4, score: 91, status: "ready" },
-  { id: 2, name: "Audit interne", owner: "Bensalem Hocine", cycles: 1, obsResolved: 2, totalObs: 2, score: 88, status: "ready" },
-  { id: 3, name: "Gestion des achats", owner: "Benchikh Mohamed", cycles: 2, obsResolved: 3, totalObs: 3, score: 79, status: "ready" },
-  { id: 4, name: "Contrôle qualité labo", owner: "Sahraoui Nadia", cycles: 1, obsResolved: 1, totalObs: 2, score: 65, status: "pending-obs" },
-];
+import { api, getCurrentUser } from "../../lib/api.js";
 
 const S = {
   page: { minHeight: "100vh", background: "#eaf5eb", fontFamily: "'Plus Jakarta Sans', 'DM Sans', sans-serif" },
@@ -18,10 +12,10 @@ const S = {
 function ScoreBadge({ score }) {
   const color = score >= 85 ? "#166534" : score >= 70 ? "#92400e" : "#991b1b";
   const bg = score >= 85 ? "#dcfce7" : score >= 70 ? "#fef3c7" : "#fee2e2";
-  return <span style={{ background: bg, color, borderRadius: 8, padding: "3px 12px", fontSize: 13, fontWeight: 800 }}>{score}%</span>;
+  return <span style={{ background: bg, color, borderRadius: 8, padding: "3px 12px", fontSize: 13, fontWeight: 800 }}>{Math.round(score)}%</span>;
 }
 
-function ConfirmModal({ fiche, onConfirm, onClose }) {
+function ConfirmModal({ fiche, onConfirm, onClose, validating }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 9000, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ background: "#fff", borderRadius: 16, padding: 32, maxWidth: 460, width: "90%", boxShadow: "0 24px 64px rgba(0,0,0,0.2)" }}>
@@ -33,11 +27,11 @@ function ConfirmModal({ fiche, onConfirm, onClose }) {
         </p>
         <div style={{ background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 10, padding: "12px 16px", marginBottom: 24 }}>
           <div style={{ fontSize: 12, color: "#166534" }}>
-            <strong>Score de conformité :</strong> {fiche.score}% · <strong>Cycles de révision :</strong> {fiche.cycles} · <strong>Observations résolues :</strong> {fiche.obsResolved}/{fiche.totalObs}
+            <strong>Score de conformité :</strong> {Math.round(fiche.score)}% · <strong>Clauses évaluées :</strong> {fiche.nb_clauses_evaluees} · <strong>Clauses conformes :</strong> {fiche.nb_clauses_conformes}/{fiche.nb_clauses_evaluees}
           </div>
         </div>
         <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
-          <button onClick={onConfirm} style={S.btn("#fff", "#166534")}>Confirmer la validation</button>
+          <button onClick={onConfirm} disabled={validating} style={S.btn("#fff", "#166534")}>{validating ? "Validation..." : "Confirmer la validation"}</button>
           <button onClick={onClose} style={S.btn("#6b7280", "#f3f4f6")}>Annuler</button>
         </div>
       </div>
@@ -46,13 +40,49 @@ function ConfirmModal({ fiche, onConfirm, onClose }) {
 }
 
 export default function ValidationPage() {
-  const [fiches, setFiches] = useState(INITIAL_FICHES);
+  const user = getCurrentUser();
+  const initials = (user?.nom_complet || "").split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase() || "??";
+
+  const [fiches, setFiches] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [confirmFiche, setConfirmFiche] = useState(null);
+  const [validating, setValidating] = useState(false);
   const [authorizedIds, setAuthorizedIds] = useState([]);
 
-  const validate = (id) => {
-    setFiches((prev) => prev.map((f) => f.id === id ? { ...f, status: "validated" } : f));
-    setConfirmFiche(null);
+  const load = () => {
+    Promise.all([
+      api.get("/diagnostics/?statut=soumis").catch(() => []),
+      api.get("/diagnostics/?statut=valide").catch(() => []),
+    ]).then(([soumis, valides]) => {
+      const map = (d, status) => ({
+        id: d.id,
+        name: d.processus?.nom || `Processus ${d.processus_id}`,
+        owner: d.auditeur ? `${d.auditeur.prenom || ""} ${d.auditeur.nom || ""}`.trim() : "—",
+        score: d.score_global || 0,
+        nb_clauses_evaluees: d.nb_clauses_evaluees || 0,
+        nb_clauses_conformes: d.nb_clauses_conformes || 0,
+        nb_ecarts_majeurs: d.nb_ecarts_majeurs || 0,
+        status,
+      });
+      const readyList = soumis.map((d) => map(d, d.nb_ecarts_majeurs > 0 ? "pending-obs" : "ready"));
+      const validatedList = valides.map((d) => map(d, "validated"));
+      setFiches([...readyList, ...validatedList]);
+    }).finally(() => setLoading(false));
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const validate = async (id) => {
+    setValidating(true);
+    try {
+      await api.post(`/diagnostics/${id}/valider`, {});
+      setFiches((prev) => prev.map((f) => f.id === id ? { ...f, status: "validated" } : f));
+    } catch {
+      // leave as-is on failure
+    } finally {
+      setValidating(false);
+      setConfirmFiche(null);
+    }
   };
 
   const toggleAuthorize = (id) => {
@@ -63,13 +93,25 @@ export default function ValidationPage() {
   const ready = fiches.filter((f) => f.status === "ready");
   const pendingObs = fiches.filter((f) => f.status === "pending-obs");
 
+  if (loading) {
+    return (
+      <div style={S.page}>
+        <Topbar title="Validation interne" userName={user?.nom_complet || "—"} userRole="Auditeur Interne" userInitials={initials} />
+        <div style={S.inner}>
+          <div style={{ ...S.card, textAlign: "center", padding: "60px 20px" }}>
+            <div style={{ fontSize: 13, color: "#9ca3af" }}>Chargement...</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={S.page}>
-      {confirmFiche && <ConfirmModal fiche={confirmFiche} onConfirm={() => validate(confirmFiche.id)} onClose={() => setConfirmFiche(null)} />}
-      <Topbar title="Validation interne" userName="Meziani Karim" userRole="Auditeur Interne" userInitials="MK" />
+      {confirmFiche && <ConfirmModal fiche={confirmFiche} onConfirm={() => validate(confirmFiche.id)} onClose={() => setConfirmFiche(null)} validating={validating} />}
+      <Topbar title="Validation interne" userName={user?.nom_complet || "—"} userRole="Auditeur Interne" userInitials={initials} />
       <div style={S.inner}>
 
-        {/* Summary strip */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, marginBottom: 28 }}>
           {[
             { label: "En attente de validation", value: ready.length, color: "#92400e", bg: "#fef3c7" },
@@ -83,7 +125,6 @@ export default function ValidationPage() {
           ))}
         </div>
 
-        {/* Fiches ready for validation */}
         {ready.length > 0 && (
           <div style={{ ...S.card, marginBottom: 20 }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: "#1a2e22", marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
@@ -93,7 +134,7 @@ export default function ValidationPage() {
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
               <thead>
                 <tr style={{ borderBottom: "2px solid #f0f2f4" }}>
-                  {["Processus", "Propriétaire", "Cycles de révision", "Observations résolues", "Score conformité", "Action"].map((h) => (
+                  {["Processus", "Auditeur", "Clauses évaluées", "Clauses conformes", "Score conformité", "Action"].map((h) => (
                     <th key={h} style={{ textAlign: "left", padding: "8px 12px", fontSize: 11, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase" }}>{h}</th>
                   ))}
                 </tr>
@@ -104,11 +145,11 @@ export default function ValidationPage() {
                     <td style={{ padding: "14px 12px", fontWeight: 700, color: "#1a2e22" }}>{f.name}</td>
                     <td style={{ padding: "14px 12px", color: "#4b6358" }}>{f.owner}</td>
                     <td style={{ padding: "14px 12px", textAlign: "center" }}>
-                      <span style={{ background: "#ede9fe", color: "#5b21b6", borderRadius: 6, padding: "2px 10px", fontSize: 12, fontWeight: 700 }}>{f.cycles}</span>
+                      <span style={{ background: "#ede9fe", color: "#5b21b6", borderRadius: 6, padding: "2px 10px", fontSize: 12, fontWeight: 700 }}>{f.nb_clauses_evaluees}</span>
                     </td>
                     <td style={{ padding: "14px 12px", textAlign: "center" }}>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: f.obsResolved === f.totalObs ? "#166534" : "#92400e" }}>
-                        {f.obsResolved}/{f.totalObs}
+                      <span style={{ fontSize: 13, fontWeight: 700, color: f.nb_clauses_conformes === f.nb_clauses_evaluees ? "#166534" : "#92400e" }}>
+                        {f.nb_clauses_conformes}/{f.nb_clauses_evaluees}
                       </span>
                     </td>
                     <td style={{ padding: "14px 12px" }}><ScoreBadge score={f.score} /></td>
@@ -124,17 +165,16 @@ export default function ValidationPage() {
           </div>
         )}
 
-        {/* Pending observations */}
         {pendingObs.length > 0 && (
           <div style={{ ...S.card, marginBottom: 20, border: "1px solid #fde68a" }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: "#92400e", marginBottom: 12 }}>
-              ⏳ Observations non résolues — validation impossible
+              ⏳ Écarts majeurs non résolus — validation déconseillée
             </div>
             {pendingObs.map((f) => (
               <div key={f.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid #fef3c7" }}>
                 <div>
                   <div style={{ fontWeight: 700, color: "#1a2e22" }}>{f.name}</div>
-                  <div style={{ fontSize: 12, color: "#9ca3af" }}>{f.obsResolved}/{f.totalObs} observations résolues par le Préparateur</div>
+                  <div style={{ fontSize: 12, color: "#9ca3af" }}>{f.nb_ecarts_majeurs} écart(s) majeur(s) identifié(s)</div>
                 </div>
                 <ScoreBadge score={f.score} />
               </div>
@@ -142,7 +182,6 @@ export default function ValidationPage() {
           </div>
         )}
 
-        {/* Validated fiches */}
         {validated.length > 0 && (
           <div style={S.card}>
             <div style={{ fontSize: 15, fontWeight: 700, color: "#166534", marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
@@ -155,7 +194,7 @@ export default function ValidationPage() {
                   <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 16, padding: "16px 20px", background: isAuth ? "#f0fdf4" : "#fafafa", borderRadius: 10, border: `1px solid ${isAuth ? "#86efac" : "#e8f0eb"}`, flexWrap: "wrap" }}>
                     <div style={{ flex: 1, minWidth: 160 }}>
                       <div style={{ fontWeight: 700, color: "#1a2e22" }}>{f.name}</div>
-                      <div style={{ fontSize: 12, color: "#9ca3af" }}>{f.owner} · {f.cycles} cycle(s) · Score : {f.score}%</div>
+                      <div style={{ fontSize: 12, color: "#9ca3af" }}>{f.owner} · Score : {Math.round(f.score)}%</div>
                     </div>
                     <span style={{ background: "#dcfce7", color: "#166534", borderRadius: 20, padding: "3px 12px", fontSize: 11, fontWeight: 700 }}>Validé ✓</span>
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -175,11 +214,11 @@ export default function ValidationPage() {
           </div>
         )}
 
-        {fiches.every((f) => f.status === "pending-obs") && validated.length === 0 && (
+        {ready.length === 0 && pendingObs.length === 0 && validated.length === 0 && (
           <div style={{ ...S.card, textAlign: "center", padding: "60px 20px" }}>
             <div style={{ fontSize: 40, marginBottom: 12 }}>🔍</div>
             <div style={{ fontSize: 16, fontWeight: 700, color: "#1a2e22" }}>Aucune fiche prête pour validation</div>
-            <div style={{ fontSize: 13, color: "#9ca3af", marginTop: 4 }}>Les Préparateurs doivent d'abord répondre à vos observations.</div>
+            <div style={{ fontSize: 13, color: "#9ca3af", marginTop: 4 }}>Les Préparateurs doivent d'abord soumettre des diagnostics.</div>
           </div>
         )}
       </div>

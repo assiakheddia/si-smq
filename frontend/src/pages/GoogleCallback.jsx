@@ -32,11 +32,16 @@ export default function GoogleCallback() {
     setTokens(accessToken, refreshToken, user);
     const roleDest = {
       preparateur: "/dashboard",
-      "auditeur-interne": "/ai/dashboard",
-      "auditeur-externe": "/ae/dashboard",
+      auditeur_interne: "/ai/dashboard",
+      auditeur_externe: "/ae/dashboard",
       direction: "/dir/dashboard",
     };
-    navigate(roleDest[user?.role] || "/dashboard", { replace: true });
+    const dest = roleDest[user?.role];
+    if (!dest) {
+      navigate("/login?error=R%C3%B4le+de+compte+inconnu", { replace: true });
+      return;
+    }
+    navigate(dest, { replace: true });
   }, [navigate]);
 
   return (

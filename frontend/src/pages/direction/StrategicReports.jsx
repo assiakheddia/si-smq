@@ -1,20 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Topbar from "../../components/Topbar.jsx";
+import { api, getCurrentUser } from "../../lib/api.js";
 
-const REPORT_TYPES = [
-  { id:"perf-qualite", title:"Rapport de performance qualité", desc:"Vue complète des indicateurs qualité, taux de conformité, évolutions et plans d'actions.", icon:"📊", sections:["KPIs qualité","Taux de conformité","Non-conformités","Actions correctives","Tendances"] },
-  { id:"conformite-iso", title:"Rapport de conformité ISO 9001", desc:"Analyse clause par clause de la conformité au référentiel ISO 9001:2015.", icon:"📋", sections:["Analyse par clause","Exigences non satisfaites","Points forts","Axes d'amélioration","Recommandations"] },
-  { id:"audit-rapport", title:"Rapport d'audit (Interne + Externe)", desc:"Synthèse de tous les audits réalisés, constats, NC et recommandations.", icon:"🔍", sections:["Programme d'audit","Résultats audits internes","Résultats audits externes","NC par processus","Conclusions"] },
-  { id:"amelioration", title:"Tableau de bord amélioration continue", desc:"Suivi des actions d'amélioration, PDCA, et efficacité des corrections.", icon:"🔄", sections:["Actions en cours","Actions clôturées","Efficacité PDCA","Récidives","Plan prévisionnel"] },
-  { id:"revue-direction", title:"Rapport de revue de direction", desc:"Rapport de management review ISO 9001 — données d'entrée et décisions de direction.", icon:"🏛️", sections:["Contexte organisationnel","Performance SMQ","Audits","Satisfaction clients","Décisions de direction"] },
-];
-
-const HISTORY = [
-  { date:"01/06/2026", type:"Rapport de conformité ISO 9001",          by:"Direction", format:"PDF",   size:"2.4 MB" },
-  { date:"15/05/2026", type:"Rapport de performance qualité",           by:"Direction", format:"Excel", size:"1.8 MB" },
-  { date:"01/05/2026", type:"Rapport d'audit (Interne + Externe)",      by:"Direction", format:"PDF",   size:"3.1 MB" },
-  { date:"01/04/2026", type:"Rapport de revue de direction",            by:"Direction", format:"PDF",   size:"4.2 MB" },
-];
+function getInitials(name) {
+  if (!name) return "DG";
+  return name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
+}
 
 const S = {
   page:{ minHeight:"100vh", background:"#eaf5eb", fontFamily:"'Plus Jakarta Sans','DM Sans',sans-serif" },
@@ -24,51 +15,137 @@ const S = {
 };
 
 export default function StrategicReports() {
+  const user = getCurrentUser();
+  const [processus, setProcessus] = useState([]);
+  const [diagnostics, setDiagnostics] = useState([]);
+  const [risques, setRisques] = useState([]);
+  const [actions, setActions] = useState([]);
+  const [indicateurs, setIndicateurs] = useState([]);
+  const [documents, setDocuments] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
   const [dateRange, setDateRange] = useState("trimestre");
-  const [format, setFormat] = useState("PDF");
-  const [sections, setSections] = useState({});
-  const [generated, setGenerated] = useState(false);
-  const [history, setHistory] = useState(HISTORY);
+
+  useEffect(() => {
+    Promise.all([
+      api.get("/processus/").catch(() => []),
+      api.get("/diagnostics/").catch(() => []),
+      api.get("/risques/").catch(() => []),
+      api.get("/actions/").catch(() => []),
+      api.get("/indicateurs/").catch(() => []),
+      api.get("/documents/").catch(() => []),
+    ]).then(([procs, diags, rqs, acts, inds, docs]) => {
+      setProcessus(Array.isArray(procs) ? procs : (procs?.items || []));
+      setDiagnostics(Array.isArray(diags) ? diags : (diags?.items || []));
+      setRisques(Array.isArray(rqs) ? rqs : (rqs?.items || []));
+      setActions(Array.isArray(acts) ? acts : (acts?.items || []));
+      setIndicateurs(Array.isArray(inds) ? inds : (inds?.items || []));
+      setDocuments(Array.isArray(docs) ? docs : (docs?.items || []));
+      setLoading(false);
+    });
+  }, []);
+
+  const scores = diagnostics.filter(d => d.score_global > 0).map(d => d.score_global);
+  const tauxConformite = scores.length ? Math.round(scores.reduce((s,v)=>s+v,0)/scores.length) : 0;
+  const ncMajeures = diagnostics.reduce((s,d) => s + (d.nb_ecarts_majeurs || 0), 0);
+  const ncMineures = diagnostics.reduce((s,d) => s + (d.nb_ecarts_mineurs || 0), 0);
+  const risquesCritiques = risques.filter(r => r.criticite === "critique" && r.est_actif !== false).length;
+  const actionsOuvertes = actions.filter(a => !["close","annulee"].includes(a.statut)).length;
+  const actionsEnRetard = actions.filter(a => a.est_en_retard).length;
+  const topDiagnostics = [...diagnostics].sort((a,b) => b.score_global - a.score_global).slice(0, 5);
+  const worstDiagnostics = [...diagnostics].sort((a,b) => a.score_global - b.score_global).slice(0, 5);
+
+  const REPORT_TYPES = [
+    {
+      id:"perf-qualite", title:"Rapport de performance qualité", icon:"📊",
+      desc:"Vue complète des indicateurs qualité, taux de conformité, évolutions et plans d'actions.",
+      sections:["KPIs qualité","Taux de conformité","Non-conformités","Actions correctives"],
+      build: () => ({
+        "Taux de conformité moyen": `${tauxConformite}%`,
+        "Diagnostics réalisés": diagnostics.length,
+        "Écarts majeurs": ncMajeures,
+        "Écarts mineurs": ncMineures,
+        "Actions ouvertes": actionsOuvertes,
+        "Actions en retard": actionsEnRetard,
+      }),
+    },
+    {
+      id:"conformite-iso", title:"Rapport de conformité ISO 9001", icon:"📋",
+      desc:"Analyse de la conformité au référentiel ISO 9001:2015 à partir des diagnostics réalisés.",
+      sections:["Diagnostics les plus conformes","Diagnostics les moins conformes","Synthèse globale"],
+      build: () => ({
+        "Processus évalués": new Set(diagnostics.map(d => d.processus_id)).size,
+        "Score moyen": `${tauxConformite}%`,
+        "Meilleur score": topDiagnostics[0] ? `${Math.round(topDiagnostics[0].score_global)}% (${topDiagnostics[0].processus?.nom})` : "—",
+        "Score le plus faible": worstDiagnostics[0] ? `${Math.round(worstDiagnostics[0].score_global)}% (${worstDiagnostics[0].processus?.nom})` : "—",
+      }),
+    },
+    {
+      id:"audit-rapport", title:"Rapport d'audit", icon:"🔍",
+      desc:"Synthèse de tous les diagnostics réalisés, constats et écarts par processus.",
+      sections:["Diagnostics par statut","Écarts par processus","Auditeurs impliqués"],
+      build: () => ({
+        "Brouillons": diagnostics.filter(d => d.statut === "brouillon").length,
+        "Soumis": diagnostics.filter(d => d.statut === "soumis").length,
+        "Validés": diagnostics.filter(d => d.statut === "valide").length,
+        "Archivés": diagnostics.filter(d => d.statut === "archive").length,
+        "Auditeurs distincts": new Set(diagnostics.filter(d => d.auditeur_id).map(d => d.auditeur_id)).size,
+      }),
+    },
+    {
+      id:"amelioration", title:"Tableau de bord amélioration continue", icon:"🔄",
+      desc:"Suivi des risques et actions correctives/préventives en cours.",
+      sections:["Risques actifs","Actions par statut","Échéances dépassées"],
+      build: () => ({
+        "Risques actifs": risques.filter(r => r.est_actif !== false).length,
+        "Risques critiques": risquesCritiques,
+        "Actions planifiées": actions.filter(a => a.statut === "planifiee").length,
+        "Actions en cours": actions.filter(a => a.statut === "en_cours").length,
+        "Actions clôturées": actions.filter(a => a.statut === "close").length,
+        "Actions en retard": actionsEnRetard,
+      }),
+    },
+    {
+      id:"revue-direction", title:"Rapport de revue de direction", icon:"🏛️",
+      desc:"Données d'entrée pour la revue de direction ISO 9001 — performance SMQ globale.",
+      sections:["Performance SMQ","Audits","KPI","Documents"],
+      build: () => ({
+        "Processus actifs": processus.filter(p => p.est_actif !== false).length,
+        "Taux de conformité moyen": `${tauxConformite}%`,
+        "KPI en alerte": indicateurs.filter(k => k.statut_alerte_actuel === "alerte").length,
+        "KPI en attention": indicateurs.filter(k => k.statut_alerte_actuel === "attention").length,
+        "Documents disponibles": documents.length,
+      }),
+    },
+  ];
 
   const report = REPORT_TYPES.find((r) => r.id === selected);
-
-  const toggleSection = (s) => setSections((prev) => ({ ...prev, [s]: !prev[s] }));
-
-  const handleGenerate = () => {
-    setGenerated(true);
-    if (report) {
-      setHistory((prev) => [{ date:new Date().toLocaleDateString("fr-FR"), type:report.title, by:"Direction", format, size:"—" }, ...prev]);
-    }
-    setTimeout(() => setGenerated(false), 5000);
-  };
+  const reportData = report ? report.build() : null;
 
   return (
     <div style={S.page}>
-      <Topbar title="Rapports stratégiques" userName="Directeur Général" userRole="Direction" userInitials="DG" />
+      <Topbar title="Rapports stratégiques" userName={user?.nom_complet || "Direction"} userRole="Direction" userInitials={getInitials(user?.nom_complet)} />
       <div style={S.inner}>
 
         <div style={{ marginBottom:24 }}>
           <h1 style={{ fontSize:20, fontWeight:800, color:"#1a2e22", marginBottom:4 }}>Rapports stratégiques</h1>
-          <p style={{ fontSize:13, color:"#5a7a66" }}>Générez des rapports de management pour la revue de direction et le pilotage qualité.</p>
+          <p style={{ fontSize:13, color:"#5a7a66" }}>Synthèses pour la revue de direction et le pilotage qualité, calculées en temps réel.</p>
         </div>
 
-        {/* Report type selector */}
         <div style={S.card}>
           <div style={{ fontSize:14, fontWeight:700, color:"#1a2e22", marginBottom:14 }}>Sélectionnez un type de rapport</div>
           <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))", gap:12 }}>
             {REPORT_TYPES.map((r) => (
-              <div key={r.id} onClick={() => { setSelected(r.id); setGenerated(false); setSections({}); }}
+              <div key={r.id} onClick={() => setSelected(r.id)}
                 style={{ padding:"16px 18px", borderRadius:12, border:`2px solid ${selected===r.id?"#7c3aed":"#e8f0eb"}`, background:selected===r.id?"#f5f3ff":"#fafafa", cursor:"pointer", transition:"all 0.15s" }}>
                 <div style={{ fontSize:26, marginBottom:8 }}>{r.icon}</div>
                 <div style={{ fontSize:13, fontWeight:700, color:selected===r.id?"#7c3aed":"#1a2e22", marginBottom:4 }}>{r.title}</div>
-                <div style={{ fontSize:11, color:"#9ca3af", lineHeight:1.5 }}>{r.desc.slice(0,80)}…</div>
+                <div style={{ fontSize:11, color:"#9ca3af", lineHeight:1.5 }}>{r.desc}</div>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Config panel */}
         {report && (
           <div style={S.card}>
             <div style={{ display:"flex", gap:16, alignItems:"center", marginBottom:20, flexWrap:"wrap" }}>
@@ -79,92 +156,71 @@ export default function StrategicReports() {
               </div>
             </div>
 
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:20 }}>
-              <div>
-                <label style={{ fontSize:12, fontWeight:700, color:"#4b6358", display:"block", marginBottom:5 }}>Période couverte</label>
-                <select value={dateRange} onChange={(e) => setDateRange(e.target.value)} style={{ width:"100%", padding:"10px 14px", borderRadius:8, border:"1px solid #e8f0eb", fontSize:13, outline:"none", fontFamily:"inherit" }}>
-                  <option value="mois">Ce mois (Juin 2026)</option>
-                  <option value="trimestre">Ce trimestre (T2 2026)</option>
-                  <option value="semestre">Ce semestre (S1 2026)</option>
-                  <option value="annee">Cette année (2026)</option>
-                </select>
-              </div>
-              <div>
-                <label style={{ fontSize:12, fontWeight:700, color:"#4b6358", display:"block", marginBottom:5 }}>Format d'export</label>
-                <div style={{ display:"flex", gap:8 }}>
-                  {["PDF","Excel","PowerPoint"].map((f) => (
-                    <button key={f} onClick={() => setFormat(f)} style={{ flex:1, padding:"10px 0", borderRadius:8, border:`2px solid ${format===f?"#7c3aed":"#e8f0eb"}`, background:format===f?"#f5f3ff":"#fff", color:format===f?"#7c3aed":"#6b7280", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>{f}</button>
-                  ))}
-                </div>
-              </div>
+            <div style={{ marginBottom:20 }}>
+              <label style={{ fontSize:12, fontWeight:700, color:"#4b6358", display:"block", marginBottom:5 }}>Période couverte</label>
+              <select value={dateRange} onChange={(e) => setDateRange(e.target.value)} style={{ width:240, padding:"10px 14px", borderRadius:8, border:"1px solid #e8f0eb", fontSize:13, outline:"none", fontFamily:"inherit" }}>
+                <option value="mois">Ce mois</option>
+                <option value="trimestre">Ce trimestre</option>
+                <option value="semestre">Ce semestre</option>
+                <option value="annee">Cette année</option>
+              </select>
             </div>
 
             <div style={{ marginBottom:20 }}>
-              <div style={{ fontSize:12, fontWeight:700, color:"#4b6358", marginBottom:10 }}>Sections à inclure</div>
+              <div style={{ fontSize:12, fontWeight:700, color:"#4b6358", marginBottom:10 }}>Sections incluses</div>
               <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
                 {report.sections.map((s) => (
-                  <label key={s} style={{ display:"flex", alignItems:"center", gap:10, cursor:"pointer" }}>
-                    <input type="checkbox" checked={sections[s] !== false} onChange={() => toggleSection(s)} style={{ width:16, height:16, accentColor:"#7c3aed", cursor:"pointer" }} />
+                  <div key={s} style={{ display:"flex", alignItems:"center", gap:10 }}>
+                    <span style={{ width:6, height:6, borderRadius:"50%", background:"#7c3aed", display:"inline-block" }} />
                     <span style={{ fontSize:13, color:"#1a2e22" }}>{s}</span>
-                  </label>
+                  </div>
                 ))}
               </div>
             </div>
 
-            {/* Preview */}
-            <div style={{ background:"#fafafa", borderRadius:10, border:"1px solid #f0f2f4", padding:"16px 20px", marginBottom:20 }}>
-              <div style={{ fontSize:12, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", marginBottom:10 }}>Aperçu du contenu</div>
-              <div style={{ fontSize:13, color:"#4b6358", lineHeight:1.8 }}>
-                Ce rapport couvrira la période <strong>{dateRange === "mois" ? "Juin 2026" : dateRange === "trimestre" ? "T2 2026 (Avr–Juin)" : dateRange === "semestre" ? "S1 2026 (Jan–Juin)" : "Année 2026"}</strong> et inclura :<br />
-                {report.sections.filter(s => sections[s] !== false).map((s, i) => <span key={s}>{i > 0 ? " · " : ""}{s}</span>)}<br /><br />
-                <span style={{ color:"#9ca3af", fontSize:12 }}>Données extraites en temps réel du système SI-SMQ — {HISTORY.length} rapports générés précédemment.</span>
-              </div>
-            </div>
-
-            <div style={{ display:"flex", gap:12 }}>
-              <button onClick={handleGenerate} style={{ background:"#7c3aed", color:"#fff", border:"none", borderRadius:10, padding:"11px 24px", fontSize:13, fontWeight:700, cursor:"pointer" }}>
-                📄 Générer le rapport {format}
-              </button>
-            </div>
-
-            {generated && (
-              <div style={{ marginTop:16, background:"#f0fdf4", border:"1px solid #86efac", borderRadius:10, padding:"16px 20px", display:"flex", gap:12, alignItems:"center" }}>
-                <span style={{ fontSize:28 }}>✅</span>
-                <div>
-                  <div style={{ fontSize:14, fontWeight:700, color:"#166534" }}>Rapport généré avec succès</div>
-                  <div style={{ fontSize:12, color:"#4b6358", marginTop:2 }}>Le rapport est prêt. <span style={{ color:"#166534", fontWeight:700, cursor:"pointer", textDecoration:"underline" }}>Télécharger le {format}</span></div>
+            <div style={{ background:"#fafafa", borderRadius:10, border:"1px solid #f0f2f4", padding:"16px 20px" }}>
+              <div style={{ fontSize:12, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", marginBottom:12 }}>Données du rapport (temps réel)</div>
+              {loading ? (
+                <div style={{ color:"#9ca3af", fontSize:13 }}>Chargement des données...</div>
+              ) : (
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+                  {Object.entries(reportData).map(([k,v]) => (
+                    <div key={k} style={{ display:"flex", justifyContent:"space-between", padding:"6px 0", borderBottom:"1px solid #f0f2f4" }}>
+                      <span style={{ fontSize:13, color:"#4b6358" }}>{k}</span>
+                      <span style={{ fontSize:13, fontWeight:700, color:"#1a2e22" }}>{v}</span>
+                    </div>
+                  ))}
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         )}
 
-        {/* History */}
         <div style={S.card}>
-          <div style={{ fontSize:15, fontWeight:700, color:"#1a2e22", marginBottom:16 }}>Historique des rapports générés</div>
-          <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
-            <thead>
-              <tr style={{ borderBottom:"2px solid #f0f2f4", background:"#fafafa" }}>
-                {["Date","Type de rapport","Généré par","Format","Taille","Actions"].map(h => (
-                  <th key={h} style={{ textAlign:"left", padding:"10px 14px", fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase" }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {history.map((h, i) => (
-                <tr key={i} style={{ borderBottom:"1px solid #f8f9fa" }}>
-                  <td style={{ padding:"12px 14px", color:"#9ca3af", fontSize:12 }}>{h.date}</td>
-                  <td style={{ padding:"12px 14px", fontWeight:600, color:"#1a2e22" }}>{h.type}</td>
-                  <td style={{ padding:"12px 14px", color:"#4b6358" }}>{h.by}</td>
-                  <td style={{ padding:"12px 14px" }}><span style={{ background:"#ede9fe", color:"#5b21b6", borderRadius:6, padding:"2px 8px", fontSize:11, fontWeight:700 }}>{h.format}</span></td>
-                  <td style={{ padding:"12px 14px", color:"#9ca3af", fontSize:12 }}>{h.size}</td>
-                  <td style={{ padding:"12px 14px" }}>
-                    <button style={{ background:"none", border:"1px solid #e8f0eb", borderRadius:8, padding:"5px 12px", fontSize:11, color:"#2D604F", fontWeight:600, cursor:"pointer" }}>↓ Télécharger</button>
-                  </td>
+          <div style={{ fontSize:15, fontWeight:700, color:"#1a2e22", marginBottom:16 }}>Documents disponibles</div>
+          {documents.length === 0 ? (
+            <div style={{ textAlign:"center", padding:"24px", color:"#9ca3af" }}>Aucun document disponible dans le système pour le moment.</div>
+          ) : (
+            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+              <thead>
+                <tr style={{ borderBottom:"2px solid #f0f2f4", background:"#fafafa" }}>
+                  {["Nom","Type","Processus","Statut"].map(h => (
+                    <th key={h} style={{ textAlign:"left", padding:"10px 14px", fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase" }}>{h}</th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {documents.map((d, i) => (
+                  <tr key={i} style={{ borderBottom:"1px solid #f8f9fa" }}>
+                    <td style={{ padding:"12px 14px", fontWeight:600, color:"#1a2e22" }}>{d.nom || d.titre}</td>
+                    <td style={{ padding:"12px 14px", color:"#4b6358" }}>{d.type}</td>
+                    <td style={{ padding:"12px 14px", color:"#4b6358" }}>{d.processus_nom || "—"}</td>
+                    <td style={{ padding:"12px 14px", color:"#4b6358" }}>{d.statut}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
     </div>

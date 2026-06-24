@@ -239,10 +239,10 @@ def get_current_active_admin(
     current_user: Annotated[Utilisateur, Depends(get_current_user)],
 ) -> Utilisateur:
     from app.models.utilisateur import RoleEnum
-    if current_user.role != RoleEnum.admin:
+    if current_user.role != RoleEnum.direction:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Accès réservé aux administrateurs.",
+            detail="Accès réservé à la direction.",
         )
     return current_user
 
@@ -251,9 +251,9 @@ def get_current_pilote_ou_admin(
     current_user: Annotated[Utilisateur, Depends(get_current_user)],
 ) -> Utilisateur:
     from app.models.utilisateur import RoleEnum
-    if current_user.role not in (RoleEnum.admin, RoleEnum.pilote):
+    if current_user.role not in (RoleEnum.direction, RoleEnum.preparateur):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Accès réservé aux pilotes et administrateurs.",
+            detail="Accès réservé aux préparateurs et à la direction.",
         )
     return current_user

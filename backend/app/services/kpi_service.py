@@ -365,7 +365,7 @@ def _utilisateur_systeme(db: Session) -> Utilisateur:
     from app.models.utilisateur import RoleEnum
     admin = (
         db.query(Utilisateur)
-        .filter(Utilisateur.role == RoleEnum.admin, Utilisateur.est_actif == True)  # noqa: E712
+        .filter(Utilisateur.role == RoleEnum.direction, Utilisateur.est_actif == True)  # noqa: E712
         .first()
     )
     if not admin:

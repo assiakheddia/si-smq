@@ -83,9 +83,9 @@ class UtilisateurCreate(BaseModel):
     )]
 
     role: RoleEnum = Field(
-        default=RoleEnum.contributeur,
+        default=RoleEnum.preparateur,
         description="Rôle initial attribué à la création.",
-        examples=["pilote"],
+        examples=["preparateur"],
     )
 
     mot_de_passe: Annotated[str, Field(
@@ -298,7 +298,7 @@ class UtilisateurResponse(BaseModel):
     """
 
     id: int
-    email: EmailStr
+    email: str
     nom: str
     prenom: str
     role: RoleEnum

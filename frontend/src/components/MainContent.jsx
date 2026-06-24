@@ -126,6 +126,21 @@ function Badge({ text, style }) {
   );
 }
 
+function KpiCard({ label, value, icon, color, sub, delay = 0 }) {
+  return (
+    <div className="kpi-card" style={{ animationDelay: `${delay}ms` }}>
+      <div className="kpi-icon" style={{ background: `${color}1a` }}>
+        {icon}
+      </div>
+      <div className="kpi-value" style={{ color }}>
+        {value}
+      </div>
+      <div className="kpi-label">{label}</div>
+      <div className="kpi-sub">{sub}</div>
+    </div>
+  );
+}
+
 function ConfirmModal({ nom, onConfirm, onCancel }) {
   return (
     <div
@@ -344,9 +359,6 @@ export default function ProcessusList() {
       />
     </svg>
   );
-
-  // Get max value for bar chart
-  const maxDeptValue = Math.max(...Object.values(deptStats), 1);
 
   return (
     <>
@@ -693,6 +705,122 @@ export default function ProcessusList() {
           gap: 8px;
         }
 
+        /* ── Topbar ── */
+        .topbar {
+          display: flex;
+          justify-content: flex-end;
+          margin-bottom: clamp(12px,1.5vw,18px);
+        }
+        .t-right {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+        .icon-btn {
+          display: flex;
+          align-items: center;
+          padding: 7px 10px;
+          background: #ffffff;
+          border: 1px solid #e8ede9;
+          border-radius: 10px;
+          position: relative;
+        }
+        .n-dot {
+          position: absolute;
+          top: 5px;
+          right: 6px;
+          width: 7px;
+          height: 7px;
+          border-radius: 50%;
+          background: #ef4444;
+        }
+        .u-chip {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 5px 12px 5px 6px;
+          background: #ffffff;
+          border: 1px solid #e8ede9;
+          border-radius: 30px;
+        }
+        .u-av {
+          width: 26px;
+          height: 26px;
+          border-radius: 50%;
+          background: #1e3d2f;
+          color: #fff;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 10px;
+          font-weight: 700;
+          font-family: 'Plus Jakarta Sans', sans-serif;
+        }
+
+        /* ── KPI cards ── */
+        .kpi-grid {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: clamp(14px,1.5vw,20px);
+          margin-bottom: clamp(16px,2vw,22px);
+        }
+        .kpi-card {
+          background: #ffffff;
+          border-radius: clamp(12px,1.3vw,16px);
+          padding: clamp(16px,1.5vw,20px);
+          border: 1px solid #e8ede9;
+          animation: fadeUp 0.4s ease both;
+        }
+        .kpi-icon {
+          width: 38px;
+          height: 38px;
+          border-radius: 10px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin-bottom: 10px;
+        }
+        .kpi-value {
+          font-family: 'Outfit',sans-serif;
+          font-weight: 900;
+          font-size: clamp(20px,2.2vw,26px);
+          line-height: 1.1;
+        }
+        .kpi-label {
+          font-size: clamp(11px,1vw,13px);
+          color: #374151;
+          font-weight: 600;
+          margin-top: 4px;
+        }
+        .kpi-sub {
+          font-size: clamp(10px,0.85vw,11px);
+          color: #9ca3af;
+          margin-top: 2px;
+        }
+
+        /* ── Cards view ── */
+        .cards-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+          gap: clamp(14px,1.5vw,18px);
+          padding: clamp(14px,1.5vw,18px);
+        }
+        .proc-card {
+          background: #ffffff;
+          border-radius: clamp(12px,1.3vw,16px);
+          padding: clamp(14px,1.5vw,18px);
+          border: 1px solid #e8ede9;
+          animation: fadeUp 0.4s ease both;
+          transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .proc-card:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+        }
+
+        @media (max-width: 992px) {
+          .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+        }
         @media (max-width: 768px) {
           .mc-wrap { padding: 70px 14px 48px; }
           .charts-grid { grid-template-columns: 1fr; }

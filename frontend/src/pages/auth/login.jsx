@@ -5,9 +5,9 @@ import { api, setTokens } from "../../lib/api";
 /* ── role definitions ── */
 const ROLES = [
   { id: "preparateur",      label: "Préparateur",       sub: "Gestion des processus",    color: "#2D604F", path: "/dashboard",    initials: "PR" },
-  { id: "auditeur-interne", label: "Auditeur Interne",  sub: "Révision & validation",    color: "#1e40af", path: "/ai/dashboard", initials: "AI" },
+  { id: "auditeur_interne", label: "Auditeur Interne",  sub: "Révision & validation",    color: "#1e40af", path: "/ai/dashboard", initials: "AI" },
   { id: "direction",        label: "Direction",          sub: "Supervision stratégique",  color: "#7c3aed", path: "/dir/dashboard",initials: "DR" },
-  { id: "auditeur-externe", label: "Auditeur Externe",  sub: "Audit ISO externe",        color: "#b45309", path: "/ae/dashboard", initials: "AE" },
+  { id: "auditeur_externe", label: "Auditeur Externe",  sub: "Audit ISO externe",        color: "#b45309", path: "/ae/dashboard", initials: "AE" },
 ];
 
 
@@ -114,14 +114,26 @@ export default function Login() {
     setLoading(true);
     try {
       const data = await api.post("/auth/login", { email, password });
+      const destRole = ROLES.find((r) => r.id === data.role);
+      if (!destRole) {
+        setError("Rôle de compte inconnu. Contactez un administrateur.");
+        setLoading(false);
+        return;
+      }
+      if (selectedRole && data.role !== selectedRole.id) {
+        setError(
+          `Ce compte est associé au rôle "${destRole.label}". Veuillez sélectionner ce rôle pour vous connecter.`
+        );
+        setLoading(false);
+        return;
+      }
       setTokens(data.access_token, data.refresh_token, {
         id: data.utilisateur_id,
         nom_complet: data.nom_complet,
         email: data.email,
         role: data.role,
       });
-      const destRole = ROLES.find((r) => r.id === data.role);
-      navigate(destRole?.path || selectedRole?.path || "/dashboard");
+      navigate(destRole.path);
     } catch (err) {
       setError(err.message || "Identifiants incorrects. Vérifiez votre email et mot de passe.");
       setLoading(false);

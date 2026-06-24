@@ -1,48 +1,18 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Topbar from "../../components/Topbar.jsx";
-
-const KPI = [
-  { label: "Audits assignés",          value: "5",  color: "#1e40af", bg: "#dbeafe", icon: "📋" },
-  { label: "Audits complétés",         value: "2",  color: "#166534", bg: "#dcfce7", icon: "✅" },
-  { label: "Non-conformités détectées",value: "8",  color: "#991b1b", bg: "#fee2e2", icon: "⚠️" },
-  { label: "Recommandations émises",   value: "12", color: "#5b21b6", bg: "#ede9fe", icon: "💡" },
-];
-
-const SCHEDULE = [
-  { process: "Gestion des achats",         date: "25/06/2026", status: "en-cours",  progress: 60 },
-  { process: "Formation du personnel",     date: "28/06/2026", status: "planifie",  progress: 0  },
-  { process: "Contrôle qualité labo",      date: "30/06/2026", status: "planifie",  progress: 0  },
-  { process: "Gestion des non-conformités",date: "10/06/2026", status: "termine",   progress: 100},
-  { process: "Audit interne",              date: "05/06/2026", status: "termine",   progress: 100},
-];
-
-const FINDINGS = [
-  { id: 1, process: "Gestion des achats", type: "majeure", clause: "8.4", desc: "Absence de critères d'évaluation fournisseurs documentés.", date: "23/06/2026" },
-  { id: 2, process: "Gestion des achats", type: "mineure", clause: "7.5", desc: "Références documentaires non à jour dans la fiche processus.", date: "23/06/2026" },
-  { id: 3, process: "Gestion des NC",     type: "observation", clause: "10.2", desc: "Délais de clôture des NC non systématiquement respectés.", date: "10/06/2026" },
-  { id: 4, process: "Audit interne",      type: "recommandation", clause: "9.2", desc: "Recommandation d'élargir le programme d'audit à tous les processus.", date: "05/06/2026" },
-  { id: 5, process: "Audit interne",      type: "mineure", clause: "5.2", desc: "Politique qualité non affichée dans tous les locaux.", date: "05/06/2026" },
-];
-
-const COMPLIANCE = [
-  { process: "Gestion des achats",         score: 62 },
-  { process: "Formation du personnel",     score: 0, pending: true },
-  { process: "Contrôle qualité labo",      score: 0, pending: true },
-  { process: "Gestion des non-conformités",score: 81 },
-  { process: "Audit interne",              score: 88 },
-];
+import { api, getCurrentUser } from "../../lib/api.js";
 
 const FINDING_STYLE = {
-  majeure:       { label: "Majeure",         bg: "#fee2e2", color: "#991b1b" },
-  mineure:       { label: "Mineure",         bg: "#fef3c7", color: "#92400e" },
-  observation:   { label: "Observation",     bg: "#f3f4f6", color: "#374151" },
-  recommandation:{ label: "Recommandation",  bg: "#ede9fe", color: "#5b21b6" },
+  majeur:       { label: "Majeure",         bg: "#fee2e2", color: "#991b1b" },
+  mineur:       { label: "Mineure",         bg: "#fef3c7", color: "#92400e" },
+  observation:  { label: "Observation",     bg: "#f3f4f6", color: "#374151" },
 };
 
-const STATUS_STYLE = {
-  "en-cours": { label: "En cours",   bg: "#dbeafe", color: "#1e40af" },
-  "planifie": { label: "Planifié",   bg: "#fef3c7", color: "#92400e" },
-  "termine":  { label: "Terminé",    bg: "#dcfce7", color: "#166534" },
+const STATUT_STYLE = {
+  brouillon: { label: "Brouillon", bg: "#fef3c7", color: "#92400e" },
+  soumis:    { label: "Soumis",    bg: "#dbeafe", color: "#1e40af" },
+  valide:    { label: "Validé",    bg: "#dcfce7", color: "#166534" },
+  archive:   { label: "Archivé",   bg: "#f3f4f6", color: "#374151" },
 };
 
 const S = {
@@ -52,18 +22,81 @@ const S = {
   sectionTitle: { fontSize: 15, fontWeight: 700, color: "#1a2e22", marginBottom: 16 },
 };
 
+function progressForStatut(statut) {
+  if (statut === "valide" || statut === "archive") return 100;
+  if (statut === "soumis") return 60;
+  return 10;
+}
+
 export default function AEDashboard() {
+  const user = getCurrentUser();
+  const [diags, setDiags] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    Promise.all([
+      api.get("/diagnostics/").catch(() => []),
+    ]).then(([diagsRes]) => {
+      const all = Array.isArray(diagsRes) ? diagsRes : [];
+      const mine = all.filter((d) => d.auditeur?.id === user?.id);
+      setDiags(mine.length > 0 ? mine : all);
+    }).finally(() => setLoading(false));
+  }, []);
+
+  const assigned = diags.length;
+  const completed = diags.filter((d) => d.statut === "valide" || d.statut === "archive").length;
+  const ncTotal = diags.reduce((sum, d) => sum + (d.nb_ecarts_majeurs || 0), 0);
+  const pending = diags.filter((d) => d.statut === "brouillon" || d.statut === "soumis").length;
+
+  const KPI = [
+    { label: "Audits assignés",           value: String(assigned),  color: "#1e40af", bg: "#dbeafe", icon: "📋" },
+    { label: "Audits complétés",          value: String(completed), color: "#166534", bg: "#dcfce7", icon: "✅" },
+    { label: "Écarts majeurs détectés",   value: String(ncTotal),   color: "#991b1b", bg: "#fee2e2", icon: "⚠️" },
+    { label: "Diagnostics en attente",    value: String(pending),   color: "#5b21b6", bg: "#ede9fe", icon: "💡" },
+  ];
+
+  const schedule = diags.slice(0, 6).map((d) => ({
+    process: d.processus?.nom || "—",
+    date: d.date_diagnostic ? new Date(d.date_diagnostic).toLocaleDateString("fr-FR") : "—",
+    statut: d.statut,
+    progress: progressForStatut(d.statut),
+  }));
+
+  const compliance = diags.slice(0, 6).map((d) => ({
+    process: d.processus?.nom || "—",
+    score: Math.round(d.score_global || 0),
+  }));
+
+  const findings = diags
+    .filter((d) => (d.nb_ecarts_majeurs || 0) > 0)
+    .slice(0, 5)
+    .map((d) => ({
+      id: d.id,
+      process: d.processus?.nom || "—",
+      type: "majeur",
+      desc: `${d.nb_ecarts_majeurs} écart(s) majeur(s) détecté(s) sur ce diagnostic.`,
+      date: d.date_diagnostic ? new Date(d.date_diagnostic).toLocaleDateString("fr-FR") : "—",
+    }));
+
+  if (loading) {
+    return (
+      <div style={S.page}>
+        <Topbar title="Tableau de bord" userName={user?.nom_complet} userRole="Auditeur Externe" />
+        <div style={S.inner}>Chargement…</div>
+      </div>
+    );
+  }
+
   return (
     <div style={S.page}>
-      <Topbar title="Tableau de bord" userName="Benmoussa Sarah" userRole="Auditeur Externe" userInitials="BS" />
+      <Topbar title="Tableau de bord" userName={user?.nom_complet} userRole="Auditeur Externe" />
       <div style={S.inner}>
 
         <div style={{ marginBottom: 28 }}>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: "#1a2e22", marginBottom: 4 }}>Bonjour, Benmoussa Sarah 👋</h1>
-          <p style={{ fontSize: 13.5, color: "#5a7a66" }}>Auditeur Externe · <strong>3 audits</strong> en attente de démarrage.</p>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: "#1a2e22", marginBottom: 4 }}>Bonjour, {user?.nom_complet || "Auditeur"} 👋</h1>
+          <p style={{ fontSize: 13.5, color: "#5a7a66" }}>Auditeur Externe · <strong>{pending} audit{pending !== 1 ? "s" : ""}</strong> en attente de finalisation.</p>
         </div>
 
-        {/* KPIs */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 16, marginBottom: 28 }}>
           {KPI.map((k) => (
             <div key={k.label} style={{ ...S.card, borderLeft: `4px solid ${k.color}`, padding: "18px 20px" }}>
@@ -79,82 +112,88 @@ export default function AEDashboard() {
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 20, marginBottom: 20 }}>
-          {/* Audit schedule */}
           <div style={S.card}>
             <div style={S.sectionTitle}>Programme d'audit</div>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-              <thead>
-                <tr style={{ borderBottom: "1px solid #f0f2f4" }}>
-                  {["Processus", "Date prévue", "Statut", "Avancement"].map((h) => (
-                    <th key={h} style={{ textAlign: "left", padding: "6px 8px", fontSize: 10, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase" }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {SCHEDULE.map((r, i) => {
-                  const ss = STATUS_STYLE[r.status];
-                  return (
-                    <tr key={i} style={{ borderBottom: "1px solid #f8f9fa" }}>
-                      <td style={{ padding: "10px 8px", fontWeight: 600, color: "#1a2e22" }}>{r.process}</td>
-                      <td style={{ padding: "10px 8px", fontSize: 12, color: "#6b8c75" }}>{r.date}</td>
-                      <td style={{ padding: "10px 8px" }}><span style={{ background: ss.bg, color: ss.color, borderRadius: 20, padding: "2px 9px", fontSize: 10, fontWeight: 700 }}>{ss.label}</span></td>
-                      <td style={{ padding: "10px 8px" }}>
-                        {r.status === "planifie" ? <span style={{ fontSize: 11, color: "#9ca3af" }}>—</span> : (
+            {schedule.length === 0 ? (
+              <div style={{ padding: "20px 0", textAlign: "center", color: "#9ca3af", fontSize: 13 }}>Aucun audit pour le moment.</div>
+            ) : (
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid #f0f2f4" }}>
+                    {["Processus", "Date", "Statut", "Avancement"].map((h) => (
+                      <th key={h} style={{ textAlign: "left", padding: "6px 8px", fontSize: 10, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {schedule.map((r, i) => {
+                    const ss = STATUT_STYLE[r.statut] || STATUT_STYLE.brouillon;
+                    return (
+                      <tr key={i} style={{ borderBottom: "1px solid #f8f9fa" }}>
+                        <td style={{ padding: "10px 8px", fontWeight: 600, color: "#1a2e22" }}>{r.process}</td>
+                        <td style={{ padding: "10px 8px", fontSize: 12, color: "#6b8c75" }}>{r.date}</td>
+                        <td style={{ padding: "10px 8px" }}><span style={{ background: ss.bg, color: ss.color, borderRadius: 20, padding: "2px 9px", fontSize: 10, fontWeight: 700 }}>{ss.label}</span></td>
+                        <td style={{ padding: "10px 8px" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                             <div style={{ flex: 1, height: 6, background: "#f0f2f4", borderRadius: 3, overflow: "hidden" }}>
                               <div style={{ width: `${r.progress}%`, height: "100%", background: r.progress === 100 ? "#22c55e" : "#3b82f6", borderRadius: 3 }} />
                             </div>
                             <span style={{ fontSize: 11, fontWeight: 700, color: "#4b6358", minWidth: 28 }}>{r.progress}%</span>
                           </div>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
           </div>
 
-          {/* Compliance by process */}
           <div style={S.card}>
             <div style={S.sectionTitle}>Conformité par processus</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              {COMPLIANCE.map((c) => (
-                <div key={c.process}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: "#1a2e22" }}>{c.process}</span>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: c.pending ? "#9ca3af" : c.score >= 80 ? "#166534" : c.score >= 60 ? "#92400e" : "#991b1b" }}>
-                      {c.pending ? "En attente" : `${c.score}%`}
-                    </span>
+            {compliance.length === 0 ? (
+              <div style={{ padding: "20px 0", textAlign: "center", color: "#9ca3af", fontSize: 13 }}>Aucune donnée disponible.</div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                {compliance.map((c, i) => (
+                  <div key={i}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: "#1a2e22" }}>{c.process}</span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: c.score >= 80 ? "#166534" : c.score >= 60 ? "#92400e" : "#991b1b" }}>
+                        {c.score}%
+                      </span>
+                    </div>
+                    <div style={{ height: 7, background: "#f0f2f4", borderRadius: 4, overflow: "hidden" }}>
+                      <div style={{ width: `${c.score}%`, height: "100%", background: c.score >= 80 ? "#22c55e" : c.score >= 60 ? "#f59e0b" : "#ef4444", borderRadius: 4 }} />
+                    </div>
                   </div>
-                  <div style={{ height: 7, background: "#f0f2f4", borderRadius: 4, overflow: "hidden" }}>
-                    <div style={{ width: `${c.score}%`, height: "100%", background: c.pending ? "#e5e7eb" : c.score >= 80 ? "#22c55e" : c.score >= 60 ? "#f59e0b" : "#ef4444", borderRadius: 4 }} />
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Recent findings */}
         <div style={S.card}>
           <div style={S.sectionTitle}>Derniers constats</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {FINDINGS.map((f) => {
-              const fs = FINDING_STYLE[f.type];
-              return (
-                <div key={f.id} style={{ display: "flex", gap: 14, alignItems: "flex-start", padding: "12px 16px", background: "#fafafa", borderRadius: 10, border: "1px solid #f0f2f4" }}>
-                  <span style={{ background: fs.bg, color: fs.color, borderRadius: 6, padding: "2px 10px", fontSize: 10, fontWeight: 700, flexShrink: 0, marginTop: 1 }}>{fs.label}</span>
-                  <div style={{ flex: 1 }}>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: "#1a2e22" }}>{f.process}</span>
-                    <span style={{ fontSize: 11, color: "#9ca3af", marginLeft: 8 }}>Clause {f.clause}</span>
-                    <div style={{ fontSize: 12, color: "#4b6358", marginTop: 3 }}>{f.desc}</div>
+          {findings.length === 0 ? (
+            <div style={{ padding: "20px 0", textAlign: "center", color: "#9ca3af", fontSize: 13 }}>Aucun constat majeur récent.</div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {findings.map((f) => {
+                const fs = FINDING_STYLE[f.type];
+                return (
+                  <div key={f.id} style={{ display: "flex", gap: 14, alignItems: "flex-start", padding: "12px 16px", background: "#fafafa", borderRadius: 10, border: "1px solid #f0f2f4" }}>
+                    <span style={{ background: fs.bg, color: fs.color, borderRadius: 6, padding: "2px 10px", fontSize: 10, fontWeight: 700, flexShrink: 0, marginTop: 1 }}>{fs.label}</span>
+                    <div style={{ flex: 1 }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: "#1a2e22" }}>{f.process}</span>
+                      <div style={{ fontSize: 12, color: "#4b6358", marginTop: 3 }}>{f.desc}</div>
+                    </div>
+                    <span style={{ fontSize: 11, color: "#9ca3af", flexShrink: 0 }}>{f.date}</span>
                   </div>
-                  <span style={{ fontSize: 11, color: "#9ca3af", flexShrink: 0 }}>{f.date}</span>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
       </div>

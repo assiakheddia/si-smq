@@ -15,7 +15,7 @@ Référence générée : "ACT-2025-PROC-LABO-007"
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
@@ -27,13 +27,15 @@ from app.core.iso_engine import (
     transition_action_valide,
 )
 from app.models.action import Action, StatutAction
+from app.models.diagnostic import DiagnosticClause
 from app.models.processus import Processus
+from app.models.risque import Risque
 from app.models.utilisateur import Utilisateur
 from app.schemas.action import (
     ActionCreate,
     ActionUpdate,
-    TransitionStatut,
-    VerifierEfficacite,
+    TransitionStatutRequest,
+    VerifierEfficaciteRequest,
 )
 
 logger = logging.getLogger(__name__)
@@ -72,54 +74,63 @@ def creer_action(
     createur: Utilisateur,
 ) -> Action:
     """
-    Crée une action corrective manuellement.
+    Crée une action corrective/préventive/d'amélioration.
 
     La priorité peut être calculée automatiquement depuis :
-      - criticite_risque (si liée à un risque)
-      - type_ecart (si liée à un écart diagnostic)
-    Si ni l'une ni l'autre, la priorité fournie dans le payload est utilisée.
+      - la criticité du risque lié (si risque_id renseigné)
+      - le type d'écart de la clause liée (si diagnostic_clause_id renseigné)
+    Sinon, la priorité fournie dans le payload est utilisée.
 
     Raises:
         HTTPException 404 — processus introuvable.
         HTTPException 400 — date_echeance dans le passé.
     """
-    processus = db.query(Processus).filter(
-        Processus.code == payload.processus_code
-    ).first()
+    processus = db.query(Processus).filter(Processus.id == payload.processus_id).first()
     if not processus:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Processus '{payload.processus_code}' introuvable.",
+            detail=f"Processus {payload.processus_id} introuvable.",
         )
 
-    if payload.date_echeance:
-        if payload.date_echeance < datetime.now(tz=timezone.utc).date():
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="La date d'échéance ne peut pas être dans le passé.",
-            )
+    if payload.date_echeance and payload.date_echeance < datetime.utcnow():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La date d'échéance ne peut pas être dans le passé.",
+        )
 
-    # Calcul automatique de la priorité
+    # Calcul automatique de la priorité depuis la source liée
     priorite = payload.priorite
-    if payload.criticite_risque:
-        priorite = priorite_depuis_criticite(payload.criticite_risque)
-    elif payload.type_ecart:
-        priorite = priorite_depuis_ecart(payload.type_ecart)
+    if payload.risque_id:
+        risque = db.query(Risque).filter(Risque.id == payload.risque_id).first()
+        if risque:
+            priorite = priorite_depuis_criticite(risque.criticite.value)
+    elif payload.diagnostic_clause_id:
+        clause = db.query(DiagnosticClause).filter(
+            DiagnosticClause.id == payload.diagnostic_clause_id
+        ).first()
+        if clause and clause.type_ecart:
+            priorite = priorite_depuis_ecart(clause.type_ecart.value)
 
-    annee = datetime.now(tz=timezone.utc).year
-    reference = _generer_reference(db, payload.processus_code, annee)
+    annee = datetime.utcnow().year
+    reference = _generer_reference(db, processus.code, annee)
 
     action = Action(
         reference=reference,
+        titre=payload.titre,
+        description=payload.description,
+        type=payload.type,
+        origine=payload.origine,
         processus_id=processus.id,
         risque_id=payload.risque_id,
-        description=payload.description,
+        diagnostic_clause_id=payload.diagnostic_clause_id,
+        responsable_id=payload.responsable_id,
+        verificateur_id=payload.verificateur_id,
         cause_racine=payload.cause_racine,
         statut=StatutAction.planifiee,
         priorite=priorite,
-        responsable_id=payload.responsable_id,
+        date_planifiee=payload.date_planifiee,
         date_echeance=payload.date_echeance,
-        genere_automatiquement=False,
+        genere_automatiquement=payload.generee_automatiquement,
     )
     db.add(action)
     db.commit()
@@ -138,7 +149,7 @@ def creer_action(
 
 def lister_actions(
     db: Session,
-    processus_code: str | None = None,
+    processus_id: int | None = None,
     statut: StatutAction | None = None,
     responsable_id: int | None = None,
     priorite: str | None = None,
@@ -146,14 +157,10 @@ def lister_actions(
     page: int = 1,
     taille_page: int = 20,
 ) -> dict:
-    q = db.query(Action)
+    q = db.query(Action).filter(Action.est_active == True)  # noqa: E712
 
-    if processus_code:
-        processus = db.query(Processus).filter(
-            Processus.code == processus_code
-        ).first()
-        if processus:
-            q = q.filter(Action.processus_id == processus.id)
+    if processus_id:
+        q = q.filter(Action.processus_id == processus_id)
 
     if statut:
         q = q.filter(Action.statut == statut)
@@ -165,9 +172,9 @@ def lister_actions(
         q = q.filter(Action.priorite == priorite)
 
     if en_retard:
-        aujourd_hui = datetime.now(tz=timezone.utc).date()
+        maintenant = datetime.utcnow()
         q = q.filter(
-            Action.date_echeance < aujourd_hui,
+            Action.date_echeance < maintenant,
             Action.statut.not_in([StatutAction.close, StatutAction.annulee]),
         )
 
@@ -175,12 +182,27 @@ def lister_actions(
     total = q.count()
     items = q.offset((page - 1) * taille_page).limit(taille_page).all()
 
+    nb_planifiees = db.query(Action).filter(Action.statut == StatutAction.planifiee).count()
+    nb_en_cours = db.query(Action).filter(Action.statut == StatutAction.en_cours).count()
+    nb_closes = db.query(Action).filter(Action.statut == StatutAction.close).count()
+    nb_en_retard = (
+        db.query(Action)
+        .filter(
+            Action.date_echeance < datetime.utcnow(),
+            Action.statut.not_in([StatutAction.close, StatutAction.annulee]),
+        )
+        .count()
+    )
+
     return {
         "items": items,
         "total": total,
         "page": page,
-        "taille_page": taille_page,
-        "pages_total": max(1, -(-total // taille_page)),
+        "per_page": taille_page,
+        "nb_planifiees": nb_planifiees,
+        "nb_en_cours": nb_en_cours,
+        "nb_en_retard": nb_en_retard,
+        "nb_closes": nb_closes,
     }
 
 
@@ -188,21 +210,14 @@ def get_action(db: Session, action_id: int) -> Action:
     return _get_ou_404(db, action_id)
 
 
-def get_kanban(db: Session, processus_code: str | None = None) -> dict:
+def get_kanban(db: Session, processus_id: int | None = None) -> dict:
     """
     Retourne les actions groupées par statut pour une vue Kanban.
-
-    Returns:
-        dict avec une clé par StatutAction contenant la liste des actions.
     """
-    q = db.query(Action)
+    q = db.query(Action).filter(Action.est_active == True)  # noqa: E712
 
-    if processus_code:
-        processus = db.query(Processus).filter(
-            Processus.code == processus_code
-        ).first()
-        if processus:
-            q = q.filter(Action.processus_id == processus.id)
+    if processus_id:
+        q = q.filter(Action.processus_id == processus_id)
 
     actions = q.all()
     kanban: dict[str, list] = {s.value: [] for s in StatutAction}
@@ -237,7 +252,12 @@ def modifier_action(
             detail=f"Une action '{action.statut.value}' ne peut plus être modifiée.",
         )
 
-    for champ in ["description", "cause_racine", "responsable_id", "priorite", "date_echeance"]:
+    champs = [
+        "titre", "description", "type", "priorite", "cause_racine",
+        "date_planifiee", "date_echeance", "responsable_id",
+        "verificateur_id", "avancement",
+    ]
+    for champ in champs:
         valeur = getattr(payload, champ, None)
         if valeur is not None:
             setattr(action, champ, valeur)
@@ -256,7 +276,7 @@ def modifier_action(
 def transitionner_statut(
     db: Session,
     action_id: int,
-    payload: TransitionStatut,
+    payload: TransitionStatutRequest,
     demandeur: Utilisateur,
 ) -> Action:
     """
@@ -276,7 +296,7 @@ def transitionner_statut(
         HTTPException 403 — droits insuffisants.
     """
     action = _get_ou_404(db, action_id)
-    nouveau_statut = payload.statut
+    nouveau_statut = payload.nouveau_statut
 
     if not transition_action_valide(action.statut.value, nouveau_statut.value):
         raise HTTPException(
@@ -289,27 +309,25 @@ def transitionner_statut(
 
     # Droits selon la transition cible
     transitions_admin = {StatutAction.close, StatutAction.annulee}
-    if nouveau_statut in transitions_admin and not demandeur.peut("valider"):
+    if nouveau_statut in transitions_admin and not demandeur.peut("delete", "action"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Clôture/annulation réservée aux pilotes et administrateurs.",
-        )
-
-    # Vérification avant clôture : résultat requis
-    if nouveau_statut == StatutAction.close and not payload.resultat:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Un résultat est requis pour clôturer une action.",
+            detail="Clôture/annulation réservée aux préparateurs et à la direction.",
         )
 
     action.statut = nouveau_statut
-    if payload.resultat:
-        action.resultat = payload.resultat
-    if nouveau_statut == StatutAction.close:
-        action.date_cloture = datetime.now(tz=timezone.utc)
+    if nouveau_statut == StatutAction.annulee:
+        action.motif_annulation = payload.commentaire
+        action.date_cloture = datetime.utcnow()
+    elif nouveau_statut == StatutAction.close:
+        action.date_cloture = datetime.utcnow()
+    elif nouveau_statut == StatutAction.en_verification:
+        action.date_realisation = datetime.utcnow()
 
-    # Avancement forcé depuis iso_engine
-    action.avancement = get_avancement_force(nouveau_statut.value)
+    # Avancement forcé depuis iso_engine (None = avancement libre, ex. en_cours)
+    avancement_force = get_avancement_force(nouveau_statut.value)
+    if avancement_force is not None:
+        action.avancement = avancement_force
 
     db.commit()
     db.refresh(action)
@@ -328,23 +346,23 @@ def transitionner_statut(
 def verifier_efficacite(
     db: Session,
     action_id: int,
-    payload: VerifierEfficacite,
+    payload: VerifierEfficaciteRequest,
     verificateur: Utilisateur,
 ) -> Action:
     """
     Enregistre la vérification d'efficacité d'une action close.
 
     La vérification confirme que l'action a produit l'effet attendu.
-    Réservée aux pilotes et administrateurs.
+    Réservée aux préparateurs et à la direction.
 
     Raises:
         HTTPException 400 — action non close.
         HTTPException 403 — droits insuffisants.
     """
-    if not verificateur.peut("valider"):
+    if not verificateur.peut("delete", "action"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Vérification d'efficacité réservée aux pilotes et administrateurs.",
+            detail="Vérification d'efficacité réservée aux préparateurs et à la direction.",
         )
 
     action = _get_ou_404(db, action_id)
@@ -355,10 +373,10 @@ def verifier_efficacite(
             detail="La vérification d'efficacité ne s'applique qu'aux actions closes.",
         )
 
-    action.efficacite_verifiee = payload.est_efficace
-    action.commentaire_efficacite = payload.commentaire
-    action.date_verification_efficacite = datetime.now(tz=timezone.utc)
-    action.verificateur_id = verificateur.id
+    action.efficacite_verifiee = payload.efficacite_verifiee
+    action.commentaire_verification = payload.commentaire_verification
+    if not action.verificateur_id:
+        action.verificateur_id = verificateur.id
 
     db.commit()
     db.refresh(action)
@@ -366,7 +384,7 @@ def verifier_efficacite(
     logger.info(
         "Efficacité vérifiée pour %s : %s par %s",
         action.reference,
-        "efficace" if payload.est_efficace else "non efficace",
+        "efficace" if payload.efficacite_verifiee else "non efficace",
         verificateur.email,
     )
     return action

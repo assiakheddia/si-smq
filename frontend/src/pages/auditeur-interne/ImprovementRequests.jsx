@@ -1,34 +1,22 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Topbar from "../../components/Topbar.jsx";
+import { api, getCurrentUser } from "../../lib/api.js";
 
-const PROCESSES = ["Gestion des achats", "Contrôle qualité labo", "Formation du personnel", "Gestion des non-conformités", "Audit interne"];
-const ISO_CLAUSES = ["4.1", "4.2", "4.4", "5.1", "5.2", "6.1", "6.2", "7.1", "7.2", "7.5", "8.1", "8.4", "9.1", "9.2", "10.1", "10.2"];
-
-const INITIAL_ITEMS = {
-  observations: [
-    { id: 1, process: "Gestion des achats", clause: "8.4", date: "20/06/2026", status: "en-attente", text: "Les critères d'évaluation des fournisseurs ne sont pas formalisés. Il est recommandé de créer une grille d'évaluation standardisée avec des seuils minimaux de performance.", response: null },
-    { id: 2, process: "Formation du personnel", clause: "7.2", date: "17/06/2026", status: "prise-en-compte", text: "Le plan de formation 2026 ne précise pas les modalités d'évaluation post-formation. Des critères de validation des acquis doivent être définis.", response: "Ajouté dans la version 3 — grille d'évaluation post-formation incluse." },
-  ],
-  recommandations: [
-    { id: 3, process: "Contrôle qualité labo", clause: "9.1", date: "18/06/2026", status: "en-attente", text: "Il est recommandé d'automatiser le suivi des résultats d'analyse via le LIMS existant pour réduire les erreurs de saisie manuelle et améliorer la traçabilité.", response: null },
-    { id: 4, process: "Gestion des non-conformités", clause: "10.2", date: "14/06/2026", status: "cloturee", text: "Mettre en place un système de suivi des actions correctives avec des délais définis et des responsables identifiés pour chaque non-conformité.", response: "Système de suivi implémenté. Tableau de bord NC créé." },
-  ],
-  corrections: [
-    { id: 5, process: "Gestion des achats", clause: "7.5", date: "19/06/2026", status: "en-attente", text: "La fiche ne contient aucune référence aux documents de maîtrise requis par la clause 7.5. Les procédures P-ACH-001 et P-ACH-002 doivent être listées et référencées.", response: null },
-    { id: 6, process: "Contrôle qualité labo", clause: "4.1", date: "16/06/2026", status: "prise-en-compte", text: "L'analyse du contexte (parties intéressées, enjeux internes/externes) est absente de la fiche. Cette section est obligatoire selon ISO 9001 clause 4.1.", response: "Section contexte ajoutée en version 2. Analyse SWOT incluse." },
-  ],
-};
+const TYPE_TO_TAB = { amelioration: "observations", preventive: "recommandations", corrective: "corrections", immediat: "corrections" };
+const TAB_TO_TYPE = { observations: "amelioration", recommandations: "preventive", corrections: "corrective" };
 
 const STATUS_MAP = {
-  "en-attente":     { label: "En attente réponse", bg: "#fef3c7", color: "#92400e" },
-  "prise-en-compte":{ label: "Prise en compte", bg: "#dcfce7", color: "#166534" },
-  "cloturee":       { label: "Clôturée", bg: "#f3f4f6", color: "#374151" },
+  planifiee:       { label: "En attente réponse", bg: "#fef3c7", color: "#92400e" },
+  en_cours:        { label: "En cours", bg: "#dbeafe", color: "#1e40af" },
+  en_verification: { label: "Prise en compte", bg: "#dcfce7", color: "#166534" },
+  close:           { label: "Clôturée", bg: "#f3f4f6", color: "#374151" },
+  annulee:         { label: "Annulée", bg: "#fee2e2", color: "#991b1b" },
 };
 
 const TAB_CONFIG = [
-  { key: "observations",   label: "Observations",        count: 2, color: "#374151", bg: "#f3f4f6" },
-  { key: "recommandations",label: "Recommandations",     count: 2, color: "#5b21b6", bg: "#ede9fe" },
-  { key: "corrections",    label: "Demandes de correction", count: 2, color: "#991b1b", bg: "#fee2e2" },
+  { key: "observations",    label: "Observations",           color: "#374151", bg: "#f3f4f6" },
+  { key: "recommandations", label: "Recommandations",        color: "#5b21b6", bg: "#ede9fe" },
+  { key: "corrections",     label: "Demandes de correction", color: "#991b1b", bg: "#fee2e2" },
 ];
 
 const S = {
@@ -40,13 +28,14 @@ const S = {
 
 function ItemCard({ item, type }) {
   const [expanded, setExpanded] = useState(false);
-  const s = STATUS_MAP[item.status];
+  const s = STATUS_MAP[item.statut] || STATUS_MAP.planifiee;
   const typeColors = {
     observations:    { icon: "💬", color: "#374151", bg: "#f3f4f6" },
     recommandations: { icon: "💡", color: "#5b21b6", bg: "#ede9fe" },
     corrections:     { icon: "⚠️", color: "#991b1b", bg: "#fee2e2" },
   };
   const tc = typeColors[type];
+  const text = item.description || item.titre || "";
 
   return (
     <div style={{ background: "#fff", border: "1px solid #f0f2f4", borderRadius: 12, overflow: "hidden" }}>
@@ -54,23 +43,24 @@ function ItemCard({ item, type }) {
         <div style={{ width: 38, height: 38, borderRadius: 10, background: tc.bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>{tc.icon}</div>
         <div style={{ flex: 1 }}>
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 6 }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: "#1a2e22" }}>{item.process}</span>
-            <span style={{ background: "#ede9fe", color: "#5b21b6", borderRadius: 6, padding: "1px 8px", fontSize: 10, fontWeight: 700 }}>{item.clause}</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "#1a2e22" }}>{item.processus_nom || "—"}</span>
+            <span style={{ background: "#ede9fe", color: "#5b21b6", borderRadius: 6, padding: "1px 8px", fontSize: 10, fontWeight: 700 }}>{item.reference || `#${item.id}`}</span>
             <span style={{ background: s.bg, color: s.color, borderRadius: 20, padding: "1px 10px", fontSize: 10, fontWeight: 700 }}>{s.label}</span>
-            <span style={{ fontSize: 11, color: "#9ca3af", marginLeft: "auto" }}>{item.date}</span>
+            <span style={{ fontSize: 11, color: "#9ca3af", marginLeft: "auto" }}>{item.date_creation ? new Date(item.date_creation).toLocaleDateString("fr-FR") : "—"}</span>
           </div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "#1a2e22", marginBottom: 4 }}>{item.titre}</div>
           <p style={{ fontSize: 13, color: "#4b6358", margin: 0, lineHeight: 1.6 }}>
-            {expanded ? item.text : item.text.slice(0, 120) + (item.text.length > 120 ? "..." : "")}
+            {expanded ? text : text.slice(0, 120) + (text.length > 120 ? "..." : "")}
           </p>
-          {item.text.length > 120 && (
+          {text.length > 120 && (
             <button onClick={() => setExpanded(!expanded)} style={{ background: "none", border: "none", color: "#2D604F", fontSize: 12, cursor: "pointer", padding: 0, marginTop: 4, fontWeight: 600 }}>
               {expanded ? "Voir moins" : "Voir plus"}
             </button>
           )}
-          {item.response && (
+          {item.responsable && (
             <div style={{ marginTop: 10, background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 8, padding: "10px 12px" }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: "#166534", textTransform: "uppercase", marginBottom: 3 }}>Réponse du Préparateur</div>
-              <div style={{ fontSize: 12, color: "#14532d" }}>{item.response}</div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#166534", textTransform: "uppercase", marginBottom: 3 }}>Responsable</div>
+              <div style={{ fontSize: 12, color: "#14532d" }}>{item.responsable.prenom} {item.responsable.nom}</div>
             </div>
           )}
         </div>
@@ -80,28 +70,66 @@ function ItemCard({ item, type }) {
 }
 
 export default function ImprovementRequests() {
-  const [activeTab, setActiveTab] = useState("observations");
-  const [items, setItems] = useState(INITIAL_ITEMS);
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ process: "", type: "observations", clause: "", text: "" });
-  const [saved, setSaved] = useState(false);
+  const user = getCurrentUser();
+  const initials = (user?.nom_complet || "").split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase() || "??";
 
-  const handleSave = () => {
-    if (!form.process || !form.clause || !form.text.trim()) return;
-    const newItem = { id: Date.now(), process: form.process, clause: form.clause, date: new Date().toLocaleDateString("fr-FR"), status: "en-attente", text: form.text, response: null };
-    setItems((prev) => ({ ...prev, [form.type]: [newItem, ...prev[form.type]] }));
-    setActiveTab(form.type);
-    setShowForm(false);
-    setSaved(true);
-    setForm({ process: "", type: "observations", clause: "", text: "" });
-    setTimeout(() => setSaved(false), 3000);
+  const [activeTab, setActiveTab] = useState("observations");
+  const [actions, setActions] = useState([]);
+  const [processusList, setProcessusList] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ processus_id: "", type: "observations", titre: "", text: "" });
+  const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const load = () => {
+    Promise.all([
+      api.get("/actions/").catch(() => []),
+      api.get("/processus/").catch(() => []),
+    ]).then(([acts, procs]) => {
+      setActions(Array.isArray(acts) ? acts : []);
+      setProcessusList(Array.isArray(procs) ? procs : []);
+    }).finally(() => setLoading(false));
   };
 
-  const currentItems = items[activeTab] || [];
+  useEffect(() => { load(); }, []);
+
+  const handleSave = async () => {
+    if (!form.processus_id || !form.titre.trim() || !form.text.trim()) return;
+    setSaving(true);
+    try {
+      await api.post("/actions/", {
+        titre: form.titre,
+        description: form.text,
+        type: TAB_TO_TYPE[form.type],
+        priorite: "normale",
+        processus_id: Number(form.processus_id),
+        origine: "manuelle",
+      });
+      setActiveTab(form.type);
+      setShowForm(false);
+      setSaved(true);
+      setForm({ processus_id: "", type: "observations", titre: "", text: "" });
+      load();
+      setTimeout(() => setSaved(false), 3000);
+    } catch {
+      // swallow — error left to global handler
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const grouped = { observations: [], recommandations: [], corrections: [] };
+  actions.forEach((a) => {
+    const tab = TYPE_TO_TAB[a.type] || "observations";
+    grouped[tab].push(a);
+  });
+
+  const currentItems = grouped[activeTab] || [];
 
   return (
     <div style={S.page}>
-      <Topbar title="Demandes d'amélioration" userName="Meziani Karim" userRole="Auditeur Interne" userInitials="MK" />
+      <Topbar title="Demandes d'amélioration" userName={user?.nom_complet || "—"} userRole="Auditeur Interne" userInitials={initials} />
       <div style={S.inner}>
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
@@ -120,16 +148,15 @@ export default function ImprovementRequests() {
           </div>
         )}
 
-        {/* New request form */}
         {showForm && (
           <div style={{ ...S.card, padding: 24, marginBottom: 20, border: "1px solid #d4e9d7" }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: "#1a2e22", marginBottom: 16 }}>Créer une nouvelle demande</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 14 }}>
               <div>
                 <label style={{ fontSize: 12, fontWeight: 700, color: "#4b6358", display: "block", marginBottom: 5 }}>Processus concerné *</label>
-                <select value={form.process} onChange={(e) => setForm({ ...form, process: e.target.value })} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #e8f0eb", fontSize: 13, outline: "none", fontFamily: "inherit" }}>
+                <select value={form.processus_id} onChange={(e) => setForm({ ...form, processus_id: e.target.value })} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #e8f0eb", fontSize: 13, outline: "none", fontFamily: "inherit" }}>
                   <option value="">Sélectionner...</option>
-                  {PROCESSES.map((p) => <option key={p} value={p}>{p}</option>)}
+                  {processusList.map((p) => <option key={p.id} value={p.id}>{p.nom}</option>)}
                 </select>
               </div>
               <div>
@@ -141,11 +168,8 @@ export default function ImprovementRequests() {
                 </select>
               </div>
               <div>
-                <label style={{ fontSize: 12, fontWeight: 700, color: "#4b6358", display: "block", marginBottom: 5 }}>Clause ISO *</label>
-                <select value={form.clause} onChange={(e) => setForm({ ...form, clause: e.target.value })} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #e8f0eb", fontSize: 13, outline: "none", fontFamily: "inherit" }}>
-                  <option value="">Sélectionner...</option>
-                  {ISO_CLAUSES.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
+                <label style={{ fontSize: 12, fontWeight: 700, color: "#4b6358", display: "block", marginBottom: 5 }}>Titre *</label>
+                <input value={form.titre} onChange={(e) => setForm({ ...form, titre: e.target.value })} placeholder="Titre court..." style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #e8f0eb", fontSize: 13, outline: "none", fontFamily: "inherit", boxSizing: "border-box" }} />
               </div>
             </div>
             <div style={{ marginBottom: 16 }}>
@@ -153,26 +177,28 @@ export default function ImprovementRequests() {
               <textarea value={form.text} onChange={(e) => setForm({ ...form, text: e.target.value })} placeholder="Décrivez précisément votre observation, recommandation ou les corrections requises..." rows={4} style={{ width: "100%", padding: "10px 14px", borderRadius: 8, border: "1px solid #e8f0eb", fontSize: 13, fontFamily: "inherit", resize: "vertical", outline: "none", boxSizing: "border-box" }} />
             </div>
             <div style={{ display: "flex", gap: 10 }}>
-              <button onClick={handleSave} disabled={!form.process || !form.clause || !form.text.trim()} style={{ ...S.btn("#fff", "#2D604F", "#2D604F"), opacity: (!form.process || !form.clause || !form.text.trim()) ? 0.5 : 1 }}>Envoyer la demande</button>
+              <button onClick={handleSave} disabled={!form.processus_id || !form.titre.trim() || !form.text.trim() || saving} style={{ ...S.btn("#fff", "#2D604F", "#2D604F"), opacity: (!form.processus_id || !form.titre.trim() || !form.text.trim() || saving) ? 0.5 : 1 }}>Envoyer la demande</button>
               <button onClick={() => setShowForm(false)} style={S.btn("#6b7280", "#f3f4f6", "#e5e7eb")}>Annuler</button>
             </div>
           </div>
         )}
 
-        {/* Tabs */}
         <div style={{ display: "flex", gap: 4, marginBottom: 16, background: "#fff", borderRadius: 10, padding: 4, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", width: "fit-content" }}>
           {TAB_CONFIG.map((tab) => (
             <button key={tab.key} onClick={() => setActiveTab(tab.key)} style={{ padding: "8px 18px", borderRadius: 8, border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", background: activeTab === tab.key ? tab.bg : "transparent", color: activeTab === tab.key ? tab.color : "#9ca3af", transition: "all 0.15s" }}>
               {tab.label}
               <span style={{ marginLeft: 6, background: activeTab === tab.key ? tab.color + "22" : "#f3f4f6", color: activeTab === tab.key ? tab.color : "#9ca3af", borderRadius: 20, padding: "0px 7px", fontSize: 10, fontWeight: 800 }}>
-                {items[tab.key]?.length || 0}
+                {grouped[tab.key]?.length || 0}
               </span>
             </button>
           ))}
         </div>
 
-        {/* Items list */}
-        {currentItems.length === 0 ? (
+        {loading ? (
+          <div style={{ ...S.card, padding: "60px 20px", textAlign: "center" }}>
+            <div style={{ fontSize: 13, color: "#9ca3af" }}>Chargement...</div>
+          </div>
+        ) : currentItems.length === 0 ? (
           <div style={{ ...S.card, padding: "60px 20px", textAlign: "center" }}>
             <div style={{ fontSize: 36, marginBottom: 10 }}>📭</div>
             <div style={{ fontSize: 15, fontWeight: 700, color: "#1a2e22" }}>Aucun élément dans cet onglet</div>

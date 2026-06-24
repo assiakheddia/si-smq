@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getCurrentUser } from '../lib/api';
+import { getCurrentUser, clearTokens } from '../lib/api';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 /* â”€â”€ Navigation per role â”€â”€ */
@@ -440,13 +440,13 @@ const ROLE_CONFIG = {
     initials: 'PR',
     color: '#2D604F',
   },
-  'auditeur-interne': {
+  auditeur_interne: {
     nav: NAV_AUDITEUR_INTERNE,
     label: 'Auditeur Interne',
     initials: 'AI',
     color: '#1e40af',
   },
-  'auditeur-externe': {
+  auditeur_externe: {
     nav: NAV_AUDITEUR_EXTERNE,
     label: 'Auditeur Externe',
     initials: 'AE',
@@ -670,7 +670,7 @@ export default function Sidebar({
               borderRadius: 9,
               cursor: 'pointer',
             }}
-            onClick={() => navigate('/login')}
+            onClick={() => { clearTokens(); navigate('/login'); }}
           >
             <div
               style={{
