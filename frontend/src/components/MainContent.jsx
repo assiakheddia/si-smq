@@ -126,100 +126,6 @@ function Badge({ text, style }) {
   );
 }
 
-function KpiCard({ label, value, icon, color, sub, delay }) {
-  const [displayed, setDisplayed] = useState(0);
-  useEffect(() => {
-    let start = 0;
-    const end = parseInt(value);
-    if (isNaN(end)) return;
-    const step = Math.ceil(end / 18);
-    const timer = setTimeout(() => {
-      const id = setInterval(() => {
-        start += step;
-        if (start >= end) {
-          setDisplayed(end);
-          clearInterval(id);
-        } else setDisplayed(start);
-      }, 35);
-    }, delay);
-    return () => clearTimeout(timer);
-  }, [value, delay]);
-
-  return (
-    <div
-      style={{
-        background: "#ffffff",
-        borderRadius: "clamp(12px,1.3vw,16px)",
-        padding: "clamp(14px,1.5vw,18px) clamp(14px,1.5vw,20px)",
-        boxShadow: `0 1px 6px rgba(0,0,0,0.06)`,
-        display: "flex",
-        alignItems: "center",
-        gap: "clamp(10px,1.1vw,14px)",
-        transition: "transform 0.2s, box-shadow 0.2s",
-        cursor: "default",
-        animation: `fadeUp 0.4s ease ${delay}ms both`,
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.transform = "translateY(-3px)";
-        e.currentTarget.style.boxShadow = `0 8px 24px ${color}20`;
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.transform = "translateY(0)";
-        e.currentTarget.style.boxShadow = `0 1px 6px rgba(0,0,0,0.06)`;
-      }}
-    >
-      <div
-        style={{
-          width: "clamp(38px,3.5vw,46px)",
-          height: "clamp(38px,3.5vw,46px)",
-          borderRadius: "clamp(10px,1vw,13px)",
-          background: `${color}15`,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          flexShrink: 0,
-        }}
-      >
-        {icon}
-      </div>
-      <div>
-        <div
-          style={{
-            fontFamily: "'Outfit',sans-serif",
-            fontWeight: 900,
-            fontSize: "clamp(20px,2vw,26px)",
-            color: "#111",
-            lineHeight: 1,
-          }}
-        >
-          {displayed}
-        </div>
-        <div
-          style={{
-            fontSize: "clamp(10px,0.95vw,12px)",
-            fontWeight: 600,
-            color: "#6b7280",
-            marginTop: 3,
-          }}
-        >
-          {label}
-        </div>
-        {sub && (
-          <div
-            style={{
-              fontSize: "clamp(9.5px,0.85vw,10.5px)",
-              color,
-              marginTop: 2,
-            }}
-          >
-            {sub}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 function ConfirmModal({ nom, onConfirm, onCancel }) {
   return (
     <div
@@ -338,7 +244,7 @@ function ConfirmModal({ nom, onConfirm, onCancel }) {
   );
 }
 
-export default function MainContent({ collapsed }) {
+export default function ProcessusList() {
   const navigate = useNavigate();
   const [data, setData]           = useState([]);
   const [loading, setLoading]     = useState(true);
@@ -380,8 +286,8 @@ export default function MainContent({ collapsed }) {
       !sortField
         ? 0
         : sortAsc
-          ? a[sortField].localeCompare(b[sortField])
-          : b[sortField].localeCompare(a[sortField]),
+          ? String(a[sortField]).localeCompare(String(b[sortField]))
+          : String(b[sortField]).localeCompare(String(a[sortField]))
     );
 
   const toggleSort = (f) => {
@@ -391,13 +297,15 @@ export default function MainContent({ collapsed }) {
       setSortAsc(true);
     }
   };
+
   const toggleRow = (id) =>
     setSelectedRows((p) =>
-      p.includes(id) ? p.filter((x) => x !== id) : [...p, id],
+      p.includes(id) ? p.filter((x) => x !== id) : [...p, id]
     );
+
   const toggleAll = () =>
     setSelectedRows((p) =>
-      p.length === filtered.length ? [] : filtered.map((r) => r.id),
+      p.length === filtered.length ? [] : filtered.map((r) => r.id)
     );
   const confirmDelete = async () => {
     try {
@@ -437,18 +345,22 @@ export default function MainContent({ collapsed }) {
     </svg>
   );
 
+  // Get max value for bar chart
+  const maxDeptValue = Math.max(...Object.values(deptStats), 1);
+
   return (
     <>
-      {showNotifs && <NotificationsPanel onClose={() => setShowNotifs(false)} />}
       <style>{`
         @keyframes fadeUp {
           from { opacity: 0; transform: translateY(12px); }
           to   { opacity: 1; transform: translateY(0); }
         }
 
-        /* ══════════════════════════════════════════
-           WRAP — fond vert solide, couvre tout
-        ══════════════════════════════════════════ */
+        @keyframes growBar {
+          from { height: 0; }
+          to   { height: var(--bar-height); }
+        }
+
         .mc-wrap {
           padding: clamp(14px,2vw,20px) clamp(14px,2.5vw,26px) 48px;
           position: relative;
@@ -457,62 +369,147 @@ export default function MainContent({ collapsed }) {
           background: #eaf5eb;
         }
 
-        /* ══════════════════════════════════════════
-           TOPBAR — fond blanc opaque, pas de backdrop
-        ══════════════════════════════════════════ */
-        .topbar {
-          display: flex; align-items: center; justify-content: flex-end;
-          background: #ffffff;
-          border: 1px solid #e8ede9;
-          border-radius: clamp(12px,1.3vw,16px);
-          height: clamp(52px,6vw,62px);
-          padding: 0 clamp(12px,1.5vw,20px);
-          margin-bottom: clamp(16px,2vw,24px);
-          box-shadow: 0 1px 4px rgba(0,0,0,0.05);
-          animation: fadeUp 0.3s ease; gap: 10px;
+        .pg-header {
+          margin-bottom: clamp(16px,2vw,22px);
+          animation: fadeUp 0.3s ease 0.05s both;
         }
-        .t-right {
+        .pg-title {
+          font-family: 'Outfit',sans-serif;
+          font-weight: 900;
+          font-size: clamp(20px,2.5vw,28px);
+          color: #111;
+          line-height: 1.1;
+        }
+        .pg-sub {
+          font-size: clamp(11px,1.05vw,13px);
+          color: #9ca3af;
+          margin-top: 4px;
+        }
+
+        /* ── Charts Section ── */
+        .charts-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: clamp(14px,1.5vw,20px);
+          margin-bottom: clamp(16px,2vw,22px);
+        }
+
+        .chart-card {
+          background: #ffffff;
+          border-radius: clamp(12px,1.3vw,16px);
+          padding: clamp(16px,1.5vw,22px) clamp(18px,1.8vw,24px);
+          border: 1px solid #e8ede9;
+          animation: fadeUp 0.4s ease both;
+          transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .chart-card:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+        }
+        .chart-title {
+          font-family: 'Outfit',sans-serif;
+          font-weight: 700;
+          font-size: clamp(14px,1.2vw,16px);
+          color: #111;
+          margin-bottom: 4px;
+        }
+        .chart-sub {
+          font-size: clamp(11px,0.95vw,12px);
+          color: #9ca3af;
+          margin-bottom: clamp(14px,1.2vw,18px);
+        }
+
+        .status-donut {
           display: flex;
           align-items: center;
-          gap: clamp(6px,0.9vw,12px);
+          gap: clamp(20px,2vw,32px);
+          justify-content: center;
+          flex-wrap: wrap;
+        }
+        .donut-container {
+          position: relative;
+          width: clamp(120px,12vw,160px);
+          height: clamp(120px,12vw,160px);
+        }
+        .donut-center {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          text-align: center;
+        }
+        .donut-number {
+          font-family: 'Outfit',sans-serif;
+          font-weight: 900;
+          font-size: clamp(24px,2.5vw,32px);
+          color: #111;
+          line-height: 1;
+        }
+        .donut-label {
+          font-size: clamp(9px,0.8vw,11px);
+          color: #6b7280;
+        }
+
+        .status-legend {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+        .legend-item {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          font-size: clamp(12px,1vw,13px);
+          color: #374151;
+        }
+        .legend-dot {
+          width: 12px;
+          height: 12px;
+          border-radius: 50%;
           flex-shrink: 0;
+        }
+        .legend-value {
           margin-left: auto;
-        }
-        .icon-btn {
-          height: clamp(30px,3vw,36px); min-width: clamp(30px,3vw,36px);
-          border-radius: 10px; border: 1px solid #e8eaed; background: white;
-          cursor: pointer; display: flex; align-items: center; justify-content: center;
-          gap: 5px; padding: 0 10px; position: relative; transition: all 0.15s;
-        }
-        .icon-btn:hover { background: #f3f5f7; transform: translateY(-1px); }
-        .n-dot { position:absolute; top:7px; right:7px; width:7px; height:7px; background:#ef4444; border-radius:50%; border:2px solid white; }
-        .u-chip {
-          display: flex; align-items: center; gap: 8px;
-          background: #f3f5f7; border: 1px solid #e8eaed;
-          border-radius: 11px; padding: 4px 10px 4px 5px;
-          cursor: pointer; transition: all 0.15s;
-        }
-        .u-chip:hover { background: #ebeef1; transform: translateY(-1px); }
-        .u-av {
-          width: clamp(26px,2.5vw,30px); height: clamp(26px,2.5vw,30px);
-          border-radius: 8px;
-          background: linear-gradient(135deg, #5ecf7a, #2d9e5f);
-          display: flex; align-items: center; justify-content: center;
-          font-family: 'Outfit',sans-serif; font-weight: 900;
-          font-size: clamp(9px,0.85vw,10px); color: #152b21;
-        }
-        .pg-header { margin-bottom: clamp(16px,2vw,22px); animation: fadeUp 0.3s ease 0.05s both; }
-        .pg-title { font-family: 'Outfit',sans-serif; font-weight: 900; font-size: clamp(20px,2.5vw,28px); color: #111; line-height: 1.1; }
-        .pg-sub { font-size: clamp(11px,1.05vw,13px); color: #9ca3af; margin-top: 4px; }
-
-        .kpi-grid {
-          display: grid; grid-template-columns: repeat(4, 1fr);
-          gap: clamp(10px,1.2vw,14px); margin-bottom: clamp(16px,2vw,22px);
+          font-weight: 700;
+          color: #111;
         }
 
-        /* ══════════════════════════════════════════
-           MAIN CARD — blanc opaque, ZERO shadow/border
-        ══════════════════════════════════════════ */
+        .bar-chart {
+          display: flex;
+          align-items: flex-end;
+          gap: clamp(12px,1.2vw,20px);
+          height: clamp(100px,10vw,140px);
+          padding-top: 8px;
+        }
+        .bar-item {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 6px;
+        }
+        .bar {
+          width: 100%;
+          max-width: 50px;
+          border-radius: 6px 6px 0 0;
+          transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+          min-height: 4px;
+          --bar-height: 0px;
+          animation: growBar 0.8s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
+        .bar-value {
+          font-family: 'Outfit',sans-serif;
+          font-weight: 700;
+          font-size: clamp(12px,1vw,14px);
+          color: #111;
+        }
+        .bar-label {
+          font-size: clamp(10px,0.8vw,11px);
+          color: #6b7280;
+          text-align: center;
+        }
+
+        /* ── Main Card ── */
         .main-card {
           background: #ffffff;
           border: none;
@@ -525,91 +522,180 @@ export default function MainContent({ collapsed }) {
         .card-top {
           padding: clamp(14px,1.5vw,20px) clamp(14px,1.5vw,22px) clamp(12px,1.2vw,16px);
           border-bottom: 1px solid #f0f2f4;
-          display: flex; align-items: flex-start; justify-content: space-between;
-          flex-wrap: wrap; gap: 12px;
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          flex-wrap: wrap;
+          gap: 12px;
         }
-        .filter-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex: 1; }
+
+        .filter-bar {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex-wrap: wrap;
+          flex: 1;
+        }
+
         .f-search {
-          display: flex; align-items: center; gap: 8px;
-          background: #f3f5f7; border: 1px solid #e8eaed;
-          border-radius: 10px; padding: clamp(6px,0.8vw,8px) clamp(10px,1.1vw,13px);
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          background: #f3f5f7;
+          border: 1px solid #e8eaed;
+          border-radius: 10px;
+          padding: clamp(6px,0.8vw,8px) clamp(10px,1.1vw,13px);
           transition: border-color 0.18s, box-shadow 0.18s;
-          flex: 1; min-width: 140px;
+          flex: 1;
+          min-width: 140px;
         }
-        .f-search:focus-within { border-color: #5ecf7a; box-shadow: 0 0 0 3px rgba(94,207,122,0.12); background: white; }
-        .f-search input { border:none; background:transparent; outline:none; font-size:clamp(11px,1vw,12.5px); color:#333; width:100%; font-family:'Plus Jakarta Sans',sans-serif; }
-        .f-search input::placeholder { color: #c4c8d1; }
+        .f-search:focus-within {
+          border-color: #5ecf7a;
+          box-shadow: 0 0 0 3px rgba(94,207,122,0.12);
+          background: white;
+        }
+        .f-search input {
+          border: none;
+          background: transparent;
+          outline: none;
+          font-size: clamp(11px,1vw,12.5px);
+          color: #333;
+          width: 100%;
+          font-family: 'Plus Jakarta Sans',sans-serif;
+        }
+        .f-search input::placeholder {
+          color: #c4c8d1;
+        }
+
         .dtab {
           padding: clamp(5px,0.7vw,7px) clamp(10px,1.1vw,14px);
-          border-radius: 9px; border: 1.5px solid #e8eaed; background: white;
-          cursor: pointer; font-size: clamp(11px,1vw,12px); font-weight: 600; color: #6b7280;
-          transition: all 0.15s; white-space: nowrap;
+          border-radius: 9px;
+          border: 1.5px solid #e8eaed;
+          background: white;
+          cursor: pointer;
+          font-size: clamp(11px,1vw,12px);
+          font-weight: 600;
+          color: #6b7280;
+          transition: all 0.15s;
+          white-space: nowrap;
           font-family: 'Plus Jakarta Sans',sans-serif;
         }
         .dtab:hover { background: #f3f5f7; }
-        .dtab.active { background: #1e3d2f; border-color: #1e3d2f; color: white; }
-        .view-toggle { display: flex; background: #f3f5f7; border-radius: 9px; padding: 3px; gap: 2px; }
-        .vt-btn {
-          padding: 5px 7px; border-radius: 7px; border: none;
-          cursor: pointer; background: transparent;
-          display: flex; align-items: center; justify-content: center;
-          transition: background 0.15s;
+        .dtab.active {
+          background: #1e3d2f;
+          border-color: #1e3d2f;
+          color: white;
         }
-        .vt-btn.on { background: white; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+
         .bulk-bar {
-          display: flex; align-items: center; gap: 10px;
-          background: #1e3d2f; border-radius: 10px;
-          padding: 10px 16px; margin: 0 clamp(14px,1.5vw,22px) 14px;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          background: #1e3d2f;
+          border-radius: 10px;
+          padding: 10px 16px;
+          margin: 0 clamp(14px,1.5vw,22px) 14px;
           animation: fadeUp 0.2s ease;
         }
-        .tbl-scroll { overflow-x: auto; }
-        table { width: 100%; border-collapse: collapse; min-width: 520px; }
+
+        .tbl-scroll {
+          overflow-x: auto;
+        }
+
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          min-width: 520px;
+        }
+
         thead th {
           padding: clamp(9px,1vw,11px) clamp(12px,1.2vw,16px);
-          text-align: left; font-size: clamp(9.5px,0.9vw,10.5px);
-          font-weight: 700; color: #9ca3af;
-          letter-spacing: 0.9px; text-transform: uppercase;
-          cursor: pointer; user-select: none; white-space: nowrap;
-          transition: color 0.14s; font-family: 'Plus Jakarta Sans',sans-serif;
+          text-align: left;
+          font-size: clamp(9.5px,0.9vw,10.5px);
+          font-weight: 700;
+          color: #9ca3af;
+          letter-spacing: 0.9px;
+          text-transform: uppercase;
+          cursor: pointer;
+          user-select: none;
+          white-space: nowrap;
+          transition: color 0.14s;
+          font-family: 'Plus Jakarta Sans',sans-serif;
           background: #ffffff;
         }
         thead th:hover { color: #1e3d2f; }
-        thead th:first-child, tbody td:first-child { padding-left: clamp(14px,1.5vw,22px); width: 40px; }
-        tbody tr { border-top: 1px solid #f0f2f4; transition: background 0.12s; animation: fadeUp 0.25s ease both; }
+        thead th:first-child,
+        tbody td:first-child {
+          padding-left: clamp(14px,1.5vw,22px);
+          width: 40px;
+        }
+
+        tbody tr {
+          border-top: 1px solid #f0f2f4;
+          transition: background 0.12s;
+          animation: fadeUp 0.25s ease both;
+        }
         tbody tr:hover { background: #f8fcf9; }
         tbody tr.selected { background: #f0fdf4 !important; }
-        tbody td { padding: clamp(10px,1.1vw,13px) clamp(12px,1.2vw,16px); font-size: clamp(11.5px,1.05vw,13px); color: #374151; font-family: 'Plus Jakarta Sans',sans-serif; white-space: nowrap; }
-        td.nom-cell { font-weight: 600; color: #111; }
+
+        tbody td {
+          padding: clamp(10px,1.1vw,13px) clamp(12px,1.2vw,16px);
+          font-size: clamp(11.5px,1.05vw,13px);
+          color: #374151;
+          font-family: 'Plus Jakarta Sans',sans-serif;
+          white-space: nowrap;
+        }
+
+        td.nom-cell {
+          font-weight: 600;
+          color: #111;
+        }
+
         .del-btn {
-          width: clamp(26px,2.5vw,30px); height: clamp(26px,2.5vw,30px);
-          border-radius: 8px; border: 1.5px solid #fee2e2; background: #fef2f2;
-          cursor: pointer; display: flex; align-items: center; justify-content: center;
+          width: clamp(26px,2.5vw,30px);
+          height: clamp(26px,2.5vw,30px);
+          border-radius: 8px;
+          border: 1.5px solid #fee2e2;
+          background: #fef2f2;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
           transition: all 0.14s;
         }
-        .del-btn:hover { background: #fecaca; border-color: #fca5a5; transform: scale(1.08); }
-        .empty-state { padding: 52px 20px; text-align: center; color: #d1d5db; font-size: clamp(12px,1.1vw,14px); }
-        .cards-grid {
-          display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-          gap: clamp(10px,1.2vw,14px);
-          padding: clamp(14px,1.5vw,18px) clamp(14px,1.5vw,22px);
+        .del-btn:hover {
+          background: #fecaca;
+          border-color: #fca5a5;
+          transform: scale(1.08);
         }
-        .proc-card {
-          border: 1.5px solid #f0f2f4; border-radius: clamp(11px,1.2vw,14px);
-          padding: clamp(12px,1.3vw,16px) clamp(13px,1.4vw,18px);
-          background: white; transition: all 0.18s; cursor: default;
-          animation: fadeUp 0.3s ease both;
-        }
-        .proc-card:hover { border-color: #a8e6b8; box-shadow: 0 6px 20px rgba(94,207,122,0.12); transform: translateY(-2px); }
-        input[type=checkbox] { width: 14px; height: 14px; cursor: pointer; accent-color: #1e3d2f; }
 
-        @media (max-width: 1100px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }
+        .empty-state {
+          padding: 52px 20px;
+          text-align: center;
+          color: #d1d5db;
+          font-size: clamp(12px,1.1vw,14px);
+        }
+
+        input[type=checkbox] {
+          width: 14px;
+          height: 14px;
+          cursor: pointer;
+          accent-color: #1e3d2f;
+        }
+
+        .footer {
+          padding: clamp(11px,1.2vw,14px) clamp(14px,1.5vw,22px);
+          border-top: 1px solid #f0f2f4;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+
         @media (max-width: 768px) {
           .mc-wrap { padding: 70px 14px 48px; }
-          .kpi-grid { grid-template-columns: repeat(2, 1fr); }
-        }
-        @media (max-width: 480px) {
-          .kpi-grid { grid-template-columns: 1fr; }
-          .cards-grid { grid-template-columns: 1fr; }
+          .charts-grid { grid-template-columns: 1fr; }
         }
       `}</style>
 
@@ -726,7 +812,7 @@ export default function MainContent({ collapsed }) {
               </div>
             </div>
             <button
-            onClick={() => navigate("/processus/new")}
+              onClick={() => navigate("/processus/new")}
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -852,43 +938,6 @@ export default function MainContent({ collapsed }) {
                   {t === "Tous" ? "Tous" : TYPE_LABEL[t]}
                 </button>
               ))}
-            </div>
-            <div className="view-toggle">
-              <button
-                className={`vt-btn ${viewMode === "table" ? "on" : ""}`}
-                onClick={() => setViewMode("table")}
-              >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke={viewMode === "table" ? "#1e3d2f" : "#9ca3af"}
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                >
-                  <path d="M3 10h18M3 6h18M3 14h18M3 18h18" />
-                </svg>
-              </button>
-              <button
-                className={`vt-btn ${viewMode === "cards" ? "on" : ""}`}
-                onClick={() => setViewMode("cards")}
-              >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke={viewMode === "cards" ? "#1e3d2f" : "#9ca3af"}
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                >
-                  <rect x="3" y="3" width="7" height="7" rx="1" />
-                  <rect x="14" y="3" width="7" height="7" rx="1" />
-                  <rect x="3" y="14" width="7" height="7" rx="1" />
-                  <rect x="14" y="14" width="7" height="7" rx="1" />
-                </svg>
-              </button>
             </div>
           </div>
 
@@ -1300,17 +1349,7 @@ export default function MainContent({ collapsed }) {
           )}
 
           {/* Footer */}
-          <div
-            style={{
-              padding: "clamp(11px,1.2vw,14px) clamp(14px,1.5vw,22px)",
-              borderTop: "1px solid #f0f2f4",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              flexWrap: "wrap",
-              gap: 8,
-            }}
-          >
+          <div className="footer">
             <span
               style={{
                 fontSize: "clamp(10.5px,1vw,12px)",

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { api, getCurrentUser } from "../lib/api.js";
+import { api, getCurrentUser } from "../../lib/api.js";
 
 const MONTHS   = ["Jan", "Fév", "Mar", "Avr", "Mai", "Juin"];
 const OBJECTIF = [85, 85, 85, 85, 85, 85];

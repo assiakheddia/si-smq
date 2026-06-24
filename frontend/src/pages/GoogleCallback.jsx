@@ -30,7 +30,13 @@ export default function GoogleCallback() {
     }
 
     setTokens(accessToken, refreshToken, user);
-    navigate("/dashboard", { replace: true });
+    const roleDest = {
+      preparateur: "/dashboard",
+      "auditeur-interne": "/ai/dashboard",
+      "auditeur-externe": "/ae/dashboard",
+      direction: "/dir/dashboard",
+    };
+    navigate(roleDest[user?.role] || "/dashboard", { replace: true });
   }, [navigate]);
 
   return (
