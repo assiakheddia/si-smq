@@ -5,7 +5,9 @@ Contient uniquement les données structurelles stables :
   - Référentiel normatif ISO 9001:2015 (clauses)
   - Parties intéressées de base
   - Compte administrateur par défaut
-  - Données de démonstration (processus, diagnostics, risques, actions)
+  - Données de démonstration alignées sur les deux BPMN :
+      PROC-LABO  : Gestion du Laboratoire (budget, intégration, achats, KPI)
+      PROC-DOC   : Encadrement Doctoral (inscription, avancement, soutenance)
 """
 
 import logging
@@ -18,6 +20,10 @@ from app.models.utilisateur import Utilisateur, RoleEnum
 from app.models.diagnostic import DiagnosticISO, StatutDiagnostic, NiveauMaturite
 from app.models.risque import Risque, NiveauCriticite, StatutRisque, TypeRisque, StrategieTraitement
 from app.models.action import Action, StatutAction, PrioriteAction, TypeAction, OrigineAction
+from app.models.indicateur import (
+    Indicateur, MesureKPI,
+    UniteKPI, FrequenceMesure, SourceKPI, SensKPI, StatutAlerte, FormulaKPI,
+)
 from app.data.clauses_iso_seed import CLAUSES_ISO_SEED
 from app.data.parties_interessees_seed import PARTIES_INTERESSEES_SEED
 from app.core.security import hash_password
@@ -40,7 +46,6 @@ def seed_clauses_iso(db: Session) -> None:
         logger.info("seed_clauses_iso : %d clauses déjà présentes — ignoré.", existing)
         return
 
-    # Passe 1 : insérer sans parent_id pour avoir les IDs
     code_to_obj: dict[str, ClauseISO] = {}
     for item in CLAUSES_ISO_SEED:
         clause = ClauseISO(
@@ -54,9 +59,8 @@ def seed_clauses_iso(db: Session) -> None:
         db.add(clause)
         code_to_obj[item["code"]] = clause
 
-    db.flush()  # génère les IDs sans commit
+    db.flush()
 
-    # Passe 2 : résoudre parent_id
     for item in CLAUSES_ISO_SEED:
         parent_code = item.get("parent_code")
         if parent_code and parent_code in code_to_obj:
@@ -75,9 +79,6 @@ def seed_parties_interessees(db: Session) -> None:
     """
     Insère les parties intéressées de base (Ministère, ATRST, Direction...).
     Idempotent : ignoré si au moins une partie existe déjà.
-
-    Note : des parties intéressées supplémentaires peuvent être ajoutées
-    dynamiquement via l'API (POST /parties-interessees).
     """
     existing = db.query(PartieInteressee).count()
     if existing > 0:
@@ -109,17 +110,11 @@ def seed_parties_interessees(db: Session) -> None:
 def seed_admin_user(db: Session) -> None:
     """
     Crée le compte admin initial si aucun utilisateur n'existe.
-    Mot de passe : défini via la variable d'environnement ADMIN_DEFAULT_PASSWORD
-    (fallback : 'changeme' en développement uniquement).
     """
     existing = db.query(Utilisateur).count()
     if existing > 0:
         logger.info("seed_admin_user : utilisateurs déjà présents — ignoré.")
         return
-
-    import os
-
-    password_plain = "my_password"  # Valeur par défaut pour le développement
 
     admin = Utilisateur(
         email="admin@si-smq.local",
@@ -127,7 +122,7 @@ def seed_admin_user(db: Session) -> None:
         prenom="SI-SMQ",
         role=RoleEnum.admin,
         est_actif=True,
-        hashed_password=hash_password(str(password_plain)[:72]),
+        hashed_password=hash_password("my_password"),
     )
     db.add(admin)
     db.commit()
@@ -135,24 +130,63 @@ def seed_admin_user(db: Session) -> None:
 
 
 # ---------------------------------------------------------------------------
-# §4 — Données de démonstration
+# §4 — Données de démonstration alignées sur les BPMN
 # ---------------------------------------------------------------------------
+
+
+def _niveau_maturite(score: float) -> NiveauMaturite:
+    if score >= 75:
+        return NiveauMaturite.conforme
+    if score >= 50:
+        return NiveauMaturite.avance
+    if score >= 25:
+        return NiveauMaturite.partiel
+    return NiveauMaturite.non_conforme
+
+
+def _statut_alerte(valeur: float, seuil_attention: float, seuil_alerte: float, sens: str) -> StatutAlerte:
+    if sens == "hausse":
+        if valeur < seuil_alerte:
+            return StatutAlerte.alerte
+        if valeur < seuil_attention:
+            return StatutAlerte.attention
+    else:  # baisse ou cible interprété comme baisse
+        if valeur > seuil_alerte:
+            return StatutAlerte.alerte
+        if valeur > seuil_attention:
+            return StatutAlerte.attention
+    return StatutAlerte.normal
+
 
 def seed_demo_data(db: Session) -> None:
     """
-    Insère des données réalistes pour la démonstration.
-    Idempotent : ignoré si PROC-001 existe déjà.
+    Insère des données réalistes alignées sur les deux diagrammes BPMN :
+      PROC-LABO — Gestion du Laboratoire (budget, intégration, achats, KPI annuel)
+      PROC-DOC  — Encadrement Doctoral (inscription, avancement, soutenance)
+
+    Idempotent : ignoré si PROC-LABO existe déjà.
     """
-    if db.query(Processus).filter(Processus.code == "PROC-001").first():
+    if db.query(Processus).filter(Processus.code == "PROC-LABO").first():
         logger.info("seed_demo_data : données démo déjà présentes — ignoré.")
         return
 
-    # --- Utilisateurs supplémentaires ---
-    pilote = Utilisateur(
+    now = datetime.utcnow()
+
+    # -------------------------------------------------------------------------
+    # Utilisateurs
+    # -------------------------------------------------------------------------
+    directeur = Utilisateur(
+        email="directeur@si-smq.local",
+        nom="Boumediene", prenom="Mourad",
+        role=RoleEnum.admin, est_actif=True,
+        departement="Direction", poste="Directeur du Laboratoire",
+        hashed_password=hash_password("demo1234"),
+    )
+    resp_qualite = Utilisateur(
         email="leila.bensalem@si-smq.local",
         nom="Bensalem", prenom="Leila",
         role=RoleEnum.pilote, est_actif=True,
-        departement="Qualité", poste="Directrice Qualité",
+        departement="Qualité", poste="Responsable Qualité & SMQ",
         hashed_password=hash_password("demo1234"),
     )
     auditeur = Utilisateur(
@@ -162,267 +196,791 @@ def seed_demo_data(db: Session) -> None:
         departement="Audit", poste="Auditeur Interne",
         hashed_password=hash_password("demo1234"),
     )
-    contributeur = Utilisateur(
-        email="sara.meziane@si-smq.local",
-        nom="Meziane", prenom="Sara",
+    chef_equipe = Utilisateur(
+        email="ahmed.benali@si-smq.local",
+        nom="Benali", prenom="Ahmed",
         role=RoleEnum.contributeur, est_actif=True,
-        departement="Processus", poste="Chargée de Processus",
+        departement="Équipe Génie Logiciel", poste="Chef d'Équipe de Recherche",
         hashed_password=hash_password("demo1234"),
     )
-    db.add_all([pilote, auditeur, contributeur])
+    dir_these = Utilisateur(
+        email="nadia.ferhat@si-smq.local",
+        nom="Ferhat", prenom="Nadia",
+        role=RoleEnum.contributeur, est_actif=True,
+        departement="Équipe Systèmes Distribués", poste="Directrice de Thèse",
+        hashed_password=hash_password("demo1234"),
+    )
+    comptable = Utilisateur(
+        email="fatima.kaci@si-smq.local",
+        nom="Kaci", prenom="Fatima",
+        role=RoleEnum.contributeur, est_actif=True,
+        departement="Administration", poste="Responsable Financière",
+        hashed_password=hash_password("demo1234"),
+    )
+    doctorant1 = Utilisateur(
+        email="yacine.tlemcani@si-smq.local",
+        nom="Tlemcani", prenom="Yacine",
+        role=RoleEnum.contributeur, est_actif=True,
+        departement="Équipe Systèmes Distribués", poste="Doctorant — 3e année",
+        hashed_password=hash_password("demo1234"),
+    )
+    doctorant2 = Utilisateur(
+        email="amira.saadi@si-smq.local",
+        nom="Saadi", prenom="Amira",
+        role=RoleEnum.contributeur, est_actif=True,
+        departement="Équipe Génie Logiciel", poste="Doctorante — 1re année",
+        hashed_password=hash_password("demo1234"),
+    )
+    db.add_all([directeur, resp_qualite, auditeur, chef_equipe, dir_these, comptable, doctorant1, doctorant2])
     db.flush()
 
-    # --- Processus ---
-    now = datetime.utcnow()
-    proc_data = [
-        dict(code="PROC-001", nom="Pilotage Stratégique",
-             type=TypeProcessus.strategique, statut=StatutProcessus.conforme,
-             objectif="Définir et déployer la politique qualité ISO 9001",
-             frequence_cycle=FrequenceCycle.annuel, score_maturite=88.0,
-             pilote_id=pilote.id,
-             declencheur="Revue de direction annuelle",
-             entrees="Politique qualité, objectifs stratégiques",
-             sorties="Plan d'amélioration, indicateurs validés"),
-        dict(code="PROC-002", nom="Gestion des Achats",
-             type=TypeProcessus.operationnel, statut=StatutProcessus.en_cours,
-             objectif="Maîtriser les achats conformément aux exigences ISO §8.4",
-             frequence_cycle=FrequenceCycle.trimestriel, score_maturite=72.0,
-             pilote_id=pilote.id,
-             declencheur="Besoin d'approvisionnement validé",
-             entrees="Bon de commande, cahier des charges fournisseur",
-             sorties="Marchandises réceptionnées, fournisseurs évalués"),
-        dict(code="PROC-003", nom="Encadrement Doctoral",
-             type=TypeProcessus.operationnel, statut=StatutProcessus.en_cours,
-             objectif="Assurer le suivi et la soutenance des doctorants",
-             frequence_cycle=FrequenceCycle.semestriel, score_maturite=65.0,
-             pilote_id=pilote.id,
-             declencheur="Inscription d'un doctorant validée",
-             entrees="Dossier inscription, PV commission doctorale",
-             sorties="Rapport d'avancement, PV soutenance, attestation"),
-        dict(code="PROC-004", nom="Gestion des Ressources Humaines",
-             type=TypeProcessus.support, statut=StatutProcessus.conforme,
-             objectif="Garantir les compétences et la disponibilité du personnel",
-             frequence_cycle=FrequenceCycle.annuel, score_maturite=78.0,
-             pilote_id=pilote.id,
-             declencheur="Évaluation annuelle ou recrutement",
-             entrees="Fiches de poste, plan de formation",
-             sorties="Compétences certifiées, personnel formé"),
-        dict(code="PROC-005", nom="Maîtrise des Documents",
-             type=TypeProcessus.support, statut=StatutProcessus.non_conforme,
-             objectif="Contrôler la création, révision et diffusion des documents ISO",
-             frequence_cycle=FrequenceCycle.continu, score_maturite=45.0,
-             pilote_id=pilote.id,
-             declencheur="Création ou révision d'un document qualité",
-             entrees="Projet de document, demande de révision",
-             sorties="Document approuvé, liste maîtrisée à jour"),
-        dict(code="PROC-006", nom="Gestion Financière",
-             type=TypeProcessus.support, statut=StatutProcessus.conforme,
-             objectif="Suivre et contrôler le budget annuel du laboratoire",
-             frequence_cycle=FrequenceCycle.annuel, score_maturite=82.0,
-             pilote_id=pilote.id,
-             declencheur="Notification budgétaire annuelle du Ministère",
-             entrees="Budget alloué, notifications Ministère",
-             sorties="Bilan financier, situation dépenses"),
-    ]
-    processus_objs = []
-    for d in proc_data:
-        p = Processus(**d)
-        db.add(p)
-        processus_objs.append(p)
+    # =========================================================================
+    # BPMN 1 — PROC-LABO : Gestion du Laboratoire
+    # Sous-processus : Budget · Intégration Membres · Achats · Bilan KPI
+    # =========================================================================
+    proc_labo = Processus(
+        code="PROC-LABO",
+        nom="Gestion du Laboratoire",
+        type=TypeProcessus.support,
+        statut=StatutProcessus.en_cours,
+        objectif=(
+            "Assurer la gestion administrative, financière et humaine du laboratoire "
+            "en conformité avec les exigences du Ministère et de l'ATRST."
+        ),
+        frequence_cycle=FrequenceCycle.annuel,
+        score_maturite=74.0,
+        pilote_id=directeur.id,
+        declencheur="Notification du budget annuel par le Ministère",
+        entrees=(
+            "Notification budgétaire annuelle du Ministère, "
+            "dossiers d'intégration des membres, carnets de recherche, demandes d'achat"
+        ),
+        sorties=(
+            "Liste officielle des membres, bilan KPI annuel, "
+            "situation financière transmise au Directeur, rapport bilan soumis à l'ATRST"
+        ),
+        ressources_cles="Budget alloué, Service des Marchés, Directeur, Comptable, ATRST",
+    )
+    db.add(proc_labo)
     db.flush()
 
-    p1, p2, p3, p4, p5, p6 = processus_objs
-
-    # --- Diagnostics ---
-    def _niveau(score):
-        if score >= 75: return NiveauMaturite.conforme
-        if score >= 50: return NiveauMaturite.avance
-        if score >= 25: return NiveauMaturite.partiel
-        return NiveauMaturite.non_conforme
-
-    diag_data = [
-        dict(processus_id=p1.id, auditeur_id=auditeur.id,
-             reference="DIAG-2025-001", score_global=88.0,
-             statut=StatutDiagnostic.valide, periode_couverte="2025-ANNUEL",
-             date_diagnostic=now - timedelta(days=30),
-             date_validation=now - timedelta(days=25),
-             commentaire_global="Pilotage conforme. Axes d'amélioration sur la communication interne."),
-        dict(processus_id=p2.id, auditeur_id=auditeur.id,
-             reference="DIAG-2025-002", score_global=72.0,
-             statut=StatutDiagnostic.valide, periode_couverte="2025-T1",
-             date_diagnostic=now - timedelta(days=45),
-             date_validation=now - timedelta(days=40),
-             commentaire_global="Processus achats avancé. Traçabilité fournisseurs à renforcer."),
-        dict(processus_id=p3.id, auditeur_id=auditeur.id,
-             reference="DIAG-2025-003", score_global=65.0,
-             statut=StatutDiagnostic.soumis, periode_couverte="2025-S1",
-             date_diagnostic=now - timedelta(days=10),
-             date_validation=None,
-             commentaire_global="Suivi doctoral partiel. Rapports semestriels non systématiques."),
-        dict(processus_id=p4.id, auditeur_id=auditeur.id,
-             reference="DIAG-2025-004", score_global=78.0,
-             statut=StatutDiagnostic.valide, periode_couverte="2025-ANNUEL",
-             date_diagnostic=now - timedelta(days=60),
-             date_validation=now - timedelta(days=55),
-             commentaire_global="RH conforme. Plan de formation déployé à 90%."),
-        dict(processus_id=p5.id, auditeur_id=auditeur.id,
-             reference="DIAG-2025-005", score_global=45.0,
-             statut=StatutDiagnostic.soumis, periode_couverte="2025-T1",
-             date_diagnostic=now - timedelta(days=5),
-             date_validation=None,
-             commentaire_global="Maîtrise documentaire insuffisante. GED non déployée."),
-        dict(processus_id=p6.id, auditeur_id=auditeur.id,
-             reference="DIAG-2025-006", score_global=82.0,
-             statut=StatutDiagnostic.valide, periode_couverte="2025-ANNUEL",
-             date_diagnostic=now - timedelta(days=20),
-             date_validation=now - timedelta(days=15),
-             commentaire_global="Gestion financière conforme. Tableau de bord budgétaire opérationnel."),
-    ]
-    for d in diag_data:
-        diag = DiagnosticISO(niveau_global=_niveau(d["score_global"]), **d)
-        db.add(diag)
-
-    # --- Risques ---
-    risque_data = [
-        dict(processus_id=p2.id, responsable_id=pilote.id,
-             reference="RSQ-2025-001",
-             titre="Dépassement budgétaire sans appel d'offres",
-             type=TypeRisque.financier,
-             probabilite=4, gravite=5, detectabilite=3, rpn=60.0,
-             criticite=NiveauCriticite.eleve, statut=StatutRisque.traitement,
-             strategie=StrategieTraitement.reduction,
-             plan_attenuation="Mise en place d'alertes à 80% du seuil budgétaire",
-             date_identification=now - timedelta(days=40)),
-        dict(processus_id=p5.id, responsable_id=pilote.id,
-             reference="RSQ-2025-002",
-             titre="Documents qualité non maîtrisés — versions obsolètes en circulation",
-             type=TypeRisque.documentaire,
-             probabilite=5, gravite=5, detectabilite=4, rpn=100.0,
-             criticite=NiveauCriticite.critique, statut=StatutRisque.identifie,
-             strategie=StrategieTraitement.reduction,
-             plan_attenuation="Déploiement GED avec contrôle de version automatique",
-             date_identification=now - timedelta(days=5)),
-        dict(processus_id=p3.id, responsable_id=pilote.id,
-             reference="RSQ-2025-003",
-             titre="Retard dans les rapports d'avancement doctoral",
-             type=TypeRisque.operationnel,
-             probabilite=4, gravite=3, detectabilite=2, rpn=24.0,
-             criticite=NiveauCriticite.modere, statut=StatutRisque.surveillance,
-             strategie=StrategieTraitement.reduction,
-             plan_attenuation="Rappels automatiques semestriels aux encadrants",
-             date_identification=now - timedelta(days=60)),
-        dict(processus_id=p1.id, responsable_id=pilote.id,
-             reference="RSQ-2025-004",
-             titre="Non-conformité lors de l'audit de certification externe",
-             type=TypeRisque.reglementaire,
-             probabilite=2, gravite=5, detectabilite=2, rpn=20.0,
-             criticite=NiveauCriticite.faible, statut=StatutRisque.surveillance,
-             strategie=StrategieTraitement.reduction,
-             plan_attenuation="Programme d'audits internes trimestriels",
-             date_identification=now - timedelta(days=90)),
-        dict(processus_id=p4.id, responsable_id=pilote.id,
-             reference="RSQ-2025-005",
-             titre="Compétences clés non documentées — risque départ personnel",
-             type=TypeRisque.humain,
-             probabilite=3, gravite=4, detectabilite=3, rpn=36.0,
-             criticite=NiveauCriticite.modere, statut=StatutRisque.traitement,
-             strategie=StrategieTraitement.reduction,
-             plan_attenuation="Cartographie des compétences et plan de succession",
-             date_identification=now - timedelta(days=30)),
-        dict(processus_id=p5.id, responsable_id=pilote.id,
-             reference="RSQ-2025-006",
-             titre="Perte de traçabilité des enregistrements qualité",
-             type=TypeRisque.qualite,
-             probabilite=5, gravite=4, detectabilite=4, rpn=80.0,
-             criticite=NiveauCriticite.critique, statut=StatutRisque.identifie,
-             strategie=StrategieTraitement.reduction,
-             plan_attenuation="Archivage électronique sécurisé avec sauvegarde",
-             date_identification=now - timedelta(days=3)),
-        dict(processus_id=p2.id, responsable_id=pilote.id,
-             reference="RSQ-2025-007",
-             titre="Fournisseur stratégique unique sans alternative",
-             type=TypeRisque.operationnel,
-             probabilite=3, gravite=4, detectabilite=2, rpn=24.0,
-             criticite=NiveauCriticite.modere, statut=StatutRisque.analyse,
-             strategie=StrategieTraitement.transfert,
-             plan_attenuation="Identification et qualification de 2 fournisseurs alternatifs",
-             date_identification=now - timedelta(days=20)),
-        dict(processus_id=p6.id, responsable_id=pilote.id,
-             reference="RSQ-2025-008",
-             titre="Délai de remboursement Ministère > 90 jours",
-             type=TypeRisque.financier,
-             probabilite=4, gravite=3, detectabilite=2, rpn=24.0,
-             criticite=NiveauCriticite.modere, statut=StatutRisque.surveillance,
-             strategie=StrategieTraitement.acceptation,
-             plan_attenuation="Suivi mensuel des remboursements avec relance formelle",
-             date_identification=now - timedelta(days=50)),
-    ]
-    for d in risque_data:
-        db.add(Risque(**d))
+    proc_budget = Processus(
+        code="PROC-LABO-BUDGET",
+        nom="Gestion Budgétaire Annuelle",
+        type=TypeProcessus.support,
+        statut=StatutProcessus.conforme,
+        objectif="Réceptionner, analyser et consolider la notification budgétaire du Ministère.",
+        frequence_cycle=FrequenceCycle.annuel,
+        score_maturite=82.0,
+        pilote_id=comptable.id,
+        parent_id=proc_labo.id,
+        declencheur="Réception de la notification budgétaire du Ministère",
+        entrees="Notification budget annuel, besoins exprimés par les équipes de recherche",
+        sorties="Budget consolidé par poste, besoins validés et planifiés pour l'année",
+        ressources_cles="Directeur, Comptable, service financier du Ministère",
+    )
+    proc_integration = Processus(
+        code="PROC-LABO-INTEGRATION",
+        nom="Intégration des Membres",
+        type=TypeProcessus.support,
+        statut=StatutProcessus.conforme,
+        objectif=(
+            "Examiner et valider les demandes d'intégration, "
+            "mettre à jour la liste officielle des membres du laboratoire."
+        ),
+        frequence_cycle=FrequenceCycle.ponctuel,
+        score_maturite=78.0,
+        pilote_id=directeur.id,
+        parent_id=proc_labo.id,
+        declencheur="Dépôt d'un dossier d'intégration par un nouveau membre",
+        entrees="Dossier d'intégration (CV, lettre motivation), liste actuelle des membres",
+        sorties="Liste membres mise à jour, notification ATRST si changement majeur",
+        ressources_cles="Directeur du laboratoire, commission d'intégration",
+    )
+    proc_achat = Processus(
+        code="PROC-LABO-ACHAT",
+        nom="Gestion des Achats et Dépenses",
+        type=TypeProcessus.support,
+        statut=StatutProcessus.en_cours,
+        objectif=(
+            "Traiter les demandes d'achat dans le respect des seuils réglementaires "
+            "(appel d'offres obligatoire ou achat direct selon montant)."
+        ),
+        frequence_cycle=FrequenceCycle.continu,
+        score_maturite=62.0,
+        pilote_id=comptable.id,
+        parent_id=proc_labo.id,
+        declencheur="Expression d'un besoin d'achat validé par un chef d'équipe",
+        entrees="Carnet de recherche, demande d'achat approuvée, budget disponible par poste",
+        sorties="Bon de commande émis, situation financière au Directeur, achat traité ou dossier refusé",
+        ressources_cles="Service des Marchés, Directeur (signature), seuils réglementaires appel d'offres",
+    )
+    proc_kpi = Processus(
+        code="PROC-LABO-KPI",
+        nom="Bilan et Suivi des KPI Annuels",
+        type=TypeProcessus.strategique,
+        statut=StatutProcessus.en_cours,
+        objectif=(
+            "Consolider les KPI annuels du laboratoire, élaborer le bilan "
+            "et le soumettre à l'ATRST avec les preuves des processus."
+        ),
+        frequence_cycle=FrequenceCycle.annuel,
+        score_maturite=70.0,
+        pilote_id=resp_qualite.id,
+        parent_id=proc_labo.id,
+        declencheur="Synchronisation des sous-processus en fin de cycle annuel",
+        entrees="Rapports des sous-processus, bilan financier, KPI consolidés de l'année",
+        sorties="Bilan annuel validé, rapport soumis à l'ATRST, accréditation renouvelée ou cycle relancé",
+        ressources_cles="Directeur, ATRST, preuves des processus budget et achats",
+    )
+    db.add_all([proc_budget, proc_integration, proc_achat, proc_kpi])
     db.flush()
 
-    # --- Actions correctives ---
-    action_data = [
-        dict(processus_id=p5.id, responsable_id=pilote.id,
-             verificateur_id=auditeur.id,
-             reference="ACT-2025-001",
-             titre="Déployer la GED — solution de gestion documentaire",
-             description="Mettre en place un système de gestion électronique des documents avec contrôle des versions.",
-             type=TypeAction.corrective, priorite=PrioriteAction.critique,
-             statut=StatutAction.en_cours, origine=OrigineAction.diagnostic,
-             avancement=35,
-             date_planifiee=now + timedelta(days=30),
-             date_echeance=now + timedelta(days=60)),
-        dict(processus_id=p2.id, responsable_id=contributeur.id,
-             verificateur_id=pilote.id,
-             reference="ACT-2025-002",
-             titre="Mettre en place le tableau de bord achats avec alertes budgétaires",
-             description="Créer un tableau de suivi mensuel des dépenses avec alerte automatique à 80% du seuil.",
-             type=TypeAction.preventive, priorite=PrioriteAction.haute,
-             statut=StatutAction.planifiee, origine=OrigineAction.risque,
-             avancement=0,
-             date_planifiee=now + timedelta(days=15),
-             date_echeance=now + timedelta(days=45)),
-        dict(processus_id=p3.id, responsable_id=contributeur.id,
-             verificateur_id=pilote.id,
-             reference="ACT-2025-003",
-             titre="Automatiser les rappels de rapports semestriels",
-             description="Configurer des notifications automatiques 30 jours avant l'échéance de chaque rapport.",
-             type=TypeAction.corrective, priorite=PrioriteAction.normale,
-             statut=StatutAction.en_cours, origine=OrigineAction.diagnostic,
-             avancement=60,
-             date_planifiee=now - timedelta(days=10),
-             date_echeance=now + timedelta(days=20)),
-        dict(processus_id=p4.id, responsable_id=pilote.id,
-             verificateur_id=auditeur.id,
-             reference="ACT-2025-004",
-             titre="Cartographier les compétences clés du laboratoire",
-             description="Identifier et documenter les compétences critiques et établir un plan de succession.",
-             type=TypeAction.preventive, priorite=PrioriteAction.normale,
-             statut=StatutAction.en_verification, origine=OrigineAction.risque,
-             avancement=100,
-             date_planifiee=now - timedelta(days=30),
-             date_echeance=now - timedelta(days=5),
-             date_realisation=now - timedelta(days=5)),
-        dict(processus_id=p1.id, responsable_id=auditeur.id,
-             verificateur_id=pilote.id,
-             reference="ACT-2025-005",
-             titre="Planifier le programme d'audits internes 2025",
-             description="Élaborer et valider le programme annuel d'audits internes couvrant tous les processus.",
-             type=TypeAction.amelioration, priorite=PrioriteAction.haute,
-             statut=StatutAction.close, origine=OrigineAction.revue_direction,
-             avancement=100,
-             date_planifiee=now - timedelta(days=60),
-             date_echeance=now - timedelta(days=20),
-             date_realisation=now - timedelta(days=22),
-             efficacite_verifiee=True,
-             commentaire_verification="Programme d'audits validé et communiqué à tous les pilotes."),
+    # =========================================================================
+    # BPMN 2 — PROC-DOC : Encadrement Doctoral
+    # Sous-processus : Inscription · Suivi Avancement · Soutenance
+    # =========================================================================
+    proc_doc = Processus(
+        code="PROC-DOC",
+        nom="Encadrement Doctoral",
+        type=TypeProcessus.operationnel,
+        statut=StatutProcessus.en_cours,
+        objectif=(
+            "Assurer le suivi pédagogique et administratif des doctorants "
+            "depuis l'inscription jusqu'à la soutenance."
+        ),
+        frequence_cycle=FrequenceCycle.semestriel,
+        score_maturite=67.0,
+        pilote_id=resp_qualite.id,
+        declencheur="Inscription d'un nouveau doctorant validée par la commission",
+        entrees="Dossier d'inscription, PV de commission doctorale, sujet de thèse validé",
+        sorties="Rapports semestriels d'avancement, PV de soutenance, attestation de doctorat",
+        ressources_cles="Directeur de thèse, co-encadrant éventuel, commission doctorale, jury",
+    )
+    db.add(proc_doc)
+    db.flush()
+
+    proc_inscription = Processus(
+        code="PROC-DOC-INSCRIPTION",
+        nom="Inscription et Affectation",
+        type=TypeProcessus.operationnel,
+        statut=StatutProcessus.conforme,
+        objectif="Valider l'inscription du doctorant, affecter un directeur de thèse et enregistrer le sujet.",
+        frequence_cycle=FrequenceCycle.annuel,
+        score_maturite=80.0,
+        pilote_id=dir_these.id,
+        parent_id=proc_doc.id,
+        declencheur="Candidature du doctorant déposée auprès de la commission",
+        entrees="Dossier de candidature, liste des directeurs disponibles, sujets proposés",
+        sorties="Inscription validée, directeur de thèse affecté, sujet enregistré dans le système",
+        ressources_cles="Commission doctorale, Directeur de thèse, administration",
+    )
+    proc_avancement = Processus(
+        code="PROC-DOC-AVANCEMENT",
+        nom="Suivi de l'Avancement",
+        type=TypeProcessus.operationnel,
+        statut=StatutProcessus.en_cours,
+        objectif="Assurer le suivi semestriel de l'avancement des travaux et valider les rapports d'étape.",
+        frequence_cycle=FrequenceCycle.semestriel,
+        score_maturite=60.0,
+        pilote_id=dir_these.id,
+        parent_id=proc_doc.id,
+        declencheur="Échéance semestrielle de rapport d'avancement (S1 : 30 juin / S2 : 31 décembre)",
+        entrees="Rapport d'avancement du doctorant, historique des évaluations précédentes",
+        sorties="Rapport validé ou retourné pour correction, recommandations du directeur de thèse",
+        ressources_cles="Directeur de thèse, co-encadrant",
+    )
+    proc_soutenance = Processus(
+        code="PROC-DOC-SOUTENANCE",
+        nom="Préparation et Soutenance",
+        type=TypeProcessus.operationnel,
+        statut=StatutProcessus.en_cours,
+        objectif=(
+            "Organiser la soutenance de thèse : constitution du jury, "
+            "dépôt du manuscrit, déroulement et délibération."
+        ),
+        frequence_cycle=FrequenceCycle.ponctuel,
+        score_maturite=55.0,
+        pilote_id=dir_these.id,
+        parent_id=proc_doc.id,
+        declencheur="Autorisation de soutenance accordée par la commission doctorale",
+        entrees="Manuscrit final, composition du jury proposée, PV d'autorisation de soutenance",
+        sorties="PV de soutenance, mention attribuée, attestation de doctorat émise",
+        ressources_cles="Jury (interne + externe), Directeur de thèse, administration doctorale",
+    )
+    db.add_all([proc_inscription, proc_avancement, proc_soutenance])
+    db.flush()
+
+    # -------------------------------------------------------------------------
+    # Diagnostics ISO
+    # -------------------------------------------------------------------------
+    diags = [
+        # PROC-LABO — audit global annuel
+        DiagnosticISO(
+            processus_id=proc_labo.id, auditeur_id=auditeur.id,
+            reference="DIAG-2024-LABO-001", score_global=68.0,
+            niveau_global=_niveau_maturite(68.0),
+            statut=StatutDiagnostic.valide, periode_couverte="2024-ANNUEL",
+            date_diagnostic=now - timedelta(days=270),
+            date_validation=now - timedelta(days=262),
+            commentaire_global="Première évaluation. Processus achats et KPI non formalisés.",
+        ),
+        DiagnosticISO(
+            processus_id=proc_labo.id, auditeur_id=auditeur.id,
+            reference="DIAG-2025-LABO-001", score_global=74.0,
+            niveau_global=_niveau_maturite(74.0),
+            statut=StatutDiagnostic.valide, periode_couverte="2025-ANNUEL",
+            date_diagnostic=now - timedelta(days=45),
+            date_validation=now - timedelta(days=38),
+            commentaire_global="Progression notable. Processus achats à renforcer sur la traçabilité budgétaire.",
+        ),
+        # PROC-LABO-ACHAT
+        DiagnosticISO(
+            processus_id=proc_achat.id, auditeur_id=auditeur.id,
+            reference="DIAG-2025-ACHAT-001", score_global=58.0,
+            niveau_global=_niveau_maturite(58.0),
+            statut=StatutDiagnostic.valide, periode_couverte="2025-T1",
+            date_diagnostic=now - timedelta(days=120),
+            date_validation=now - timedelta(days=112),
+            commentaire_global="Délais acceptables. Absence de tableau de suivi formalisé. Seuil d'appel d'offres méconnu des équipes.",
+        ),
+        DiagnosticISO(
+            processus_id=proc_achat.id, auditeur_id=auditeur.id,
+            reference="DIAG-2025-ACHAT-002", score_global=62.0,
+            niveau_global=_niveau_maturite(62.0),
+            statut=StatutDiagnostic.soumis, periode_couverte="2025-T2",
+            date_diagnostic=now - timedelta(days=12),
+            date_validation=None,
+            commentaire_global="Amélioration sur les délais. Alertes budgétaires à automatiser. Formation chefs d'équipe planifiée.",
+        ),
+        # PROC-LABO-BUDGET
+        DiagnosticISO(
+            processus_id=proc_budget.id, auditeur_id=auditeur.id,
+            reference="DIAG-2025-BUDGET-001", score_global=82.0,
+            niveau_global=_niveau_maturite(82.0),
+            statut=StatutDiagnostic.valide, periode_couverte="2025-ANNUEL",
+            date_diagnostic=now - timedelta(days=90),
+            date_validation=now - timedelta(days=83),
+            commentaire_global="Budget consolidé dans les délais. Tableau de bord mensuel déployé. Communication aux équipes à améliorer.",
+        ),
+        # PROC-DOC — audit global semestriel
+        DiagnosticISO(
+            processus_id=proc_doc.id, auditeur_id=auditeur.id,
+            reference="DIAG-2024-DOC-001", score_global=60.0,
+            niveau_global=_niveau_maturite(60.0),
+            statut=StatutDiagnostic.valide, periode_couverte="2024-S2",
+            date_diagnostic=now - timedelta(days=200),
+            date_validation=now - timedelta(days=193),
+            commentaire_global="Suivi doctoral insuffisant. 40% des rapports S2 non déposés. Processus soutenance non documenté.",
+        ),
+        DiagnosticISO(
+            processus_id=proc_doc.id, auditeur_id=auditeur.id,
+            reference="DIAG-2025-DOC-001", score_global=67.0,
+            niveau_global=_niveau_maturite(67.0),
+            statut=StatutDiagnostic.valide, periode_couverte="2025-S1",
+            date_diagnostic=now - timedelta(days=30),
+            date_validation=now - timedelta(days=23),
+            commentaire_global="Progression. Taux de dépôt des rapports amélioré à 70%. Formalisation de la procédure soutenance en cours.",
+        ),
+        # PROC-DOC-AVANCEMENT
+        DiagnosticISO(
+            processus_id=proc_avancement.id, auditeur_id=auditeur.id,
+            reference="DIAG-2025-AVANC-001", score_global=60.0,
+            niveau_global=_niveau_maturite(60.0),
+            statut=StatutDiagnostic.soumis, periode_couverte="2025-S1",
+            date_diagnostic=now - timedelta(days=8),
+            date_validation=None,
+            commentaire_global="30% des rapports S1 non déposés. Rappels automatiques en cours de déploiement.",
+        ),
+        # PROC-DOC-SOUTENANCE
+        DiagnosticISO(
+            processus_id=proc_soutenance.id, auditeur_id=auditeur.id,
+            reference="DIAG-2025-SOUT-001", score_global=55.0,
+            niveau_global=_niveau_maturite(55.0),
+            statut=StatutDiagnostic.brouillon, periode_couverte="2025-S1",
+            date_diagnostic=now - timedelta(days=3),
+            date_validation=None,
+            commentaire_global="Processus non encore formalisé. Constitution du jury généralement tardive (< 30 jours avant soutenance).",
+        ),
     ]
-    for d in action_data:
-        db.add(Action(**d))
+    for d in diags:
+        db.add(d)
+    db.flush()
+
+    # -------------------------------------------------------------------------
+    # Risques
+    # -------------------------------------------------------------------------
+    risques = [
+        # — Gestion des Achats —
+        Risque(
+            processus_id=proc_achat.id, responsable_id=comptable.id,
+            reference="RSQ-2025-ACHAT-001",
+            titre="Achats fractionnés pour contourner le seuil d'appel d'offres",
+            description=(
+                "Risque de fractionnement non intentionnel des commandes, "
+                "entraînant un non-respect de la réglementation sur les marchés publics."
+            ),
+            type=TypeRisque.reglementaire,
+            probabilite=4, gravite=5, detectabilite=3, rpn=60.0,
+            criticite=NiveauCriticite.eleve, statut=StatutRisque.traitement,
+            strategie=StrategieTraitement.reduction,
+            plan_attenuation=(
+                "Alertes automatiques à 80% du seuil par poste budgétaire. "
+                "Formation des chefs d'équipe à la procédure réglementaire."
+            ),
+            date_identification=now - timedelta(days=120),
+        ),
+        Risque(
+            processus_id=proc_achat.id, responsable_id=directeur.id,
+            reference="RSQ-2025-ACHAT-002",
+            titre="Fournisseur stratégique unique sans alternative qualifiée",
+            description="Dépendance critique à un seul fournisseur pour les équipements de recherche.",
+            type=TypeRisque.operationnel,
+            probabilite=3, gravite=4, detectabilite=2, rpn=24.0,
+            criticite=NiveauCriticite.modere, statut=StatutRisque.analyse,
+            strategie=StrategieTraitement.transfert,
+            plan_attenuation="Qualification de 2 fournisseurs alternatifs d'ici fin 2025.",
+            date_identification=now - timedelta(days=60),
+        ),
+        # — Gestion Budgétaire —
+        Risque(
+            processus_id=proc_budget.id, responsable_id=comptable.id,
+            reference="RSQ-2025-BUDGET-001",
+            titre="Remboursements Ministère supérieurs à 90 jours",
+            description="Les délais de remboursement longs fragilisent la trésorerie du laboratoire.",
+            type=TypeRisque.financier,
+            probabilite=4, gravite=3, detectabilite=2, rpn=24.0,
+            criticite=NiveauCriticite.modere, statut=StatutRisque.surveillance,
+            strategie=StrategieTraitement.acceptation,
+            plan_attenuation="Suivi mensuel des remboursements avec relance formelle et escalade au Directeur si > 60 j.",
+            date_identification=now - timedelta(days=150),
+        ),
+        # — Bilan KPI —
+        Risque(
+            processus_id=proc_kpi.id, responsable_id=resp_qualite.id,
+            reference="RSQ-2025-KPI-001",
+            titre="Bilan ATRST soumis hors délai",
+            description=(
+                "Consolidation tardive des KPI due au retard de remontée des données "
+                "des sous-processus, entraînant un risque de non-conformité réglementaire."
+            ),
+            type=TypeRisque.reglementaire,
+            probabilite=3, gravite=5, detectabilite=3, rpn=45.0,
+            criticite=NiveauCriticite.modere, statut=StatutRisque.traitement,
+            strategie=StrategieTraitement.reduction,
+            plan_attenuation="Lancement de la collecte KPI 6 semaines avant l'échéance ATRST.",
+            date_identification=now - timedelta(days=30),
+        ),
+        # — Encadrement Doctoral (global) —
+        Risque(
+            processus_id=proc_doc.id, responsable_id=resp_qualite.id,
+            reference="RSQ-2025-DOC-001",
+            titre="Abandon de doctorat non détecté à temps",
+            description="Absence d'entretien régulier expose au départ silencieux d'un doctorant.",
+            type=TypeRisque.humain,
+            probabilite=3, gravite=4, detectabilite=4, rpn=48.0,
+            criticite=NiveauCriticite.modere, statut=StatutRisque.surveillance,
+            strategie=StrategieTraitement.reduction,
+            plan_attenuation="Entretien individuel trimestriel obligatoire entre doctorant et directeur de thèse.",
+            date_identification=now - timedelta(days=90),
+        ),
+        # — Suivi Avancement —
+        Risque(
+            processus_id=proc_avancement.id, responsable_id=dir_these.id,
+            reference="RSQ-2025-AVANC-001",
+            titre="Retards systématiques dans les rapports semestriels",
+            description="30% des doctorants ne déposent pas leur rapport dans le délai imparti.",
+            type=TypeRisque.operationnel,
+            probabilite=4, gravite=3, detectabilite=2, rpn=24.0,
+            criticite=NiveauCriticite.modere, statut=StatutRisque.traitement,
+            strategie=StrategieTraitement.reduction,
+            plan_attenuation="Rappels automatiques par email à J-30 et J-7 avant chaque échéance semestrielle.",
+            date_identification=now - timedelta(days=60),
+        ),
+        # — Soutenance —
+        Risque(
+            processus_id=proc_soutenance.id, responsable_id=dir_these.id,
+            reference="RSQ-2025-SOUT-001",
+            titre="Constitution tardive du jury — risque d'annulation de la soutenance",
+            description="Désignation du jury à moins de 30 jours de la date de soutenance.",
+            type=TypeRisque.operationnel,
+            probabilite=3, gravite=4, detectabilite=3, rpn=36.0,
+            criticite=NiveauCriticite.modere, statut=StatutRisque.identifie,
+            strategie=StrategieTraitement.reduction,
+            plan_attenuation="Procédure de constitution du jury déclenchée 3 mois avant la date prévisionnelle.",
+            date_identification=now - timedelta(days=20),
+        ),
+    ]
+    for r in risques:
+        db.add(r)
+    db.flush()
+
+    # -------------------------------------------------------------------------
+    # Actions correctives / préventives
+    # -------------------------------------------------------------------------
+    actions = [
+        # — PROC-LABO-ACHAT —
+        Action(
+            processus_id=proc_achat.id,
+            responsable_id=comptable.id, verificateur_id=directeur.id,
+            reference="ACT-2025-ACHAT-001",
+            titre="Déployer les alertes budgétaires automatiques par poste",
+            description=(
+                "Configurer des notifications email à 80% du seuil budgétaire par poste, "
+                "générées automatiquement depuis le tableau de suivi des achats."
+            ),
+            type=TypeAction.preventive, priorite=PrioriteAction.haute,
+            statut=StatutAction.en_cours, origine=OrigineAction.risque,
+            avancement=55,
+            date_planifiee=now - timedelta(days=10),
+            date_echeance=now + timedelta(days=20),
+        ),
+        Action(
+            processus_id=proc_achat.id,
+            responsable_id=chef_equipe.id, verificateur_id=comptable.id,
+            reference="ACT-2025-ACHAT-002",
+            titre="Former les chefs d'équipe à la procédure d'achat réglementaire",
+            description=(
+                "Session de 2h sur les seuils réglementaires d'appel d'offres, "
+                "le formulaire de demande d'achat et la traçabilité requise."
+            ),
+            type=TypeAction.preventive, priorite=PrioriteAction.normale,
+            statut=StatutAction.planifiee, origine=OrigineAction.diagnostic,
+            avancement=0,
+            date_planifiee=now + timedelta(days=5),
+            date_echeance=now + timedelta(days=35),
+        ),
+        # — PROC-LABO-BUDGET —
+        Action(
+            processus_id=proc_budget.id,
+            responsable_id=comptable.id, verificateur_id=directeur.id,
+            reference="ACT-2025-BUDGET-001",
+            titre="Élaborer le tableau de bord de suivi budgétaire mensuel",
+            description=(
+                "Rapport mensuel automatisé (dépenses réelles vs. budget par poste) "
+                "transmis chaque 1er du mois au Directeur par email."
+            ),
+            type=TypeAction.amelioration, priorite=PrioriteAction.haute,
+            statut=StatutAction.en_verification, origine=OrigineAction.diagnostic,
+            avancement=100,
+            date_planifiee=now - timedelta(days=60),
+            date_echeance=now - timedelta(days=20),
+            date_realisation=now - timedelta(days=22),
+        ),
+        # — PROC-LABO-KPI —
+        Action(
+            processus_id=proc_kpi.id,
+            responsable_id=resp_qualite.id, verificateur_id=directeur.id,
+            reference="ACT-2025-KPI-001",
+            titre="Définir et déployer le tableau de bord KPI du laboratoire",
+            description=(
+                "Identifier les 8 KPI prioritaires, définir les sources de données, "
+                "et déployer le tableau de bord dans le SI-SMQ."
+            ),
+            type=TypeAction.amelioration, priorite=PrioriteAction.haute,
+            statut=StatutAction.close, origine=OrigineAction.revue_direction,
+            avancement=100,
+            date_planifiee=now - timedelta(days=180),
+            date_echeance=now - timedelta(days=90),
+            date_realisation=now - timedelta(days=95),
+            efficacite_verifiee=True,
+            commentaire_verification="8 indicateurs opérationnels, tableau de bord accessible à tous les pilotes.",
+        ),
+        # — PROC-DOC-AVANCEMENT —
+        Action(
+            processus_id=proc_avancement.id,
+            responsable_id=dir_these.id, verificateur_id=resp_qualite.id,
+            reference="ACT-2025-AVANC-001",
+            titre="Automatiser les rappels de rapports semestriels aux doctorants",
+            description=(
+                "Configurer des emails automatiques à J-30 et J-7 avant chaque échéance "
+                "semestrielle, avec copie au directeur de thèse."
+            ),
+            type=TypeAction.corrective, priorite=PrioriteAction.haute,
+            statut=StatutAction.en_cours, origine=OrigineAction.diagnostic,
+            avancement=70,
+            date_planifiee=now - timedelta(days=20),
+            date_echeance=now + timedelta(days=10),
+        ),
+        Action(
+            processus_id=proc_avancement.id,
+            responsable_id=resp_qualite.id, verificateur_id=auditeur.id,
+            reference="ACT-2025-AVANC-002",
+            titre="Créer le canevas standardisé de rapport semestriel d'avancement",
+            description=(
+                "Élaborer un modèle officiel de rapport d'avancement couvrant : "
+                "objectifs atteints, publications, difficultés, plan S2."
+            ),
+            type=TypeAction.corrective, priorite=PrioriteAction.normale,
+            statut=StatutAction.planifiee, origine=OrigineAction.diagnostic,
+            avancement=0,
+            date_planifiee=now + timedelta(days=3),
+            date_echeance=now + timedelta(days=25),
+        ),
+        # — PROC-DOC-SOUTENANCE —
+        Action(
+            processus_id=proc_soutenance.id,
+            responsable_id=dir_these.id, verificateur_id=resp_qualite.id,
+            reference="ACT-2025-SOUT-001",
+            titre="Formaliser la procédure de constitution et convocation du jury",
+            description=(
+                "Rédiger la procédure documentée : délais réglementaires, composition du jury, "
+                "envoi des convocations, gestion des PV de soutenance."
+            ),
+            type=TypeAction.amelioration, priorite=PrioriteAction.normale,
+            statut=StatutAction.en_cours, origine=OrigineAction.risque,
+            avancement=40,
+            date_planifiee=now - timedelta(days=5),
+            date_echeance=now + timedelta(days=25),
+        ),
+        # — PROC-DOC (global) —
+        Action(
+            processus_id=proc_doc.id,
+            responsable_id=resp_qualite.id, verificateur_id=auditeur.id,
+            reference="ACT-2025-DOC-001",
+            titre="Réaliser l'audit interne S1 du processus d'encadrement doctoral",
+            description=(
+                "Audit interne couvrant les trois sous-processus (inscription, avancement, soutenance) "
+                "avec rapport de constatations et plan d'actions."
+            ),
+            type=TypeAction.amelioration, priorite=PrioriteAction.haute,
+            statut=StatutAction.en_cours, origine=OrigineAction.revue_direction,
+            avancement=30,
+            date_planifiee=now - timedelta(days=3),
+            date_echeance=now + timedelta(days=30),
+        ),
+    ]
+    for a in actions:
+        db.add(a)
+    db.flush()
+
+    # -------------------------------------------------------------------------
+    # Indicateurs KPI avec historique des mesures
+    # -------------------------------------------------------------------------
+
+    def _mesures(kpi: Indicateur, donnees: list[tuple], pilote: Utilisateur, sens: str) -> None:
+        """
+        donnees : liste de (valeur, periode_label, jours_avant_maintenant)
+        Calcule évolution, evolution_pct et statut_alerte pour chaque mesure.
+        """
+        prev = None
+        for valeur, periode, jours_avant in donnees:
+            evo = (valeur - prev) if prev is not None else None
+            evo_pct = (
+                ((valeur - prev) / abs(prev) * 100)
+                if (prev is not None and prev != 0)
+                else None
+            )
+            alerte = _statut_alerte(
+                valeur,
+                kpi.seuil_attention,
+                kpi.seuil_alerte,
+                sens,
+            )
+            db.add(MesureKPI(
+                indicateur_id=kpi.id,
+                saisi_par_id=pilote.id,
+                valeur=valeur,
+                date_mesure=now - timedelta(days=jours_avant),
+                periode=periode,
+                valeur_precedente=prev,
+                evolution=evo,
+                evolution_pct=evo_pct,
+                statut_alerte=alerte,
+                est_valide=True,
+            ))
+            prev = valeur
+        if donnees:
+            kpi.valeur_actuelle = donnees[-1][0]
+
+    # KPI 1 — Taux d'exécution budgétaire (PROC-LABO-BUDGET)
+    kpi_budget_exec = Indicateur(
+        code="KPI-BUDGET-EXEC",
+        nom="Taux d'exécution budgétaire",
+        description="Pourcentage du budget annuel alloué effectivement consommé à date.",
+        processus_id=proc_budget.id,
+        responsable_id=comptable.id,
+        unite=UniteKPI.pourcentage,
+        sens=SensKPI.hausse,
+        frequence=FrequenceMesure.trimestriel,
+        source=SourceKPI.manuel,
+        valeur_initiale=0.0, valeur_cible=95.0,
+        seuil_attention=60.0, seuil_alerte=40.0,
+        afficher_dashboard=True,
+    )
+    db.add(kpi_budget_exec)
+    db.flush()
+    _mesures(kpi_budget_exec, [
+        (22.0, "2025-T1", 270),
+        (45.0, "2025-T2", 180),
+        (68.0, "2025-T3", 90),
+        (87.0, "2025-T4", 0),
+    ], comptable, "hausse")
+
+    # KPI 2 — Délai moyen de traitement des achats (PROC-LABO-ACHAT)
+    kpi_delai_achat = Indicateur(
+        code="KPI-ACHAT-DELAI",
+        nom="Délai moyen de traitement des achats (jours)",
+        description="Nombre moyen de jours entre la demande d'achat validée et l'émission du bon de commande.",
+        processus_id=proc_achat.id,
+        responsable_id=comptable.id,
+        unite=UniteKPI.jours,
+        sens=SensKPI.baisse,
+        frequence=FrequenceMesure.mensuel,
+        source=SourceKPI.manuel,
+        valeur_initiale=25.0, valeur_cible=7.0,
+        seuil_attention=14.0, seuil_alerte=20.0,
+        afficher_dashboard=True,
+    )
+    db.add(kpi_delai_achat)
+    db.flush()
+    _mesures(kpi_delai_achat, [
+        (26.0, "2025-02", 210),
+        (22.0, "2025-03", 180),
+        (19.0, "2025-04", 150),
+        (16.0, "2025-05", 120),
+        (13.0, "2025-06", 90),
+        (11.0, "2025-07", 60),
+        (9.0,  "2025-08", 30),
+        (8.0,  "2025-09", 0),
+    ], comptable, "baisse")
+
+    # KPI 3 — Nombre de doctorants actifs (PROC-DOC)
+    kpi_doctorants_actifs = Indicateur(
+        code="KPI-DOC-ACTIFS",
+        nom="Nombre de doctorants actifs",
+        description="Nombre total de doctorants inscrits et en cours de thèse au laboratoire.",
+        processus_id=proc_doc.id,
+        responsable_id=dir_these.id,
+        unite=UniteKPI.nombre,
+        sens=SensKPI.hausse,
+        frequence=FrequenceMesure.semestriel,
+        source=SourceKPI.manuel,
+        valeur_initiale=6.0, valeur_cible=18.0,
+        seuil_attention=10.0, seuil_alerte=6.0,
+        afficher_dashboard=True,
+    )
+    db.add(kpi_doctorants_actifs)
+    db.flush()
+    _mesures(kpi_doctorants_actifs, [
+        (6.0,  "2023-S2", 540),
+        (8.0,  "2024-S1", 365),
+        (9.0,  "2024-S2", 180),
+        (11.0, "2025-S1", 0),
+    ], dir_these, "hausse")
+
+    # KPI 4 — Taux de rapports d'avancement déposés dans les délais (PROC-DOC-AVANCEMENT)
+    kpi_rapports_delai = Indicateur(
+        code="KPI-DOC-RAPPORTS-DELAI",
+        nom="Taux de rapports d'avancement déposés dans les délais",
+        description="Pourcentage de doctorants ayant soumis leur rapport semestriel avant l'échéance.",
+        processus_id=proc_avancement.id,
+        responsable_id=dir_these.id,
+        unite=UniteKPI.pourcentage,
+        sens=SensKPI.hausse,
+        frequence=FrequenceMesure.semestriel,
+        source=SourceKPI.manuel,
+        valeur_initiale=50.0, valeur_cible=95.0,
+        seuil_attention=70.0, seuil_alerte=55.0,
+        afficher_dashboard=True,
+    )
+    db.add(kpi_rapports_delai)
+    db.flush()
+    _mesures(kpi_rapports_delai, [
+        (50.0, "2023-S2", 540),
+        (58.0, "2024-S1", 365),
+        (63.0, "2024-S2", 180),
+        (70.0, "2025-S1", 0),
+    ], dir_these, "hausse")
+
+    # KPI 5 — Score de maturité globale ISO (transversal)
+    kpi_maturite = Indicateur(
+        code="KPI-GLOBAL-MATURITE",
+        nom="Score de maturité globale des processus",
+        description="Moyenne des scores de maturité ISO des processus racines (PROC-LABO et PROC-DOC).",
+        processus_id=None,
+        responsable_id=resp_qualite.id,
+        unite=UniteKPI.score,
+        sens=SensKPI.hausse,
+        frequence=FrequenceMesure.trimestriel,
+        source=SourceKPI.auto,
+        formule=FormulaKPI.score_maturite_processus,
+        valeur_initiale=50.0, valeur_cible=80.0,
+        seuil_attention=60.0, seuil_alerte=50.0,
+        afficher_dashboard=True,
+    )
+    db.add(kpi_maturite)
+    db.flush()
+    _mesures(kpi_maturite, [
+        (50.0, "2024-T1", 450),
+        (55.0, "2024-T2", 360),
+        (59.0, "2024-T3", 270),
+        (63.0, "2024-T4", 180),
+        (66.0, "2025-T1", 90),
+        (70.0, "2025-T2", 0),
+    ], resp_qualite, "hausse")
+
+    # KPI 6 — Nombre de risques critiques actifs (transversal)
+    kpi_risques_critiques = Indicateur(
+        code="KPI-GLOBAL-RISQUES-CRITIQUES",
+        nom="Nombre de risques critiques non clôturés",
+        description="Nombre de risques avec RPN > 80 et statut différent de 'clos'.",
+        processus_id=None,
+        responsable_id=resp_qualite.id,
+        unite=UniteKPI.nombre,
+        sens=SensKPI.baisse,
+        frequence=FrequenceMesure.mensuel,
+        source=SourceKPI.auto,
+        formule=FormulaKPI.nb_risques_critiques,
+        valeur_initiale=6.0, valeur_cible=0.0,
+        seuil_attention=2.0, seuil_alerte=4.0,
+        afficher_dashboard=True,
+    )
+    db.add(kpi_risques_critiques)
+    db.flush()
+    _mesures(kpi_risques_critiques, [
+        (6.0, "2025-03", 180),
+        (5.0, "2025-04", 150),
+        (4.0, "2025-05", 120),
+        (3.0, "2025-06", 90),
+        (2.0, "2025-07", 60),
+        (2.0, "2025-08", 30),
+        (1.0, "2025-09", 0),
+    ], resp_qualite, "baisse")
+
+    # KPI 7 — Taux d'actions correctives clôturées (transversal)
+    kpi_actions_closes = Indicateur(
+        code="KPI-GLOBAL-ACTIONS-CLOSES",
+        nom="Taux d'actions correctives clôturées",
+        description="Pourcentage d'actions en statut 'close' ou 'annulée' sur le total des actions créées.",
+        processus_id=None,
+        responsable_id=resp_qualite.id,
+        unite=UniteKPI.pourcentage,
+        sens=SensKPI.hausse,
+        frequence=FrequenceMesure.mensuel,
+        source=SourceKPI.auto,
+        formule=FormulaKPI.taux_actions_closes,
+        valeur_initiale=20.0, valeur_cible=80.0,
+        seuil_attention=55.0, seuil_alerte=35.0,
+        afficher_dashboard=True,
+    )
+    db.add(kpi_actions_closes)
+    db.flush()
+    _mesures(kpi_actions_closes, [
+        (20.0, "2025-03", 180),
+        (28.0, "2025-04", 150),
+        (35.0, "2025-05", 120),
+        (40.0, "2025-06", 90),
+        (47.0, "2025-07", 60),
+        (52.0, "2025-08", 30),
+        (58.0, "2025-09", 0),
+    ], resp_qualite, "hausse")
 
     db.commit()
-    logger.info("seed_demo_data : données de démonstration insérées avec succès.")
+    logger.info(
+        "seed_demo_data : 2 processus BPMN (9 total), 8 utilisateurs, "
+        "9 diagnostics, 7 risques, 8 actions, 7 KPIs avec historique — insérés."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -433,7 +991,7 @@ def seed_demo_data(db: Session) -> None:
 def run_all_seeders(db: Session) -> None:
     """
     Appelé une fois au démarrage FastAPI (lifespan ou @app.on_event).
-    Ordre : clauses → parties → admin → démo.
+    Ordre : clauses ISO → parties intéressées → admin → données démo BPMN.
     """
     logger.info("=== Démarrage des seeders SI-SMQ ===")
     seed_clauses_iso(db)
