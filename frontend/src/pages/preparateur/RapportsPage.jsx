@@ -102,18 +102,36 @@ export default function RapportsPage() {
   const [reportFormat, setReportFormat] = useState("PDF");
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
+
+  // Process scope state ("tous" = all processes, "selection" = chosen subset)
+  const [reportScope, setReportScope] = useState("tous");
+  const [processusList, setProcessusList] = useState([]);
+  const [selectedProcessus, setSelectedProcessus] = useState([]);
 
   const user = getCurrentUser();
   const initials = getInitials(user?.nom_complet);
 
-  useEffect(() => {
-    setUnread(getUnreadCount());
+  const refreshDocuments = () =>
     api
       .get("/documents/")
       .then((docs) => setDocuments(Array.isArray(docs) ? docs : []))
-      .catch(() => setDocuments([]))
-      .finally(() => setLoading(false));
+      .catch(() => setDocuments([]));
+
+  useEffect(() => {
+    setUnread(getUnreadCount());
+    refreshDocuments().finally(() => setLoading(false));
+    api
+      .get("/processus/")
+      .then((procs) => setProcessusList(Array.isArray(procs) ? procs : []))
+      .catch(() => setProcessusList([]));
   }, []);
+
+  const toggleProcessus = (code) => {
+    setSelectedProcessus((prev) =>
+      prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code],
+    );
+  };
 
   const mapDoc = (d) => ({
     id: d.id,
@@ -146,23 +164,65 @@ export default function RapportsPage() {
     );
   };
 
-  const handleGenerateReport = () => {
+  const showToast = (message, type, duration = 2500) => {
+    setExportToast({ message, type });
+    setTimeout(() => setExportToast(null), duration);
+  };
+
+  const handleGenerateReport = async () => {
     if (!reportName.trim()) {
-      setExportToast({
-        message: "Veuillez donner un nom au rapport",
-        type: "error",
-      });
-      setTimeout(() => setExportToast(null), 2500);
+      showToast("Veuillez donner un nom au rapport", "error");
       return;
     }
-    const selectedCount = selectedElements.length;
-    setExportToast({
-      message: `Rapport "${reportName}" généré avec ${selectedCount} éléments au format ${reportFormat}`,
-      type: "success",
-    });
-    setTimeout(() => setExportToast(null), 3500);
-    setShowReportBuilder(false);
-    setReportName("");
+    if (selectedElements.length === 0) {
+      showToast("Sélectionnez au moins un élément du rapport", "error");
+      return;
+    }
+    if (reportFormat !== "PDF") {
+      showToast(
+        `L'export ${reportFormat} arrive bientôt — seul le PDF est disponible pour le moment`,
+        "error",
+      );
+      return;
+    }
+    if (reportScope === "selection" && selectedProcessus.length === 0) {
+      showToast("Sélectionnez au moins un processus", "error");
+      return;
+    }
+
+    setGenerating(true);
+    try {
+      const { blob, filename } = await api.postBlob("/rapports/generer", {
+        nom: reportName.trim(),
+        elements: selectedElements,
+        portee: reportScope,
+        processus_codes: reportScope === "selection" ? selectedProcessus : null,
+      });
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename || `${reportName.trim()}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      refreshDocuments();
+      showToast(
+        `Rapport "${reportName}" généré avec ${selectedElements.length} éléments (PDF)`,
+        "success",
+        3500,
+      );
+      setShowReportBuilder(false);
+      setReportName("");
+      setReportScope("tous");
+      setSelectedProcessus([]);
+    } catch (err) {
+      showToast(err?.message || "Erreur lors de la génération du rapport", "error");
+    } finally {
+      setGenerating(false);
+    }
   };
 
   const handleExport = (fmt, titre) => {
@@ -404,6 +464,97 @@ export default function RapportsPage() {
               </div>
             </div>
 
+            {/* Process scope selection */}
+            <div style={{ marginBottom: 20 }}>
+              <label
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: C.muted,
+                  textTransform: "uppercase",
+                  letterSpacing: 0.5,
+                  display: "block",
+                  marginBottom: 10,
+                }}
+              >
+                Processus concernés
+              </label>
+              <div style={{ display: "flex", gap: 8, marginBottom: reportScope === "selection" ? 10 : 0 }}>
+                {[
+                  { id: "tous", label: `Tous les processus (${processusList.length})` },
+                  { id: "selection", label: "Processus spécifiques" },
+                ].map((opt) => (
+                  <button
+                    key={opt.id}
+                    onClick={() => setReportScope(opt.id)}
+                    style={{
+                      flex: 1,
+                      padding: "9px 12px",
+                      borderRadius: 10,
+                      border: `2px solid ${reportScope === opt.id ? C.primary : "#e8eaed"}`,
+                      background: reportScope === opt.id ? C.lightBg : "white",
+                      color: reportScope === opt.id ? C.dark : "#6b7280",
+                      fontWeight: 700,
+                      fontSize: 12.5,
+                      cursor: "pointer",
+                      fontFamily: "'Plus Jakarta Sans', sans-serif",
+                      transition: "all 0.15s",
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+
+              {reportScope === "selection" && (
+                <div
+                  style={{
+                    maxHeight: 160,
+                    overflowY: "auto",
+                    border: `1.5px solid ${C.border}`,
+                    borderRadius: 10,
+                    padding: 8,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 4,
+                  }}
+                >
+                  {processusList.length === 0 ? (
+                    <div style={{ fontSize: 12, color: C.muted, padding: 6 }}>
+                      Aucun processus disponible
+                    </div>
+                  ) : (
+                    processusList.map((p) => (
+                      <label
+                        key={p.code}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          padding: "6px 8px",
+                          borderRadius: 8,
+                          cursor: "pointer",
+                          background: selectedProcessus.includes(p.code)
+                            ? C.lightBg
+                            : "transparent",
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedProcessus.includes(p.code)}
+                          onChange={() => toggleProcessus(p.code)}
+                          style={{ accentColor: C.primary }}
+                        />
+                        <span style={{ fontSize: 12.5, color: C.text }}>
+                          <strong>{p.code}</strong> — {p.nom}
+                        </span>
+                      </label>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+
             {/* Format selection */}
             <div style={{ display: "flex", gap: 12, marginBottom: 24 }}>
               <label
@@ -421,26 +572,31 @@ export default function RapportsPage() {
                 Format
               </label>
               <div style={{ display: "flex", gap: 8 }}>
-                {["PDF", "Excel", "Word"].map((fmt) => (
-                  <button
-                    key={fmt}
-                    onClick={() => setReportFormat(fmt)}
-                    style={{
-                      padding: "6px 16px",
-                      borderRadius: 8,
-                      border: `2px solid ${reportFormat === fmt ? C.primary : "#e8eaed"}`,
-                      background: reportFormat === fmt ? C.primary : "white",
-                      color: reportFormat === fmt ? "white" : "#6b7280",
-                      fontWeight: 700,
-                      fontSize: 12,
-                      cursor: "pointer",
-                      fontFamily: "'Plus Jakarta Sans', sans-serif",
-                      transition: "all 0.15s",
-                    }}
-                  >
-                    {fmt}
-                  </button>
-                ))}
+                {["PDF", "Excel", "Word"].map((fmt) => {
+                  const disabled = fmt !== "PDF";
+                  return (
+                    <button
+                      key={fmt}
+                      onClick={() => !disabled && setReportFormat(fmt)}
+                      title={disabled ? "Bientôt disponible" : undefined}
+                      style={{
+                        padding: "6px 16px",
+                        borderRadius: 8,
+                        border: `2px solid ${reportFormat === fmt ? C.primary : "#e8eaed"}`,
+                        background: reportFormat === fmt ? C.primary : "white",
+                        color: disabled ? "#c1c5cc" : reportFormat === fmt ? "white" : "#6b7280",
+                        fontWeight: 700,
+                        fontSize: 12,
+                        cursor: disabled ? "not-allowed" : "pointer",
+                        fontFamily: "'Plus Jakarta Sans', sans-serif",
+                        transition: "all 0.15s",
+                        opacity: disabled ? 0.6 : 1,
+                      }}
+                    >
+                      {fmt}{disabled ? " (bientôt)" : ""}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -465,6 +621,7 @@ export default function RapportsPage() {
               </button>
               <button
                 onClick={handleGenerateReport}
+                disabled={generating}
                 style={{
                   flex: 2,
                   padding: "11px 0",
@@ -474,12 +631,13 @@ export default function RapportsPage() {
                   color: "white",
                   fontWeight: 700,
                   fontSize: 14,
-                  cursor: "pointer",
+                  cursor: generating ? "wait" : "pointer",
+                  opacity: generating ? 0.7 : 1,
                   fontFamily: "'Plus Jakarta Sans', sans-serif",
                   boxShadow: "0 4px 14px rgba(45,96,79,0.3)",
                 }}
               >
-                🚀 Générer le rapport
+                {generating ? "⏳ Génération…" : "🚀 Générer le rapport"}
               </button>
             </div>
           </div>

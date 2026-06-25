@@ -23,10 +23,11 @@ from sqlalchemy.orm import Session
 
 from app.core.iso_engine import valider_processus_iso
 from app.models.processus import PartieInteressee, Processus
+from app.models.processus_revision import ProcessusRevision, StatutRevision
 from app.models.utilisateur import Utilisateur
 from app.schemas.processus import (
-    AssignerPilote,
-    AssocierParties,
+    AssignerPiloteRequest,
+    AssocierPartiesRequest,
     ProcessusCreate,
     ProcessusUpdate,
 )
@@ -67,6 +68,77 @@ def _profondeur(db: Session, processus_id: int) -> int:
     return niveau
 
 
+def _resoudre_pilote_id(
+    db: Session,
+    pilote_id: int | None,
+    pilote_nom: str | None,
+) -> int | None:
+    """
+    Résout l'ID du pilote à partir de pilote_id (priorité) ou, à défaut,
+    par correspondance sur le nom complet (pilote_nom, texte libre).
+
+    Best-effort : si aucune correspondance exacte n'est trouvée, retourne
+    None sans bloquer la création/mise à jour du processus (le pilote
+    pourra être assigné plus tard via assigner_pilote()).
+    """
+    if pilote_id:
+        pilote = db.query(Utilisateur).filter(Utilisateur.id == pilote_id).first()
+        if not pilote:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Pilote (utilisateur {pilote_id}) introuvable.",
+            )
+        return pilote.id
+
+    if pilote_nom and pilote_nom.strip():
+        cible = pilote_nom.strip().lower()
+        candidats = db.query(Utilisateur).filter(Utilisateur.est_actif == True).all()  # noqa: E712
+        for u in candidats:
+            nom_complet = f"{u.prenom} {u.nom}".strip().lower()
+            if nom_complet == cible:
+                return u.id
+        logger.info("pilote_nom '%s' ne correspond à aucun utilisateur connu — ignoré.", pilote_nom)
+
+    return None
+
+
+def _enregistrer_revision(
+    db: Session,
+    processus: Processus,
+    auteur: Utilisateur,
+    description: str,
+    est_creation: bool = False,
+) -> None:
+    """
+    Journalise une nouvelle révision (création ou modification) d'un processus.
+
+    - Création        : version "1.0"
+    - Modification     : incrémente le mineur de la dernière révision (x.y -> x.(y+1))
+                          et archive la précédente.
+    """
+    derniere = (
+        db.query(ProcessusRevision)
+        .filter(ProcessusRevision.processus_id == processus.id)
+        .order_by(ProcessusRevision.date_revision.desc())
+        .first()
+    )
+
+    if est_creation or not derniere:
+        version = "1.0"
+    else:
+        major, _, minor = derniere.version.partition(".")
+        version = f"{major}.{int(minor or 0) + 1}"
+        derniere.statut = StatutRevision.archive
+
+    db.add(ProcessusRevision(
+        processus_id=processus.id,
+        version=version,
+        auteur_id=auteur.id if auteur else None,
+        description=description,
+        statut=StatutRevision.approuve,
+    ))
+
+
 def _valider_profondeur_parent(db: Session, parent_id: int) -> None:
     """Vérifie que l'ajout d'un enfant ne dépasse pas MAX_NIVEAUX."""
     profondeur_parent = _profondeur(db, parent_id)
@@ -84,6 +156,16 @@ def _valider_profondeur_parent(db: Session, parent_id: int) -> None:
 # §1 — Création
 # ---------------------------------------------------------------------------
 
+def _generer_code_auto(db: Session) -> str:
+    """Génère un code séquentiel quand aucun n'est fourni : PROC-001, PROC-002…"""
+    candidat_n = db.query(Processus).count() + 1
+    while True:
+        candidat = f"PROC-{candidat_n:03d}"
+        if not _code_existe(db, candidat):
+            return candidat
+        candidat_n += 1
+
+
 def creer_processus(
     db: Session,
     payload: ProcessusCreate,
@@ -92,46 +174,53 @@ def creer_processus(
     """
     Crée un nouveau processus.
 
-    - Code normalisé en majuscules (validator Pydantic)
+    - Code normalisé en majuscules (validator Pydantic) ; auto-généré si absent
     - Unicité du code vérifiée
     - Profondeur max 3 niveaux vérifiée si parent_id fourni
-    - Pilote optionnel à la création
+    - Pilote optionnel (par ID ou par nom libre — cf. pilote_nom)
 
     Raises:
         HTTPException 409 — code déjà existant.
         HTTPException 400 — profondeur max dépassée.
         HTTPException 404 — parent_id ou pilote_id introuvable.
     """
-    if _code_existe(db, payload.code):
+    code = payload.code or _generer_code_auto(db)
+    if _code_existe(db, code):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Un processus avec le code '{payload.code}' existe déjà.",
+            detail=f"Un processus avec le code '{code}' existe déjà.",
         )
 
     if payload.parent_id:
         _get_ou_404(db, payload.parent_id)  # vérifie existence parent
         _valider_profondeur_parent(db, payload.parent_id)
 
-    pilote = None
-    if payload.pilote_id:
-        pilote = db.query(Utilisateur).filter(Utilisateur.id == payload.pilote_id).first()
-        if not pilote:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Pilote (utilisateur {payload.pilote_id}) introuvable.",
-            )
+    pilote_id = _resoudre_pilote_id(db, payload.pilote_id, payload.pilote_nom)
 
     processus = Processus(
-        code=payload.code,
+        code=code,
         nom=payload.nom,
         description=payload.description,
         objectif=payload.objectif,
+        type=payload.type,
+        frequence_cycle=payload.frequence_cycle,
+        declencheur=payload.declencheur,
         entrees=payload.entrees,
         sorties=payload.sorties,
+        ressources_cles=payload.ressources_cles,
+        ordre=payload.ordre,
+        est_actif=payload.est_actif,
         parent_id=payload.parent_id,
-        pilote_id=pilote.id if pilote else None,
+        pilote_id=pilote_id,
+        raci_roles=payload.raci_roles,
+        raci_activities=payload.raci_activities,
+        raci_cells=payload.raci_cells,
     )
     db.add(processus)
+    db.flush()
+
+    _enregistrer_revision(db, processus, createur, "Création initiale", est_creation=True)
+
     db.commit()
     db.refresh(processus)
 
@@ -238,16 +327,44 @@ def modifier_processus(
         _valider_profondeur_parent(db, payload.parent_id)
         processus.parent_id = payload.parent_id
 
-    for champ in ["nom", "description", "objectif", "entrees", "sorties"]:
+    champs_modifies: list[str] = []
+    for champ in [
+        "nom", "description", "objectif", "type", "statut",
+        "frequence_cycle", "declencheur", "entrees", "sorties",
+        "ressources_cles", "ordre", "est_actif",
+        "raci_roles", "raci_activities", "raci_cells",
+    ]:
         valeur = getattr(payload, champ, None)
         if valeur is not None:
             setattr(processus, champ, valeur)
+            champs_modifies.append(champ)
+
+    if payload.pilote_id is not None or payload.pilote_nom is not None:
+        pilote_id = _resoudre_pilote_id(db, payload.pilote_id, payload.pilote_nom)
+        if pilote_id is not None:
+            processus.pilote_id = pilote_id
+            champs_modifies.append("pilote")
+
+    if champs_modifies:
+        description = "Mise à jour : " + ", ".join(champs_modifies)
+        _enregistrer_revision(db, processus, modificateur, description)
 
     db.commit()
     db.refresh(processus)
 
     logger.info("Processus modifié : %s par %s", processus.code, modificateur.email)
     return processus
+
+
+def lister_revisions(db: Session, processus_id: int) -> list[ProcessusRevision]:
+    """Historique des révisions d'un processus, plus récente en premier."""
+    _get_ou_404(db, processus_id)
+    return (
+        db.query(ProcessusRevision)
+        .filter(ProcessusRevision.processus_id == processus_id)
+        .order_by(ProcessusRevision.date_revision.desc())
+        .all()
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -298,7 +415,7 @@ def supprimer_processus(
 def assigner_pilote(
     db: Session,
     processus_id: int,
-    payload: AssignerPilote,
+    payload: AssignerPiloteRequest,
     demandeur: Utilisateur,
 ) -> Processus:
     """
@@ -342,7 +459,7 @@ def assigner_pilote(
 def associer_parties_interessees(
     db: Session,
     processus_id: int,
-    payload: AssocierParties,
+    payload: AssocierPartiesRequest,
     demandeur: Utilisateur,
 ) -> Processus:
     """

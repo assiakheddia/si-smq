@@ -96,6 +96,13 @@ class ProcessusBase(_Base):
     ordre:           int = Field(default=0, ge=0)
     est_actif:       bool = True
 
+    raci_roles:      list[str] | None = Field(default=None,
+                                              description="Rôles de la matrice RACI — §5.3")
+    raci_activities: list[str] | None = Field(default=None,
+                                              description="Activités de la matrice RACI")
+    raci_cells:      dict[str, str] | None = Field(default=None,
+                                              description='Cellules "{activite}-{role}" -> R|A|C|I')
+
     @field_validator("code")
     @classmethod
     def code_uppercase(cls, v: str | None) -> str | None:
@@ -122,6 +129,13 @@ class ProcessusCreate(ProcessusBase):
     """
     pilote_id:   int | None = Field(default=None,
                                     description="ID de l'utilisateur pilote (§5.3)")
+    pilote_nom:  str | None = Field(default=None, max_length=255,
+                                    description=(
+                                        "Nom complet du pilote en texte libre — utilisé pour "
+                                        "résoudre pilote_id par correspondance si pilote_id "
+                                        "n'est pas fourni directement (ex: formulaire frontend "
+                                        "qui ne connaît que le nom, pas l'ID utilisateur)."
+                                    ))
     parent_id:   int | None = Field(default=None,
                                     description="ID du processus parent (sous-processus)")
     parties_ids: list[int]  = Field(default_factory=list,
@@ -155,10 +169,15 @@ class ProcessusUpdate(_Base):
     sorties:         str | None = None
     ressources_cles: str | None = None
     pilote_id:       int | None = None
+    pilote_nom:      str | None = Field(default=None, max_length=255,
+                                        description="Cf. ProcessusCreate.pilote_nom")
     parent_id:       int | None = None
     ordre:           int | None = Field(default=None, ge=0)
     est_actif:       bool | None = None
     parties_ids:     list[int] | None = None
+    raci_roles:      list[str] | None = None
+    raci_activities: list[str] | None = None
+    raci_cells:      dict[str, str] | None = None
     # Si fourni → remplace complètement la liste des parties (PUT sémantique sur la relation)
     # Si None   → liste des parties inchangée
 

@@ -29,19 +29,24 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 class StatutDocument(str, Enum):
     brouillon = "brouillon"
-    valide    = "valide"
+    en_revue  = "en_revue"
+    approuve  = "approuve"
+    obsolete  = "obsolete"
     archive   = "archive"
 
 
 class TypeDocument(str, Enum):
-    procedure        = "procedure"
-    instruction      = "instruction"
-    enregistrement   = "enregistrement"
-    rapport          = "rapport"
-    politique        = "politique"
-    plan             = "plan"
-    formulaire       = "formulaire"
-    autre            = "autre"
+    procedure          = "procedure"
+    enregistrement     = "enregistrement"
+    politique          = "politique"
+    plan               = "plan"
+    rapport            = "rapport"
+    formulaire         = "formulaire"
+    manuel             = "manuel"
+    charte             = "charte"
+    preuve_action      = "preuve_action"
+    preuve_conformite  = "preuve_conformite"
+    autre              = "autre"
 
 
 # ---------------------------------------------------------------------------
@@ -257,7 +262,7 @@ class DocumentChangerStatut(BaseModel):
 # ---------------------------------------------------------------------------
 
 class UploadeurBref(BaseModel):
-    """Projection minimale de l'utilisateur ayant uploadé le document."""
+    """Projection minimale de l'utilisateur ayant créé le document."""
 
     id: int
     nom: str
@@ -279,11 +284,11 @@ class DocumentResponse(BaseModel):
         examples=["DOC-PROC-LABO-ACHAT-001"],
     )
     titre: str
-    type_document: TypeDocument
+    type: TypeDocument
     statut: StatutDocument
     version: str
     processus_code: str | None
-    tags: list[str]
+    tags: list[str] = Field(default_factory=list)
     est_confidentiel: bool
     taille_octets: int | None = Field(
         default=None,
@@ -294,7 +299,7 @@ class DocumentResponse(BaseModel):
         description="Type MIME détecté à l'upload.",
         examples=["application/pdf"],
     )
-    uploadeur: UploadeurBref | None = None
+    auteur: UploadeurBref | None = None
     date_creation: datetime
     date_modification: datetime
 

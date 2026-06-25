@@ -245,6 +245,10 @@ class Document(Base):
         foreign_keys=[approuve_par_id],
     )
 
+    @property
+    def processus_code(self) -> str | None:
+        return self.processus.code if self.processus else None
+
     def __repr__(self) -> str:
         return (
             f"<Document [{self.reference}] "

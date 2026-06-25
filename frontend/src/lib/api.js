@@ -92,10 +92,47 @@ async function request(method, path, body) {
   return data;
 }
 
+async function requestBlob(method, path, body) {
+  const headers = { "Content-Type": "application/json" };
+  const token = getToken();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  let res = await fetch(`${BASE}${path}`, {
+    method,
+    headers,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+
+  if (res.status === 401) {
+    const refreshedToken = await tryRefresh().catch(() => {
+      clearTokens();
+      if (window.location.pathname !== "/login") window.location.replace("/login");
+      throw new Error("Session expirée");
+    });
+    res = await fetch(`${BASE}${path}`, {
+      method,
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${refreshedToken}` },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+  }
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    const message = data?.detail ?? `Erreur ${res.status}`;
+    throw new Error(Array.isArray(message) ? message[0]?.msg : message);
+  }
+
+  const filename = /filename="?([^";]+)"?/i.exec(
+    res.headers.get("Content-Disposition") || "",
+  )?.[1];
+  return { blob: await res.blob(), filename };
+}
+
 export const api = {
   get:    (path)        => request("GET",    path),
   post:   (path, body)  => request("POST",   path, body),
   put:    (path, body)  => request("PUT",    path, body),
   patch:  (path, body)  => request("PATCH",  path, body),
   delete: (path)        => request("DELETE", path),
+  postBlob: (path, body) => requestBlob("POST", path, body),
 };

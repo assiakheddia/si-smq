@@ -286,6 +286,38 @@ class Settings(BaseSettings):
     )
 
     # -----------------------------------------------------------------------
+    # §7b — Intelligence Analytique (IA) — Moteur Analytique ISO 9001
+    # -----------------------------------------------------------------------
+
+    ANTHROPIC_API_KEY: str = Field(
+        default="",
+        description=(
+            "Clé API Anthropic (Claude) pour le Moteur Analytique. "
+            "Si vide, le moteur bascule directement sur l'évaluation locale "
+            "(aucun appel réseau). Obtenir une clé : https://console.anthropic.com/settings/keys"
+        ),
+    )
+
+    ANTHROPIC_MODEL: str = Field(
+        default="claude-haiku-4-5",
+        description="Modèle Claude utilisé pour l'analyse clause par clause.",
+    )
+
+    LLM_TIMEOUT_SECONDS: int = Field(
+        default=30,
+        ge=5,
+        le=120,
+        description="Timeout (secondes) par appel IA avant fallback local.",
+    )
+
+    LLM_MAX_RETRIES: int = Field(
+        default=1,
+        ge=0,
+        le=3,
+        description="Nombre de tentatives avant bascule sur l'évaluation locale.",
+    )
+
+    # -----------------------------------------------------------------------
     # §7 — Validators croisés
     # -----------------------------------------------------------------------
 

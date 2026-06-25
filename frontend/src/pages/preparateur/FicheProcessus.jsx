@@ -1,13 +1,21 @@
-import { useParams, useNavigate } from 'react-router-dom';
+﻿import { useParams, useNavigate } from 'react-router-dom';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import Topbar from '../../components/Topbar.jsx';
-import { api } from '../../lib/api';
+import { api, getCurrentUser } from '../../lib/api';
+
+function getInitials(name) {
+  if (!name) return "—";
+  return name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
+}
 
 const TYPE_TO_FORM = {
   strategique:  'Management',
   operationnel: 'Réalisation',
   support:      'Soutien',
 };
+
+const RACI_ROLES_DEFAUT = ['Pilote', 'Qualité', 'Direction'];
+const RACI_ACTIVITES_DEFAUT = ['Planification', 'Mise en œuvre', 'Contrôle', 'Revue'];
 
 /* ── Map backend ProcessusResponse → shape expected by the UI tabs ── */
 function normalizeProcessus(p) {
@@ -21,30 +29,20 @@ function normalizeProcessus(p) {
     typeProcessus:       TYPE_TO_FORM[p.type] || p.type || '—',
     objectif:            p.objectif    || '',
     structures:          p.parties_interessees?.map((pi) => pi.nom) || [],
-    raci:                { responsable: '', approbateur: '', consulte: '', informe: '' },
+    raci: {
+      roles:      p.raci_roles      && p.raci_roles.length      ? p.raci_roles      : RACI_ROLES_DEFAUT,
+      activities: p.raci_activities && p.raci_activities.length ? p.raci_activities : RACI_ACTIVITES_DEFAUT,
+      cells:      p.raci_cells || {},
+    },
     periode:             p.frequence_cycle || '',
-    coutEstime:          '',
     objectifStrategique: p.description || '',
     fluxEntrees:         p.entrees ? p.entrees.split('\n').filter(Boolean) : [],
     fluxSorties:         p.sorties ? p.sorties.split('\n').filter(Boolean) : [],
-    clients:             [],
-    effectifs:           [],
-    competences:         [],
     ressourcesMat:       p.ressources_cles ? p.ressources_cles.split('\n').filter(Boolean) : [],
-    ressourcesLog:       [],
-    kpis:                [],
-    processusAmont:      [],
-    processusAval:       [],
     enjeuxStrategiques:  p.description || '',
     moyensAlloues:       p.ressources_cles ? p.ressources_cles.split('\n').filter(Boolean) : [],
-    contraintes:         [],
-    risques:             [],
     documentsDescription: '',
-    documents:           [],
-    preuves:             [],
     dysfonctionnementsDescription: '',
-    dysfonctionnements:  [],
-    etapes:              [],
     /* raw counts for header badges */
     nb_diagnostics:      p.nb_diagnostics      || 0,
     nb_risques_actifs:   p.nb_risques_actifs   || 0,
@@ -325,253 +323,6 @@ const S = {
   },
 };
 
-/* ═══════════════════════════════════════════════════════════════════
-   DONNÉES MOCK
-═══════════════════════════════════════════════════════════════════ */
-const PROCESSUS_DATA = {
-  1: {
-    identifiant: 'PROC-007',
-    designation: 'Gestion PFE',
-    pilote: 'M. Haddadou',
-    email: 'haddadou@esi.dz',
-    telephone: '(225) 555-0118',
-    sousDept: 'Soutenances',
-    typeProcessus: 'Réalisation',
-    objectif:
-      "Organiser et piloter l'ensemble des activités liées aux projets de fin d'études : affectation des sujets, suivi des étudiants, planification et organisation des soutenances.",
-    structures: [
-      'Département Informatique',
-      'Direction des études',
-      'Jury de soutenance',
-    ],
-    raci: {
-      roles: ['Pilote', 'Qualité', 'Direction'],
-      activities: ['Planification', 'Mise en œuvre', 'Contrôle', 'Revue'],
-      cells: {
-        '0-0': 'R',
-        '0-1': 'C',
-        '0-2': 'A',
-        '1-0': 'R',
-        '1-1': 'C',
-        '1-2': 'I',
-        '2-0': 'C',
-        '2-1': 'R',
-        '2-2': 'A',
-        '3-0': 'I',
-        '3-1': 'A',
-        '3-2': 'R',
-      },
-    },
-    periode: 'Septembre → Juin',
-    coutEstime: 'Budget pédagogique annuel',
-    objectifStrategique: "Améliorer la qualité des PFEs et l'encadrement",
-    fluxEntrees: ['Demandes de sujets', 'CV étudiants', 'Règlement intérieur'],
-    fluxSorties: [
-      'Sujets attribués',
-      'Calendrier soutenances',
-      'Rapports finaux',
-    ],
-    clients: [
-      'Étudiants en fin de cycle',
-      'Entreprises partenaires',
-      'Direction pédagogique',
-    ],
-    effectifs: ['12 enseignants encadrants', '3 membres administratifs'],
-    competences: [
-      'Expertise technique dans la spécialité',
-      "Maîtrise des critères d'évaluation",
-      'Gestion de planning',
-    ],
-    ressourcesMat: ['Salles de soutenance', 'Vidéoprojecteurs'],
-    ressourcesLog: ['Plateforme PFE', 'Messagerie Teams'],
-    kpis: [
-      {
-        nom: 'Taux de réussite aux soutenances',
-        unite: '%',
-        valeurCible: '≥ 90%',
-        seuilAlerte: '< 75%',
-        frequence: 'Annuelle',
-        responsable: 'Coordinateur',
-        couleur: '#d4f5dc',
-        couleurTexte: '#1a6b35',
-      },
-      {
-        nom: 'Délai moyen de validation du sujet',
-        unite: 'jours',
-        valeurCible: '< 15 jours',
-        seuilAlerte: '> 20j',
-        frequence: 'Par promotion',
-        responsable: 'Admin',
-        couleur: '#fff3d4',
-        couleurTexte: '#7a5800',
-      },
-      {
-        nom: "Taux d'encadrement couvert",
-        unite: '%',
-        valeurCible: '100%',
-        seuilAlerte: '< 90%',
-        frequence: 'Semestrielle',
-        responsable: 'Jury',
-        couleur: '#d4e8f5',
-        couleurTexte: '#1a4a6b',
-      },
-    ],
-    processusAmont: ['Gestion des inscriptions', 'Gestion des enseignants'],
-    processusAval: ['Délibération', 'Archivage'],
-    enjeuxStrategiques:
-      "Garantir la qualité académique des travaux de fin d'études et la conformité aux exigences pédagogiques nationales.",
-    moyensAlloues: [
-      'Plateforme de dépôt en ligne',
-      'Salle de soutenance équipée',
-      'Système de gestion PFE (SGPFE)',
-    ],
-    contraintes: [
-      'Calendrier académique fixé',
-      "Quota d'encadrement par enseignant",
-      'Réglementation MESRS',
-    ],
-    risques: [
-      {
-        description: "Manque d'encadrants disponibles",
-        probabilite: '2',
-        gravite: '3',
-        mesure: 'Recrutement anticipé',
-        responsable: 'Coordinateur',
-      },
-      {
-        description: 'Indisponibilité des jurys',
-        probabilite: '2',
-        gravite: '2',
-        mesure: 'Planning prévisionnel',
-        responsable: 'Admin',
-      },
-      {
-        description: 'Dépôt tardif des rapports',
-        probabilite: '3',
-        gravite: '2',
-        mesure: 'Relances automatiques',
-        responsable: 'Plateforme',
-      },
-    ],
-    niveauMaturite: 81,
-    documentsDescription:
-      'Documents de référence essentiels pour la bonne exécution du processus de gestion des PFE. Ils définissent les règles, les rôles et les responsabilités de chaque intervenant.',
-    documents: [
-      {
-        id: 'DOC-001',
-        titre: 'Charte PFE',
-        format: 'PDF',
-        version: 'DOC-0012.1',
-        revue: 'Approuvée – Direction',
-        statut: 'Approuvé',
-      },
-      {
-        id: 'DOC-002',
-        titre: "Guide de l'encadrant",
-        format: 'PDF',
-        version: 'DOC-0021.3',
-        revue: 'Approuvée – Direction',
-        statut: 'Approuvé',
-      },
-      {
-        id: 'DOC-003',
-        titre: "Formulaire d'évaluation",
-        format: 'Excel',
-        version: 'DOC-0032.0',
-        revue: 'Approuvée – Direction',
-        statut: 'Approuvé',
-      },
-      {
-        id: 'DOC-004',
-        titre: 'Règlement intérieur',
-        format: 'Word',
-        version: 'DOC-0041.8',
-        revue: 'Approuvée – Direction',
-        statut: 'Approuvé',
-      },
-    ],
-    preuves: [
-      { titre: 'PV de délibération', format: 'pdf' },
-      { titre: 'Fiche de suivi étudiant', format: 'xlsx' },
-      { titre: 'Rapport de soutenance signé', format: 'pdf' },
-    ],
-    dysfonctionnementsDescription:
-      "Identification et analyse des dysfonctionnements majeurs rencontrés lors de l'exécution du processus, ainsi que les actions correctives mises en place.",
-    dysfonctionnements: [
-      {
-        titre: 'Retard dans la validation des sujets PFE',
-        description:
-          'Les sujets PFE sont souvent validés après le délai prévu, perturbant le calendrier global.',
-        consequences:
-          'Perte de temps, stress étudiant, chevauchement avec les délais académiques',
-        causes: 'Manque de communication entre département et encadrants',
-        ameliorations:
-          "Mise en place d'un workflow numérique de validation avec notifications automatiques\nQuota d'encadrement par enseignant\nRéglementation MESRS",
-        gravite: 'Majeur',
-        responsable: 'Coordinateur',
-        echeance: '2026-09',
-        statut: 'En cours',
-      },
-      {
-        titre: 'Sujets non conformes aux exigences académiques',
-        description:
-          'Certains sujets proposés par les encadrants ne respectent pas les critères de qualité établis.',
-        consequences:
-          "Refus des sujets par le jury, retards dans le calendrier d'attribution, surcharge de travail pour le comité.",
-        causes:
-          'Manque de formation des encadrants\nAbsence de template standardisé',
-        ameliorations:
-          "Organiser des ateliers de formation obligatoires\nCréer un template standard avec critères d'évaluation\nMettre en place une pré-évaluation avant soumission\nDésigner un référent qualité par département",
-        gravite: 'Moyen',
-        responsable: 'Comité pédagogique',
-        echeance: '2026-12',
-        statut: 'En cours',
-      },
-    ],
-    etapes: [
-      {
-        numero: 1,
-        nom: 'Lancement appel à sujets',
-        acteur: 'Coordinateur',
-        description: 'Envoyer appel aux enseignants via plateforme',
-        entree: 'Calendrier académique',
-        sortie: 'Liste sujets proposés',
-        duree: '2 semaines',
-        document: 'Formulaire proposition',
-      },
-      {
-        numero: 2,
-        nom: 'Dépôt des sujets',
-        acteur: 'Enseignants',
-        description: 'Déposer propositions sur plateforme',
-        entree: 'Template sujet',
-        sortie: 'Sujets déposés',
-        duree: '3 semaines',
-        document: 'Fiche sujet',
-      },
-      {
-        numero: 3,
-        nom: 'Affectation étudiants',
-        acteur: 'Coordinateur',
-        description: 'Attribuer sujets selon préférences',
-        entree: 'Préférences étudiants',
-        sortie: 'Planning affectation',
-        duree: '2 semaines',
-        document: 'Tableau affectation',
-      },
-      {
-        numero: 4,
-        nom: 'Suivi PFE',
-        acteur: 'Encadrants',
-        description: "Suivi hebdomadaire de l'avancement",
-        entree: "Rapports d'avancement",
-        sortie: 'Évaluations intermédiaires',
-        duree: '6 mois',
-        document: 'Grille de suivi',
-      },
-    ],
-  },
-};
 
 const TABS = [
   { id: 0, label: 'Informations et historique' },
@@ -581,60 +332,6 @@ const TABS = [
   { id: 4, label: 'Dysfonctionnements' },
   { id: 5, label: 'Déroulement' },
   { id: 6, label: 'Non-conformité et action' },
-];
-
-/* ═══════════════════════════════════════════════════════════════════
-   DONNÉES MOCK - NON-CONFORMITÉS
-═══════════════════════════════════════════════════════════════════ */
-const INIT_NC = [
-  {
-    id: 1,
-    auditId: 1,
-    ref: 'NC-001',
-    titre: 'Manque de traçabilité documentaire',
-    clause: '7.5 Documents',
-    gravite: 'Majeure',
-    statut: 'clos',
-    responsable: 'Haddadou Ali',
-    dateLimit: '2026-04-15',
-    action: "Mise en place d'un registre numérique",
-  },
-  {
-    id: 2,
-    auditId: 1,
-    ref: 'NC-002',
-    titre: 'Procédure de revue non suivie',
-    clause: '9.3 Revue',
-    gravite: 'Mineure',
-    statut: 'clos',
-    responsable: 'Meziani Karim',
-    dateLimit: '2026-04-20',
-    action: 'Rappels paramétrés dans le SMQ',
-  },
-  {
-    id: 3,
-    auditId: 2,
-    ref: 'NC-003',
-    titre: 'Étalonnage équipements non conforme',
-    clause: '7.1 Ressources',
-    gravite: 'Critique',
-    statut: 'en_cours',
-    responsable: 'Bensalem Sara',
-    dateLimit: '2026-05-30',
-    action: "Contrat étalonnage signé, en attente d'exécution",
-  },
-  {
-    id: 4,
-    auditId: 7,
-    ref: 'NC-004',
-    titre: 'Critères sélection fournisseurs absent',
-    clause: '8.4 Processus ext.',
-    gravite: 'Majeure',
-    statut: 'ouvert',
-    responsable: 'Kaci Nadia',
-    dateLimit: '2026-06-10',
-    action: '',
-  },
 ];
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -767,11 +464,7 @@ function Handle({ cx, cy, strokeColor, onMouseDown }) {
 ═══════════════════════════════════════════════════════════════════ */
 
 /* ── TAB 1 — Informations et historique ── */
-const Tab1 = ({ processus }) => {
-  // Get the base number from process code
-  const match = processus.identifiant.match(/^PROC-(\d+)$/);
-  const baseNum = match ? parseInt(match[1]) : 0;
-
+const Tab1 = ({ processus, revisions }) => {
   // Get roles and activities from raci data
   const roles = processus.raci?.roles || ['Pilote', 'Qualité', 'Direction'];
   const activities = processus.raci?.activities || [
@@ -1026,44 +719,32 @@ const Tab1 = ({ processus }) => {
           </tr>
         </thead>
         <tbody>
-          {[
-            {
-              v: `PROC-${String(baseNum).padStart(3, '0')}2.1`,
-              d: '27/03/2026',
-              a: 'Ryma Felkir',
-              m: 'Mise à jour des KPIs et ajout des nouvelles étapes',
-              s: 'Approuvé',
-            },
-            {
-              v: `PROC-${String(baseNum).padStart(3, '0')}2.0`,
-              d: '15/01/2026',
-              a: 'Ryma Felkir',
-              m: 'Refonte complète du processus',
-              s: 'Archivé',
-            },
-            {
-              v: `PROC-${String(baseNum).padStart(3, '0')}1.0`,
-              d: '10/09/2025',
-              a: 'Admin Système',
-              m: 'Création initiale',
-              s: 'Archivé',
-            },
-          ].map((h, i) => (
-            <tr
-              key={i}
-              style={{ background: i % 2 === 0 ? C.white : C.lightBg }}
-            >
-              <td style={S.td}>
-                <span style={{ fontWeight: 700, color: C.primary }}>{h.v}</span>
-              </td>
-              <td style={S.td}>{h.d}</td>
-              <td style={S.td}>{h.a}</td>
-              <td style={S.td}>{h.m}</td>
-              <td style={S.td}>
-                <StatusBadge statut={h.s} />
+          {(revisions || []).length === 0 ? (
+            <tr>
+              <td colSpan={5} style={{ ...S.td, textAlign: 'center', color: C.muted }}>
+                Aucun historique pour ce processus.
               </td>
             </tr>
-          ))}
+          ) : (
+            (revisions || []).map((r, i) => (
+              <tr
+                key={r.id}
+                style={{ background: i % 2 === 0 ? C.white : C.lightBg }}
+              >
+                <td style={S.td}>
+                  <span style={{ fontWeight: 700, color: C.primary }}>v{r.version}</span>
+                </td>
+                <td style={S.td}>{new Date(r.date_revision).toLocaleDateString('fr-FR')}</td>
+                <td style={S.td}>
+                  {r.auteur ? `${r.auteur.prenom} ${r.auteur.nom}` : '—'}
+                </td>
+                <td style={S.td}>{r.description}</td>
+                <td style={S.td}>
+                  <StatusBadge statut={r.statut === 'approuve' ? 'Approuvé' : 'Archivé'} />
+                </td>
+              </tr>
+            ))
+          )}
         </tbody>
       </table>
     </div>
@@ -1071,72 +752,39 @@ const Tab1 = ({ processus }) => {
 };
 
 /* ── TAB 2 — Éléments Clés ── */
-const Tab2 = ({ processus }) => (
+const Tab2 = ({ processus, kpis }) => (
   <div>
     <SectionHeader
       num="2"
       title="Éléments Clés du Processus"
-      sub="Flux, ressources, compétences et indicateurs de performance"
+      sub="Flux, ressources et indicateurs de performance"
     />
 
-    {/* Délai + Coût */}
+    {/* Délai */}
     <div
       style={{
-        display: 'grid',
-        gridTemplateColumns: '1fr 1fr',
-        gap: 14,
+        background: C.accent,
+        borderRadius: 12,
+        padding: '15px 20px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
         marginBottom: 24,
       }}
     >
-      <div
+      <span style={{ fontSize: 13, fontWeight: 700, color: C.dark }}>
+        Fréquence du cycle
+      </span>
+      <span
         style={{
-          background: C.accent,
-          borderRadius: 12,
-          padding: '15px 20px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
+          fontFamily: "'Outfit',sans-serif",
+          fontWeight: 800,
+          fontSize: 15,
+          color: C.dark,
         }}
       >
-        <span style={{ fontSize: 13, fontWeight: 700, color: C.dark }}>
-          Délai globale
-        </span>
-        <span
-          style={{
-            fontFamily: "'Outfit',sans-serif",
-            fontWeight: 800,
-            fontSize: 15,
-            color: C.dark,
-          }}
-        >
-          {processus.periode}
-        </span>
-      </div>
-      <div
-        style={{
-          background: '#fef3c7',
-          border: '1px solid #fde68a',
-          borderRadius: 12,
-          padding: '15px 20px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-        }}
-      >
-        <span style={{ fontSize: 13, fontWeight: 700, color: '#78350f' }}>
-          Coût estimé
-        </span>
-        <span
-          style={{
-            fontFamily: "'Outfit',sans-serif",
-            fontWeight: 700,
-            fontSize: 13,
-            color: '#78350f',
-          }}
-        >
-          {processus.coutEstime}
-        </span>
-      </div>
+        {processus.periode}
+      </span>
     </div>
 
     {/* Flux */}
@@ -1259,30 +907,7 @@ const Tab2 = ({ processus }) => (
         marginBottom: 24,
       }}
     >
-      <InfoRow label="Clients (bénéficiaires)...">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-          {processus.clients.map((c, i) => (
-            <span key={i}>· {c}</span>
-          ))}
-        </div>
-      </InfoRow>
-      <InfoRow label="Effectifs impliqués...">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-          {processus.effectifs.map((e, i) => (
-            <span key={i}>{e}</span>
-          ))}
-        </div>
-      </InfoRow>
-      <InfoRow label="Compétences clés...">
-        <div
-          style={{ display: 'flex', flexWrap: 'wrap', gap: 4, paddingTop: 2 }}
-        >
-          {processus.competences.map((c, i) => (
-            <Chip key={i} text={c} />
-          ))}
-        </div>
-      </InfoRow>
-      <InfoRow label="Ressources matérielles...">
+      <InfoRow label="Ressources matérielles..." last>
         <div
           style={{ display: 'flex', flexWrap: 'wrap', gap: 4, paddingTop: 2 }}
         >
@@ -1293,21 +918,6 @@ const Tab2 = ({ processus }) => (
               bg="#eff6ff"
               color="#1d4ed8"
               border="#bfdbfe"
-            />
-          ))}
-        </div>
-      </InfoRow>
-      <InfoRow label="Ressources logicielles..." last>
-        <div
-          style={{ display: 'flex', flexWrap: 'wrap', gap: 4, paddingTop: 2 }}
-        >
-          {processus.ressourcesLog.map((r, i) => (
-            <Chip
-              key={i}
-              text={r}
-              bg="#fdf4ff"
-              color="#7e22ce"
-              border="#e9d5ff"
             />
           ))}
         </div>
@@ -1323,229 +933,124 @@ const Tab2 = ({ processus }) => (
     />
 
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {processus.kpis.map((kpi, i) => (
-        <div
-          key={i}
-          style={{
-            background: kpi.couleur,
-            borderRadius: 14,
-            border: `1px solid ${kpi.couleurTexte}22`,
-            overflow: 'hidden',
-          }}
-        >
+      {(kpis || []).length === 0 && (
+        <div style={{ fontSize: 13, color: C.muted, padding: '8px 0' }}>
+          Aucun indicateur suivi pour ce processus.
+        </div>
+      )}
+      {(kpis || []).map((kpi, i) => {
+        const palette = [
+          { bg: '#d4f5dc', text: '#1a6b35' },
+          { bg: '#fff3d4', text: '#7a5800' },
+          { bg: '#d4e8f5', text: '#1a4a6b' },
+        ][i % 3];
+        return (
           <div
+            key={kpi.id ?? i}
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '12px 18px',
-              borderBottom: `1px solid ${kpi.couleurTexte}18`,
+              background: palette.bg,
+              borderRadius: 14,
+              border: `1px solid ${palette.text}22`,
+              overflow: 'hidden',
             }}
           >
-            <span
+            <div
               style={{
-                fontSize: 13,
-                fontWeight: 700,
-                color: kpi.couleurTexte,
-                fontFamily: "'Plus Jakarta Sans',sans-serif",
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '12px 18px',
+                borderBottom: `1px solid ${palette.text}18`,
               }}
             >
-              {kpi.nom}
-            </span>
-            <Chip
-              text={kpi.frequence}
-              bg="rgba(255,255,255,0.6)"
-              color={kpi.couleurTexte}
-              border={kpi.couleurTexte + '33'}
-            />
-          </div>
-
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr 1fr 1fr',
-              gap: 0,
-            }}
-          >
-            {[
-              { label: 'Valeur cible', value: kpi.valeurCible, big: true },
-              { label: "Seuil d'alerte", value: kpi.seuilAlerte },
-              { label: 'Unité', value: kpi.unite },
-              { label: 'Responsable', value: kpi.responsable },
-            ].map((f, j) => (
-              <div
-                key={j}
+              <span
                 style={{
-                  padding: '12px 16px',
-                  borderRight:
-                    j < 3 ? `1px solid ${kpi.couleurTexte}15` : 'none',
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: palette.text,
+                  fontFamily: "'Plus Jakarta Sans',sans-serif",
                 }}
               >
+                {kpi.nom}
+              </span>
+              <Chip
+                text={kpi.frequence}
+                bg="rgba(255,255,255,0.6)"
+                color={palette.text}
+                border={palette.text + '33'}
+              />
+            </div>
+
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr 1fr 1fr',
+                gap: 0,
+              }}
+            >
+              {[
+                { label: 'Valeur cible', value: kpi.valeur_cible ?? '—', big: true },
+                { label: "Seuil d'alerte", value: kpi.seuil_alerte ?? '—' },
+                { label: 'Unité', value: kpi.unite },
+                {
+                  label: 'Responsable',
+                  value: kpi.responsable
+                    ? `${kpi.responsable.prenom} ${kpi.responsable.nom}`
+                    : '—',
+                },
+              ].map((f, j) => (
                 <div
+                  key={j}
                   style={{
-                    fontSize: 10,
-                    fontWeight: 700,
-                    color: kpi.couleurTexte,
-                    opacity: 0.65,
-                    textTransform: 'uppercase',
-                    letterSpacing: 0.8,
-                    marginBottom: 6,
+                    padding: '12px 16px',
+                    borderRight:
+                      j < 3 ? `1px solid ${palette.text}15` : 'none',
                   }}
                 >
-                  {f.label}
+                  <div
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      color: palette.text,
+                      opacity: 0.65,
+                      textTransform: 'uppercase',
+                      letterSpacing: 0.8,
+                      marginBottom: 6,
+                    }}
+                  >
+                    {f.label}
+                  </div>
+                  <div
+                    style={{
+                      fontFamily: f.big
+                        ? "'Outfit',sans-serif"
+                        : "'Plus Jakarta Sans',sans-serif",
+                      fontWeight: f.big ? 900 : 600,
+                      fontSize: f.big ? 22 : 14,
+                      color: palette.text,
+                      lineHeight: 1.2,
+                    }}
+                  >
+                    {f.value}
+                  </div>
                 </div>
-                <div
-                  style={{
-                    fontFamily: f.big
-                      ? "'Outfit',sans-serif"
-                      : "'Plus Jakarta Sans',sans-serif",
-                    fontWeight: f.big ? 900 : 600,
-                    fontSize: f.big ? 22 : 14,
-                    color: kpi.couleurTexte,
-                    lineHeight: 1.2,
-                  }}
-                >
-                  {f.value}
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   </div>
 );
 
 /* ── TAB 3 — Contexte ── */
-const Tab3 = ({ processus }) => (
+const Tab3 = ({ processus, risques }) => (
   <div>
     <SectionHeader
       num="3"
       title="Contexte et Environnement"
-      sub="Cartographie des processus voisins et facteurs contextuels"
+      sub="Enjeux stratégiques, moyens alloués et risques identifiés"
     />
-
-    <div
-      style={{
-        fontSize: 14,
-        fontWeight: 700,
-        color: C.text,
-        marginBottom: 14,
-      }}
-    >
-      Processus voisins
-    </div>
-    <div style={{ display: 'flex', gap: 0, marginBottom: 28 }}>
-      <div
-        style={{
-          flex: 1,
-          background: C.white,
-          border: `1px solid ${C.border}`,
-          borderRadius: '12px 0 0 12px',
-          padding: '16px 18px',
-          minHeight: 140,
-        }}
-      >
-        <div
-          style={{
-            display: 'inline-flex',
-            background: C.lightBg,
-            border: `1px solid ${C.border}`,
-            borderRadius: 6,
-            padding: '4px 10px',
-            marginBottom: 14,
-          }}
-        >
-          <span style={{ fontSize: 12, fontWeight: 700, color: C.primary }}>
-            — AMONT
-          </span>
-        </div>
-        {processus.processusAmont.map((p, i) => (
-          <div
-            key={i}
-            style={{
-              background: '#e8f5e9',
-              border: '1px solid #c8e6c9',
-              borderRadius: 8,
-              padding: '8px 12px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              marginBottom: 8,
-            }}
-          >
-            <span style={{ color: C.primary, fontSize: 12 }}>←</span>
-            <span style={{ fontSize: 13, color: C.text }}>{p}</span>
-          </div>
-        ))}
-      </div>
-      <div
-        style={{
-          width: 48,
-          background: C.lightBg,
-          border: `1px solid ${C.border}`,
-          borderLeft: 'none',
-          borderRight: 'none',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-          <path
-            d="M8 7l4-4 4 4M8 17l4 4 4-4M12 3v18"
-            stroke={C.muted}
-            strokeWidth="1.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      </div>
-      <div
-        style={{
-          flex: 1,
-          background: C.white,
-          border: `1px solid ${C.border}`,
-          borderRadius: '0 12px 12px 0',
-          padding: '16px 18px',
-          minHeight: 140,
-        }}
-      >
-        <div
-          style={{
-            display: 'inline-flex',
-            background: C.lightBg,
-            border: `1px solid ${C.border}`,
-            borderRadius: 6,
-            padding: '4px 10px',
-            marginBottom: 14,
-          }}
-        >
-          <span style={{ fontSize: 12, fontWeight: 700, color: C.primary }}>
-            AVAL —
-          </span>
-        </div>
-        {processus.processusAval.map((p, i) => (
-          <div
-            key={i}
-            style={{
-              background: '#e8f5e9',
-              border: '1px solid #c8e6c9',
-              borderRadius: 8,
-              padding: '8px 12px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 6,
-              marginBottom: 8,
-            }}
-          >
-            <span style={{ fontSize: 13, color: C.text }}>{p}</span>
-            <span style={{ color: C.primary, fontSize: 12 }}>→</span>
-          </div>
-        ))}
-      </div>
-    </div>
 
     <div
       style={{
@@ -1580,34 +1085,26 @@ const Tab3 = ({ processus }) => (
           ))}
         </div>
       </InfoRow>
-      <InfoRow label="Contraintes">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {processus.contraintes.map((c, i) => (
-            <div
-              key={i}
-              style={{ display: 'flex', alignItems: 'center', gap: 8 }}
-            >
-              <span style={{ color: '#f59e0b', fontSize: 14 }}>⚡</span>
-              <span style={{ fontSize: 13, color: C.text }}>{c}</span>
-            </div>
-          ))}
-        </div>
-      </InfoRow>
       <InfoRow label="Risques identifiés" last>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-          {processus.risques.map((r, i) => {
+          {(risques || []).length === 0 && (
+            <span style={{ fontSize: 13, color: C.muted }}>
+              Aucun risque identifié pour ce processus.
+            </span>
+          )}
+          {(risques || []).map((r, i) => {
             const palettes = [
               { bg: '#fef3c7', text: '#78350f', border: '#fde68a' },
               { bg: '#fee2e2', text: '#7f1d1d', border: '#fecaca' },
               { bg: '#d4e8f5', text: '#1a4a6b', border: '#bfdbfe' },
             ];
             const p = palettes[i % palettes.length];
-            const crit = parseInt(r.probabilite) * parseInt(r.gravite);
+            const crit = (r.probabilite || 0) * (r.gravite || 0);
             const critColor =
               crit >= 9 ? '#e53935' : crit >= 4 ? C.warn : '#4caf50';
             return (
               <div
-                key={i}
+                key={r.id ?? i}
                 style={{
                   background: p.bg,
                   border: `1px solid ${p.border}`,
@@ -1620,7 +1117,7 @@ const Tab3 = ({ processus }) => (
                 }}
               >
                 <span style={{ fontSize: 12, fontWeight: 600, color: p.text }}>
-                  {r.description}
+                  {r.titre || r.description}
                 </span>
                 <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                   <span
@@ -1636,7 +1133,7 @@ const Tab3 = ({ processus }) => (
                     C:{crit}
                   </span>
                   <span style={{ fontSize: 10, color: p.text, opacity: 0.7 }}>
-                    {r.responsable}
+                    {r.responsable ? `${r.responsable.prenom} ${r.responsable.nom}` : '—'}
                   </span>
                 </div>
               </div>
@@ -1649,7 +1146,8 @@ const Tab3 = ({ processus }) => (
 );
 
 /* ── TAB 4 — Documentation ── */
-const Tab4 = ({ processus }) => {
+const Tab4 = ({ processus, documents }) => {
+  const docs = documents || [];
   const handleFileDownload = (titre, format = 'pdf') => {
     const content = `Document: ${titre}\n\nThis is a sample document for ${titre}.\n\nIn a real implementation, this would be an actual file from your server.\n\nDate: ${new Date().toLocaleDateString('fr-FR')}\nProcessus: ${processus.designation}`;
     const blob = new Blob([content], { type: 'application/pdf' });
@@ -1727,155 +1225,54 @@ const Tab4 = ({ processus }) => {
             </tr>
           </thead>
           <tbody>
-            {processus.documents.map((doc, i) => (
-              <tr key={i}>
-                <td style={S.td}>{doc.id}</td>
-                <td
-                  style={{
-                    ...S.td,
-                    cursor: 'pointer',
-                    color: C.primary,
-                    textDecoration: 'underline',
-                    textUnderlineOffset: '2px',
-                    fontWeight: 500,
-                    transition: 'color 0.2s',
-                  }}
-                  onClick={() =>
-                    handleFileDownload(
-                      doc.titre,
-                      doc.format?.toLowerCase() || 'pdf',
-                    )
-                  }
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.color = C.accent;
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.color = C.primary;
-                  }}
-                >
-                  {doc.titre}
+            {docs.length === 0 ? (
+              <tr>
+                <td colSpan={5} style={{ ...S.td, textAlign: 'center', color: C.muted }}>
+                  Aucun document associé à ce processus.
                 </td>
-                <td style={S.td}>{doc.format}</td>
-                <td style={S.td}>{doc.revue}</td>
-                <td style={S.td}>{doc.version}</td>
               </tr>
-            ))}
+            ) : (
+              docs.map((doc) => (
+                <tr key={doc.id}>
+                  <td style={S.td}>{doc.reference}</td>
+                  <td
+                    style={{
+                      ...S.td,
+                      cursor: 'pointer',
+                      color: C.primary,
+                      textDecoration: 'underline',
+                      textUnderlineOffset: '2px',
+                      fontWeight: 500,
+                      transition: 'color 0.2s',
+                    }}
+                    onClick={() => handleFileDownload(doc.titre, 'pdf')}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.color = C.accent;
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.color = C.primary;
+                    }}
+                  >
+                    {doc.titre}
+                  </td>
+                  <td style={S.td}>{doc.type}</td>
+                  <td style={S.td}>{doc.statut}</td>
+                  <td style={S.td}>{doc.version}</td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
-      </div>
-
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'flex-end',
-          marginBottom: 28,
-          fontSize: 12,
-          color: C.muted,
-        }}
-      >
-        Page 1 | 1
-      </div>
-
-      <div style={{ marginBottom: 20 }}>
-        <div
-          style={{
-            fontSize: 16,
-            fontWeight: 700,
-            color: C.text,
-            fontFamily: "'Outfit', sans-serif",
-            marginBottom: 8,
-          }}
-        >
-          Enregistrements (preuves de réalisation)
-        </div>
-        <div
-          style={{
-            fontSize: 12,
-            color: C.muted,
-            marginBottom: 16,
-          }}
-        >
-          Traces et preuves de l'exécution du processus (cliquez pour
-          télécharger)
-        </div>
-      </div>
-
-      <div
-        style={{
-          background: C.lightBg,
-          borderRadius: 12,
-          padding: '20px 24px',
-          border: `1px solid ${C.border}`,
-        }}
-      >
-        {processus.preuves.map((preuve, i) => (
-          <div
-            key={i}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 12,
-              padding: '8px 0',
-              borderBottom:
-                i < processus.preuves.length - 1
-                  ? `1px solid ${C.border}`
-                  : 'none',
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-            }}
-            onClick={() =>
-              handleFileDownload(preuve.titre, preuve.format || 'pdf')
-            }
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'rgba(119,213,143,0.1)';
-              e.currentTarget.style.paddingLeft = '8px';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'transparent';
-              e.currentTarget.style.paddingLeft = '0';
-            }}
-          >
-            <span
-              style={{
-                width: 6,
-                height: 6,
-                borderRadius: '50%',
-                background: C.accent,
-                flexShrink: 0,
-              }}
-            />
-            <span
-              style={{
-                fontSize: 14,
-                color: C.primary,
-                textDecoration: 'underline',
-                textUnderlineOffset: '3px',
-                fontWeight: 500,
-              }}
-            >
-              {preuve.titre}
-            </span>
-            <span
-              style={{
-                marginLeft: 'auto',
-                fontSize: 11,
-                color: C.muted,
-              }}
-            >
-              📄 {preuve.format || 'PDF'}
-            </span>
-          </div>
-        ))}
       </div>
     </div>
   );
 };
 
 /* ── TAB 5 — Dysfonctionnements ── */
-const Tab5 = ({ processus }) => {
+const Tab5 = ({ processus, dysfonctionnements, onLancerDiagnostic, diagLoading, diagError }) => {
   const [dysfIndex, setDysfIndex] = useState(0);
-  const dysfonctionnementsList = processus.dysfonctionnements || [];
-  const currentDysf = dysfonctionnementsList[dysfIndex];
+  const dysfonctionnementsList = dysfonctionnements ?? processus.dysfonctionnements ?? [];
+  const currentDysf = dysfonctionnementsList[Math.min(dysfIndex, Math.max(dysfonctionnementsList.length - 1, 0))];
 
   const goToPrev = () => {
     setDysfIndex((prev) =>
@@ -1915,6 +1312,43 @@ const Tab5 = ({ processus }) => {
       >
         {processus.dysfonctionnementsDescription ||
           'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.'}
+      </div>
+
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'flex-end',
+          alignItems: 'center',
+          gap: 12,
+          marginBottom: 20,
+        }}
+      >
+        {diagError && (
+          <span style={{ fontSize: 12, color: C.danger }}>
+            Diagnostic indisponible : {diagError}
+          </span>
+        )}
+        <button
+          onClick={onLancerDiagnostic}
+          disabled={diagLoading}
+          style={{
+            padding: '10px 22px',
+            borderRadius: 10,
+            border: 'none',
+            background: C.primary,
+            color: '#fff',
+            fontWeight: 700,
+            fontSize: 13,
+            cursor: diagLoading ? 'default' : 'pointer',
+            opacity: diagLoading ? 0.7 : 1,
+            boxShadow: '0 4px 14px rgba(45,96,79,0.3)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+          }}
+        >
+          🔬 {diagLoading ? 'Analyse en cours…' : 'Lancer le diagnostic SMQ'}
+        </button>
       </div>
 
       <div
@@ -2173,128 +1607,53 @@ const Tab6 = ({ processus }) => (
     <SectionHeader
       num="6"
       title="Déroulement et Modélisation"
-      sub="Étapes chronologiques du processus"
+      sub="Flux d'entrées, déclencheur et flux de sorties du processus"
     />
 
     <div
       style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 12,
-        marginBottom: 24,
+        background: C.white,
+        border: `1px solid ${C.border}`,
+        borderRadius: 12,
+        overflow: 'hidden',
       }}
     >
-      {processus.etapes.map((e, i) => (
-        <div
-          key={i}
-          style={{
-            display: 'flex',
-            gap: 0,
-            background: C.white,
-            border: `1px solid ${C.border}`,
-            borderRadius: 12,
-            overflow: 'hidden',
-          }}
-        >
-          <div
-            style={{
-              width: 52,
-              background: `linear-gradient(180deg, ${C.primary}, ${C.dark})`,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
-            }}
-          >
-            <span
-              style={{
-                fontFamily: "'Outfit',sans-serif",
-                fontWeight: 900,
-                fontSize: 20,
-                color: '#fff',
-              }}
-            >
-              {e.numero}
-            </span>
+      <InfoRow label="Flux d'entrées">
+        {processus.fluxEntrees.length ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {processus.fluxEntrees.map((f, i) => <span key={i}>· {f}</span>)}
           </div>
-          <div style={{ flex: 1, padding: '14px 18px' }}>
-            <div
-              style={{
-                fontSize: 14,
-                fontWeight: 700,
-                color: C.primary,
-                marginBottom: 10,
-                fontFamily: "'Outfit',sans-serif",
-              }}
-            >
-              {e.nom}
-            </div>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(130px,1fr))',
-                gap: '8px 16px',
-                marginBottom: 8,
-              }}
-            >
-              {[
-                { label: 'Acteur', value: e.acteur },
-                { label: 'Durée', value: e.duree },
-                { label: 'Entrée', value: e.entree },
-                { label: 'Sortie', value: e.sortie },
-                { label: 'Document', value: e.document },
-              ].map((f) => (
-                <div key={f.label}>
-                  <div
-                    style={{
-                      fontSize: 10,
-                      fontWeight: 700,
-                      color: C.muted,
-                      textTransform: 'uppercase',
-                      letterSpacing: 0.5,
-                      marginBottom: 2,
-                    }}
-                  >
-                    {f.label}
-                  </div>
-                  <div style={{ fontSize: 12, color: C.text }}>{f.value}</div>
-                </div>
-              ))}
-            </div>
-            {e.description && (
-              <div
-                style={{
-                  fontSize: 12,
-                  color: C.muted,
-                  lineHeight: 1.6,
-                  borderTop: `1px solid ${C.border}`,
-                  paddingTop: 8,
-                }}
-              >
-                {e.description}
-              </div>
-            )}
+        ) : (
+          <span style={{ color: C.muted }}>—</span>
+        )}
+      </InfoRow>
+      <InfoRow label="Flux de sorties" last>
+        {processus.fluxSorties.length ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {processus.fluxSorties.map((f, i) => <span key={i}>· {f}</span>)}
           </div>
-        </div>
-      ))}
+        ) : (
+          <span style={{ color: C.muted }}>—</span>
+        )}
+      </InfoRow>
     </div>
 
     <div style={S.divider} />
     <SectionHeader
       num="6b"
       title="Cartographie BPMN"
-      sub="Diagramme de flux du processus"
+      sub="Modélisez le diagramme de flux du processus"
     />
     <BpmnEditor
-      initialData={BPMN_SAMPLE}
+      initialData={BPMN_VIERGE}
       onChange={(data) => console.log('BPMN updated:', data)}
     />
   </div>
 );
 
 /* ── TAB 7 — Non-conformité et action ── */
-const Tab7 = ({ processus }) => {
-  const [ncData, setNcData] = useState(INIT_NC);
+const Tab7 = ({ processus, nonConformites }) => {
+  const ncData = nonConformites || [];
   const [search, setSearch] = useState('');
   const [statutFilter, setStatutFilter] = useState('Tous');
   const [graviteFilter, setGraviteFilter] = useState('Tous');
@@ -2593,7 +1952,9 @@ const Tab7 = ({ processus }) => {
                     <td style={S.td}>{nc.responsable}</td>
                     <td style={S.td}>
                       <span style={{ fontSize: 12 }}>
-                        {new Date(nc.dateLimit).toLocaleDateString('fr-FR')}
+                        {nc.dateLimit
+                          ? new Date(nc.dateLimit).toLocaleDateString('fr-FR')
+                          : '—'}
                       </span>
                     </td>
                     <td style={S.td}>
@@ -2650,6 +2011,13 @@ const NODE_COLORS = {
   start: { fill: '#C0DD97', stroke: '#3B6D11', text: '#27500A' },
   end: { fill: '#F7C1C1', stroke: '#A32D2D', text: '#791F1F' },
   gateway: { fill: '#FAC775', stroke: '#854F0B', text: '#633806' },
+};
+
+/* Diagramme vierge — l'utilisateur construit son propre BPMN, rien n'est pré-rempli */
+const BPMN_VIERGE = {
+  lanes: [{ id: 'l1', label: 'Lane 1', h: 110 }],
+  nodes: [],
+  edges: [],
 };
 
 const BPMN_SAMPLE = {
@@ -3617,12 +2985,61 @@ export default function FicheProcessus() {
   const [activeTab, setActiveTab] = useState(0);
   const [processus, setProcessus] = useState(null);
   const [loadError, setLoadError] = useState(null);
+  const [dysfonctionnements, setDysfonctionnements] = useState([]);
+  const [diagLoading, setDiagLoading] = useState(false);
+  const [diagError, setDiagError] = useState(null);
+  const [risques, setRisques] = useState([]);
+  const [kpis, setKpis] = useState([]);
+  const [documents, setDocuments] = useState([]);
+  const [nonConformites, setNonConformites] = useState([]);
+  const [revisions, setRevisions] = useState([]);
 
   useEffect(() => {
     api
       .get(`/processus/${id}`)
-      .then((p) => setProcessus(normalizeProcessus(p)))
+      .then((p) => {
+        setProcessus(normalizeProcessus(p));
+        const code = p.code;
+        if (!code) return;
+        api.get(`/risques/?processus_code=${code}`).then(setRisques).catch(() => {});
+        api.get(`/indicateurs/?processus_code=${code}`).then(setKpis).catch(() => {});
+        api.get(`/documents/?processus_code=${code}`).then(setDocuments).catch(() => {});
+      })
       .catch((err) => setLoadError(err.message));
+
+    api.get(`/processus/${id}/revisions`).then(setRevisions).catch(() => {});
+
+    api
+      .get(`/processus/${id}/dysfonctionnements`)
+      .then(setDysfonctionnements)
+      .catch(() => {}); // pas bloquant — la fiche reste utilisable sans diagnostic existant
+  }, [id]);
+
+  /* Non-conformités (Tab7) — dérivées du même run du Moteur Analytique que Tab5 */
+  useEffect(() => {
+    setNonConformites(
+      dysfonctionnements.map((d) => ({
+        id: d.id,
+        ref: d.clause_iso_code ? `§${d.clause_iso_code}` : `DSF-${d.id}`,
+        titre: d.titre,
+        clause: d.clause_iso_code ? `§${d.clause_iso_code}` : '—',
+        gravite: { mineur: 'Mineure', moyen: 'Majeure', majeur: 'Majeure', critique: 'Critique' }[d.gravite] || 'Mineure',
+        statut: { ouvert: 'ouvert', en_cours: 'en_cours', resolu: 'clos' }[d.statut] || 'ouvert',
+        responsable: d.responsable ? `${d.responsable.prenom} ${d.responsable.nom}` : '—',
+        dateLimit: d.echeance || null,
+        action: (d.ameliorations || '').split('\n').filter(Boolean)[0] || '',
+      })),
+    );
+  }, [dysfonctionnements]);
+
+  const handleLancerDiagnostic = useCallback(() => {
+    setDiagLoading(true);
+    setDiagError(null);
+    api
+      .post(`/processus/${id}/diagnostic-smq`)
+      .then((diagnostic) => setDysfonctionnements(diagnostic.dysfonctionnements || []))
+      .catch((err) => setDiagError(err.message))
+      .finally(() => setDiagLoading(false));
   }, [id]);
 
   if (loadError) {
@@ -3653,13 +3070,20 @@ export default function FicheProcessus() {
   }
 
   const tabContents = [
-    <Tab1 key="tab1" processus={processus} />,
-    <Tab2 key="tab2" processus={processus} />,
-    <Tab3 key="tab3" processus={processus} />,
-    <Tab4 key="tab4" processus={processus} />,
-    <Tab5 key="tab5" processus={processus} />,
+    <Tab1 key="tab1" processus={processus} revisions={revisions} />,
+    <Tab2 key="tab2" processus={processus} kpis={kpis} />,
+    <Tab3 key="tab3" processus={processus} risques={risques} />,
+    <Tab4 key="tab4" processus={processus} documents={documents} />,
+    <Tab5
+      key="tab5"
+      processus={processus}
+      dysfonctionnements={dysfonctionnements}
+      onLancerDiagnostic={handleLancerDiagnostic}
+      diagLoading={diagLoading}
+      diagError={diagError}
+    />,
     <Tab6 key="tab6" processus={processus} />,
-    <Tab7 key="tab7" processus={processus} />,
+    <Tab7 key="tab7" processus={processus} nonConformites={nonConformites} />,
   ];
 
   return (
@@ -3680,9 +3104,9 @@ export default function FicheProcessus() {
           title={processus.designation}
           showBack={true}
           onBackClick={() => navigate('/processus')}
-          userName="SILI Lyna"
+          userName={getCurrentUser()?.nom_complet || '—'}
           userRole="Admin"
-          userInitials="SL"
+          userInitials={getInitials(getCurrentUser()?.nom_complet)}
           showNotifications={true}
         />
 
@@ -3723,12 +3147,12 @@ export default function FicheProcessus() {
                 </div>
                 <div style={S.kpiRow}>
                   {[
-                    { num: processus.kpis.length, lbl: 'KPIs' },
+                    { num: kpis.length, lbl: 'KPIs' },
                     {
-                      num: processus.dysfonctionnements?.length || 0,
+                      num: dysfonctionnements.length,
                       lbl: 'Dysfonctionnements',
                     },
-                    { num: processus.risques.length, lbl: 'Risques' },
+                    { num: risques.length, lbl: 'Risques' },
                     {
                       num: `${processus.niveauMaturite || 0}%`,
                       lbl: 'Niveau de Conformité ISO 9001',
@@ -3777,7 +3201,7 @@ export default function FicheProcessus() {
           <button
             type="button"
             style={S.btnEdit}
-            onClick={() => navigate(`/processus/${id}/modifier`)}
+            onClick={() => navigate(`/processus/${id}`)}
           >
             ✏️ Modifier le processus
           </button>

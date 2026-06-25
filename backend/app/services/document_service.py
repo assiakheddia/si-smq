@@ -183,17 +183,15 @@ def creer_document(
     document = Document(
         reference=reference,
         titre=payload.titre,
-        type_document=payload.type_document,
+        type=payload.type_document,
         description=payload.description,
         version=payload.version,
         processus_id=processus_id,
-        tags=payload.tags,
         est_confidentiel=payload.est_confidentiel,
         statut=StatutDocument.brouillon,
-        uploadeur_id=uploadeur.id,
-        minio_path=None,
+        auteur_id=uploadeur.id,
+        chemin_minio=None,
         taille_octets=None,
-        mime_type=None,
     )
     db.add(document)
     db.commit()
@@ -326,11 +324,7 @@ def lister_documents(
         q = q.filter(Document.statut == statut)
 
     if type_document:
-        q = q.filter(Document.type_document == type_document)
-
-    if tag:
-        # Recherche dans le tableau JSON tags (PostgreSQL)
-        q = q.filter(Document.tags.contains([tag]))
+        q = q.filter(Document.type == type_document)
 
     q = q.order_by(Document.date_modification.desc())
     total = q.count()
@@ -396,7 +390,7 @@ def modifier_document(
             detail="Un document archivé ne peut plus être modifié.",
         )
 
-    if document.statut == StatutDocument.valide and not modificateur.peut("valider"):
+    if document.statut == StatutDocument.approuve and not modificateur.peut("valider"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Modification d'un document validé réservée aux pilotes/admins.",
@@ -475,7 +469,7 @@ def changer_statut(
         )
 
     # Validation : fichier obligatoire
-    if nouveau_statut == StatutDocument.valide and not document.minio_path:
+    if nouveau_statut == StatutDocument.approuve and not document.minio_path:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Impossible de valider un document sans fichier uploadé.",
@@ -518,7 +512,7 @@ def supprimer_document(
 
     document = _get_ou_404(db, document_id)
 
-    if document.statut == StatutDocument.valide:
+    if document.statut == StatutDocument.approuve:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(

@@ -24,6 +24,7 @@ from app.models.indicateur import (
     Indicateur, MesureKPI,
     UniteKPI, FrequenceMesure, SourceKPI, SensKPI, StatutAlerte, FormulaKPI,
 )
+from app.models.processus_revision import ProcessusRevision, StatutRevision
 from app.data.clauses_iso_seed import CLAUSES_ISO_SEED
 from app.data.parties_interessees_seed import PARTIES_INTERESSEES_SEED
 from app.core.security import hash_password
@@ -417,6 +418,32 @@ def seed_demo_data(db: Session) -> None:
     )
     db.add_all([proc_inscription, proc_avancement, proc_soutenance])
     db.flush()
+
+    # -------------------------------------------------------------------------
+    # Matrice RACI (§5.3) — appliquée aux 9 processus pour cohérence démo
+    # -------------------------------------------------------------------------
+    raci_roles = ["Pilote", "Qualité", "Direction"]
+    raci_activities = ["Planification", "Mise en œuvre", "Contrôle", "Revue"]
+    raci_cells = {
+        "0-0": "R", "0-1": "C", "0-2": "I",
+        "1-0": "R", "1-1": "C", "1-2": "I",
+        "2-0": "C", "2-1": "R", "2-2": "A",
+        "3-0": "I", "3-1": "C", "3-2": "A",
+    }
+    for p in [
+        proc_labo, proc_budget, proc_integration, proc_achat, proc_kpi,
+        proc_doc, proc_inscription, proc_avancement, proc_soutenance,
+    ]:
+        p.raci_roles = raci_roles
+        p.raci_activities = raci_activities
+        p.raci_cells = raci_cells
+        db.add(ProcessusRevision(
+            processus_id=p.id,
+            version="1.0",
+            auteur_id=p.pilote_id,
+            description="Création initiale",
+            statut=StatutRevision.approuve,
+        ))
 
     # -------------------------------------------------------------------------
     # Diagnostics ISO
@@ -988,6 +1015,19 @@ def seed_demo_data(db: Session) -> None:
         "seed_demo_data : 2 processus BPMN (9 total), 8 utilisateurs, "
         "9 diagnostics, 7 risques, 8 actions, 7 KPIs avec historique — insérés."
     )
+
+    # -------------------------------------------------------------------------
+    # Moteur Analytique — lance un DiagnosticSMQ initial sur les 2 processus
+    # racines pour que Tab5 (Dysfonctionnements) ait des données dès le départ.
+    # Best-effort : une erreur ici ne doit jamais empêcher le démarrage.
+    # -------------------------------------------------------------------------
+    try:
+        from app.services import diagnostic_smq_service
+        for p in [proc_labo, proc_doc]:
+            diagnostic_smq_service.lancer_diagnostic(db, p.id, resp_qualite)
+        logger.info("seed_demo_data : DiagnosticSMQ initial lancé sur PROC-LABO et PROC-DOC.")
+    except Exception as exc:  # noqa: BLE001 — ne bloque jamais le démarrage
+        logger.warning("seed_demo_data : DiagnosticSMQ initial non lancé (%s).", exc)
 
 
 # ---------------------------------------------------------------------------

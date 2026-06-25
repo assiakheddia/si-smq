@@ -27,7 +27,12 @@ from app.core.iso_engine import (
     score_to_type_ecart,
 )
 from app.models.clause_iso import ClauseISO
-from app.models.diagnostic import DiagnosticClause, DiagnosticISO, StatutDiagnostic
+from app.models.diagnostic import (
+    DiagnosticClause,
+    DiagnosticISO,
+    NiveauMaturite,
+    StatutDiagnostic,
+)
 from app.models.processus import Processus
 from app.models.utilisateur import Utilisateur
 from app.schemas.diagnostic import (
@@ -96,25 +101,26 @@ def creer_diagnostic(
         HTTPException 404 — processus introuvable.
     """
     processus = db.query(Processus).filter(
-        Processus.code == payload.processus_code
+        Processus.id == payload.processus_id
     ).first()
     if not processus:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Processus '{payload.processus_code}' introuvable.",
+            detail=f"Processus '{payload.processus_id}' introuvable.",
         )
 
     annee = datetime.now(tz=timezone.utc).year
-    reference = _generer_reference(db, payload.processus_code, annee)
+    reference = _generer_reference(db, processus.code, annee)
 
     diagnostic = DiagnosticISO(
         reference=reference,
         processus_id=processus.id,
-        auditeur_id=auditeur.id,
-        periode=payload.periode,
+        auditeur_id=payload.auditeur_id or auditeur.id,
+        periode_couverte=payload.periode_couverte,
+        commentaire_global=payload.commentaire_global,
         statut=StatutDiagnostic.brouillon,
-        score_global=None,
-        niveau_global=None,
+        score_global=0.0,
+        niveau_global=NiveauMaturite.non_conforme,
     )
     db.add(diagnostic)
     db.flush()  # obtenir l'ID avant de créer les clauses
@@ -129,11 +135,8 @@ def creer_diagnostic(
         dc = DiagnosticClause(
             diagnostic_id=diagnostic.id,
             clause_id=clause.id,
-            score=None,
+            score=0.0,
             type_ecart=None,
-            commentaire=None,
-            recommandation=None,
-            genere_automatiquement=False,
         )
         db.add(dc)
 

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { getCurrentUser, clearTokens } from '../lib/api';
 import { useNavigate, useLocation } from 'react-router-dom';
 
-/* â”€â”€ Navigation per role â”€â”€ */
+/* ── Navigation per role ── */
 const NAV_PREPARATEUR = [
   {
     id: 'dashboard',
@@ -53,7 +53,7 @@ const NAV_PREPARATEUR = [
     id: 'audits',
     path: '/audits',
     label: 'Audits',
-    sub: 'ContrÃ´le qualitÃ©',
+    sub: 'Contrôle qualité',
     icon: (
       <svg
         width="16"
@@ -92,7 +92,7 @@ const NAV_PREPARATEUR = [
   {
     id: 'parametres',
     path: '/parametres',
-    label: 'ParamÃ¨tres',
+    label: 'Paramètres',
     sub: 'Configuration',
     icon: (
       <svg
@@ -138,7 +138,7 @@ const NAV_AUDITEUR_INTERNE = [
   {
     id: 'review',
     path: '/ai/review',
-    label: 'RÃ©vision des fiches',
+    label: 'Révision des fiches',
     sub: 'Fiches soumises',
     icon: (
       <svg
@@ -198,7 +198,7 @@ const NAV_AUDITEUR_INTERNE = [
   {
     id: 'parametres',
     path: '/parametres',
-    label: 'ParamÃ¨tres',
+    label: 'Paramètres',
     sub: 'Configuration',
     icon: (
       <svg
@@ -244,8 +244,8 @@ const NAV_AUDITEUR_EXTERNE = [
   {
     id: 'audits',
     path: '/ae/audits',
-    label: 'Audits assignÃ©s',
-    sub: 'Processus Ã  auditer',
+    label: 'Audits assignés',
+    sub: 'Processus à auditer',
     icon: (
       <svg
         width="16"
@@ -264,8 +264,8 @@ const NAV_AUDITEUR_EXTERNE = [
   {
     id: 'evaluation',
     path: '/ae/evaluation',
-    label: 'Ã‰valuation',
-    sub: 'ConformitÃ© ISO',
+    label: 'Évaluation',
+    sub: 'Conformité ISO',
     icon: (
       <svg
         width="16"
@@ -285,7 +285,7 @@ const NAV_AUDITEUR_EXTERNE = [
   {
     id: 'nonconformites',
     path: '/ae/nonconformites',
-    label: 'Non-conformitÃ©s',
+    label: 'Non-conformités',
     sub: 'Constats & findings',
     icon: (
       <svg
@@ -306,7 +306,7 @@ const NAV_AUDITEUR_EXTERNE = [
     id: 'rapport',
     path: '/ae/rapport',
     label: "Rapport d'audit",
-    sub: 'GÃ©nÃ©ration rapports',
+    sub: 'Génération rapports',
     icon: (
       <svg
         width="16"
@@ -329,7 +329,7 @@ const NAV_DIRECTION = [
     id: 'dashboard',
     path: '/dir/dashboard',
     label: 'Tableau de bord',
-    sub: 'Vue exÃ©cutive',
+    sub: 'Vue exécutive',
     icon: (
       <svg
         width="16"
@@ -352,7 +352,7 @@ const NAV_DIRECTION = [
     id: 'monitoring',
     path: '/dir/monitoring',
     label: 'Supervision globale',
-    sub: 'ActivitÃ© systÃ¨me',
+    sub: 'Activité système',
     icon: (
       <svg
         width="16"
@@ -392,7 +392,7 @@ const NAV_DIRECTION = [
     id: 'kpi',
     path: '/dir/kpi',
     label: 'Analytique KPI',
-    sub: 'Indicateurs avancÃ©s',
+    sub: 'Indicateurs avancés',
     icon: (
       <svg
         width="16"
@@ -411,7 +411,7 @@ const NAV_DIRECTION = [
   {
     id: 'reports',
     path: '/dir/reports',
-    label: 'Rapports stratÃ©giques',
+    label: 'Rapports stratégiques',
     sub: 'Rapports direction',
     icon: (
       <svg
@@ -436,7 +436,7 @@ const NAV_DIRECTION = [
 const ROLE_CONFIG = {
   preparateur: {
     nav: NAV_PREPARATEUR,
-    label: 'PrÃ©parateur',
+    label: 'Préparateur',
     initials: 'PR',
     color: '#2D604F',
   },
@@ -597,7 +597,7 @@ export default function Sidebar({
                     fontFamily: "'Plus Jakarta Sans',sans-serif",
                   }}
                 >
-                  SystÃ¨me QualitÃ©
+                  Système Qualité
                 </div>
               </div>
             )}
@@ -704,7 +704,7 @@ export default function Sidebar({
                   {cfg.label}
                 </div>
                 <div style={{ fontSize: 9.5, color: 'rgba(240,255,244,0.3)' }}>
-                  Se dÃ©connecter
+                  Se déconnecter
                 </div>
               </div>
             )}

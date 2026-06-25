@@ -1,9 +1,68 @@
-import { useState, useCallback, createContext, useContext } from "react";
+import { useState, useCallback, useEffect, createContext, useContext } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import NotificationsPanel, {
   pushNotification,
   getUnreadCount,
 } from "../../components/NotificationsPanel.jsx";
+import { api, getCurrentUser } from "../../lib/api.js";
+
+/* ── Mapping types ↔ libellés du formulaire (cf. backend TypeProcessus) ── */
+const TYPE_FORM_TO_BACKEND = {
+  Management: "strategique",
+  "Réalisation": "operationnel",
+  Soutien: "support",
+};
+const TYPE_BACKEND_TO_FORM = {
+  strategique: "Management",
+  operationnel: "Réalisation",
+  support: "Soutien",
+};
+
+/* ── Backend ProcessusResponse → champs du formulaire local ── */
+function denormalizeProcessus(p) {
+  return {
+    identifiant: p.code || "",
+    designation: p.nom || "",
+    pilote: p.pilote ? `${p.pilote.prenom} ${p.pilote.nom}`.trim() : "",
+    email: p.pilote?.email || "",
+    telephone: p.pilote?.telephone || "",
+    sousDept: p.pilote?.departement || "",
+    typeProcessus: TYPE_BACKEND_TO_FORM[p.type] || "",
+    objectif: p.objectif || "",
+    fluxEntrees: p.entrees ? p.entrees.split("; ") : [""],
+    fluxSorties: p.sorties ? p.sorties.split("; ") : [""],
+    ressourcesMat: p.ressources_cles ? [p.ressources_cles] : [],
+    ...(p.raci_roles && p.raci_activities
+      ? { raci: { roles: p.raci_roles, activities: p.raci_activities, cells: p.raci_cells || {} } }
+      : {}),
+  };
+}
+
+/* ── Formulaire local → payload backend (ProcessusCreate / ProcessusUpdate) ── */
+function buildProcessusPayload(form, { isEdit }) {
+  const entrees = form.fluxEntrees.filter(Boolean).join("; ");
+  const sorties = form.fluxSorties.filter(Boolean).join("; ");
+  const ressources = [...form.ressourcesMat, ...form.ressourcesLog]
+    .filter(Boolean)
+    .join(", ");
+
+  const payload = {
+    nom: form.designation.trim(),
+    type: TYPE_FORM_TO_BACKEND[form.typeProcessus] || null,
+    objectif: form.objectif || null,
+    entrees: entrees || null,
+    sorties: sorties || null,
+    ressources_cles: ressources || null,
+    pilote_nom: form.pilote ? form.pilote.trim() : null,
+    raci_roles: form.raci.roles,
+    raci_activities: form.raci.activities,
+    raci_cells: form.raci.cells,
+  };
+  // Le code affiché côté création est un placeholder local — laisser le
+  // backend en générer un réel. En édition, on renvoie le code existant.
+  if (isEdit) payload.code = form.identifiant;
+  return payload;
+}
 
 /* ═══════════════════════════════════════════════════════════════════
    DESIGN TOKENS
@@ -2012,6 +2071,9 @@ export default function ProcessFormPage() {
   const [auditEmail, setAuditEmail] = useState("");
   const [showNotifs, setShowNotifs] = useState(false);
   const [unreadCount, setUnreadCount] = useState(() => getUnreadCount());
+  const [loadingProcess, setLoadingProcess] = useState(isEdit);
+  const [dbId, setDbId] = useState(id ? Number(id) : null);
+  const [saving, setSaving] = useState(false);
 
   /* ── Validation Helpers ── */
   const validateField = useCallback(
@@ -2121,6 +2183,32 @@ export default function ProcessFormPage() {
     setTimeout(() => setToast(null), 3500);
   };
 
+  /* ── Chargement du processus réel en édition ── */
+  useEffect(() => {
+    if (!isEdit) return;
+    let cancelled = false;
+    api
+      .get(`/processus/${id}`)
+      .then((p) => {
+        if (cancelled) return;
+        setForm((f) => ({ ...f, ...denormalizeProcessus(p) }));
+        setDbId(p.id);
+        setPublished(true);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        showToast(err?.message || "Processus introuvable.", "error");
+        navigate("/processus");
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingProcess(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, isEdit]);
+
   const handleCancel = () => {
     if (dirty) {
       if (
@@ -2132,9 +2220,42 @@ export default function ProcessFormPage() {
     } else navigate("/processus");
   };
 
-  const handleDraft = () => {
-    showToast("Brouillon enregistré ✓");
-    setDirty(false);
+  /* ── Persistance réelle (POST création / PUT mise à jour) ── */
+  const persistProcessus = async () => {
+    const payload = buildProcessusPayload(form, { isEdit: Boolean(dbId) });
+    if (dbId) {
+      return api.put(`/processus/${dbId}`, payload);
+    }
+    return api.post("/processus/", payload);
+  };
+
+  const handleDraft = async () => {
+    if (!isNotEmpty(form.designation)) {
+      showToast(
+        "Donnez au moins une désignation au processus avant d'enregistrer.",
+        "error",
+      );
+      setActiveTab(0);
+      return;
+    }
+    setSaving(true);
+    try {
+      const saved = await persistProcessus();
+      if (!dbId) {
+        setDbId(saved.id);
+        navigate(`/processus/${saved.id}`, { replace: true });
+      }
+      setForm((f) => ({ ...f, identifiant: saved.code || f.identifiant }));
+      setDirty(false);
+      showToast("Brouillon enregistré ✓");
+    } catch (err) {
+      showToast(
+        err?.message || "Erreur lors de l'enregistrement du brouillon.",
+        "error",
+      );
+    } finally {
+      setSaving(false);
+    }
   };
 
   const validateAll = () => {
@@ -2162,28 +2283,32 @@ export default function ProcessFormPage() {
     proceedPublish();
   };
 
-  const proceedPublish = () => {
-    const entry = {
-      id: `pub_${Date.now()}`,
-      nom: form.designation,
-      responsable: form.pilote,
-      tel: form.telephone || "—",
-      email: form.email,
-      dept: form.sousDept,
-      status: "actif",
-    };
-    const stored = JSON.parse(localStorage.getItem("smq_processes") || "[]");
-    stored.push(entry);
-    localStorage.setItem("smq_processes", JSON.stringify(stored));
-    setPublished(true);
-    setDirty(false);
-    pushNotification(
-      "publish",
-      "Processus publié",
-      `Le processus «${form.designation}» a été publié avec succès.`,
-    );
-    setUnreadCount((n) => n + 1);
-    showToast("Processus publié ! Il apparaît maintenant dans la liste. 🎉");
+  const proceedPublish = async () => {
+    setSaving(true);
+    try {
+      const saved = await persistProcessus();
+      if (!dbId) {
+        setDbId(saved.id);
+        navigate(`/processus/${saved.id}`, { replace: true });
+      }
+      setForm((f) => ({ ...f, identifiant: saved.code || f.identifiant }));
+      setPublished(true);
+      setDirty(false);
+      pushNotification(
+        "publish",
+        "Processus publié",
+        `Le processus «${form.designation}» a été publié avec succès.`,
+      );
+      setUnreadCount((n) => n + 1);
+      showToast("Processus publié ! Il apparaît maintenant dans la liste. 🎉");
+    } catch (err) {
+      showToast(
+        err?.message || "Erreur lors de la publication du processus.",
+        "error",
+      );
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleDiagnostic = () => {
@@ -3439,10 +3564,12 @@ export default function ProcessFormPage() {
                 ...styles.btnPublish,
                 padding: "12px 28px",
                 fontSize: 15,
+                opacity: saving ? 0.6 : 1,
               }}
+              disabled={saving}
               onClick={handlePublish}
             >
-              🚀 Publier le processus
+              {saving ? "🚀 Publication…" : "🚀 Publier le processus"}
             </button>
           </div>
         </div>
@@ -3927,6 +4054,14 @@ export default function ProcessFormPage() {
   /* ═══════════════════════════════════════════════════════════════
      RENDER
   ═══════════════════════════════════════════════════════════════ */
+  if (loadingProcess) {
+    return (
+      <div style={{ padding: 40, color: "#6b7280", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+        Chargement…
+      </div>
+    );
+  }
+
   return (
     <FieldCtx.Provider
       value={{
@@ -4028,7 +4163,19 @@ export default function ProcessFormPage() {
                 style={styles.uChip}
                 onClick={() => navigate("/parametres")}
               >
-                <div style={styles.uAv}>AZ</div>
+                <div style={styles.uAv}>
+                  {(() => {
+                    const u = getCurrentUser();
+                    return (
+                      u?.nom_complet
+                        ?.split(" ")
+                        .map((w) => w[0])
+                        .join("")
+                        .toUpperCase()
+                        .slice(0, 2) || "?"
+                    );
+                  })()}
+                </div>
                 <div>
                   <div
                     style={{
@@ -4039,7 +4186,7 @@ export default function ProcessFormPage() {
                       fontFamily: "'Plus Jakarta Sans',sans-serif",
                     }}
                   >
-                    Atir Zineb
+                    {getCurrentUser()?.nom_complet || "—"}
                   </div>
                   <div style={{ fontSize: 10, color: "#9ca3af" }}>Admin</div>
                 </div>
@@ -4209,10 +4356,11 @@ export default function ProcessFormPage() {
               )}
               <button
                 type="button"
-                style={styles.btnDraft}
+                style={{ ...styles.btnDraft, opacity: saving ? 0.6 : 1 }}
+                disabled={saving}
                 onClick={handleDraft}
               >
-                💾 Enregistrer brouillon
+                {saving ? "💾 Enregistrement…" : "💾 Enregistrer brouillon"}
               </button>
               {published && diagDone && !auditSent && (
                 <button
@@ -4230,10 +4378,11 @@ export default function ProcessFormPage() {
               {!published && (
                 <button
                   type="button"
-                  style={styles.btnPublish}
+                  style={{ ...styles.btnPublish, opacity: saving ? 0.6 : 1 }}
+                  disabled={saving}
                   onClick={handlePublish}
                 >
-                  🚀 Publier le processus
+                  {saving ? "🚀 Publication…" : "🚀 Publier le processus"}
                 </button>
               )}
               {published && !diagDone && (

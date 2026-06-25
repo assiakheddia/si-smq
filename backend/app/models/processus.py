@@ -16,7 +16,7 @@ Choix structurels :
 import enum
 from sqlalchemy import (
     Column, Integer, String, Text, Float,
-    ForeignKey, Enum as SAEnum, Boolean, Table
+    ForeignKey, Enum as SAEnum, Boolean, Table, JSON
 )
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -235,6 +235,18 @@ class Processus(Base):
     # BPMN Doctoral → semestriel (rapports d'avancement tous les 6 mois)
 
     # -------------------------------------------------------------------------
+    # Matrice RACI (§5.3 ISO 9001 — responsabilités)
+    # -------------------------------------------------------------------------
+    raci_roles = Column(JSON, nullable=True)
+    # Liste de rôles, ex: ["Pilote", "Qualité", "Direction"]
+
+    raci_activities = Column(JSON, nullable=True)
+    # Liste d'activités, ex: ["Planification", "Mise en œuvre", "Contrôle", "Revue"]
+
+    raci_cells = Column(JSON, nullable=True)
+    # Dict "{activite_index}-{role_index}" -> "R"|"A"|"C"|"I"
+
+    # -------------------------------------------------------------------------
     # Flags
     # -------------------------------------------------------------------------
     est_actif = Column(Boolean, default=True, nullable=False)
@@ -298,6 +310,26 @@ class Processus(Base):
         "Document",
         back_populates="processus",
         cascade="all, delete-orphan",
+    )
+
+    diagnostics_smq = relationship(
+        "DiagnosticSMQ",
+        back_populates="processus",
+        cascade="all, delete-orphan",
+    )
+
+    dysfonctionnements = relationship(
+        "Dysfonctionnement",
+        back_populates="processus",
+        cascade="all, delete-orphan",
+        order_by="Dysfonctionnement.ordre",
+    )
+
+    revisions = relationship(
+        "ProcessusRevision",
+        back_populates="processus",
+        cascade="all, delete-orphan",
+        order_by="ProcessusRevision.date_revision.desc()",
     )
 
     def __repr__(self) -> str:
