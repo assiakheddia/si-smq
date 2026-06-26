@@ -284,6 +284,7 @@ class DiagnosticResponse(_Base):
     nb_clauses_evaluees:  int = Field(default=0)
     nb_clauses_conformes: int = Field(default=0)
     nb_ecarts_majeurs:    int = Field(default=0)
+    nb_ecarts_mineurs:    int = Field(default=0)
     est_actif:            bool
 
 
@@ -374,3 +375,8 @@ class RapportMaturiteResponse(_Base):
 
     # Avertissements ISOEngine (prérequis manquants)
     avertissements_iso:  list[str] = []
+
+
+class EvaluerToutesClausesRequest(_Base):
+    """POST /diagnostics/{id}/evaluer-toutes-clauses — évaluation groupée."""
+    score_cible: float = Field(..., ge=0.0, le=100.0, description="Score cible (%) appliqué à toutes les clauses")

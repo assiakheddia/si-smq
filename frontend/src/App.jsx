@@ -5,7 +5,6 @@ import { getCurrentUser } from "./lib/api";
 const ROLE_HOME = {
   preparateur:      "/dashboard",
   auditeur_interne: "/ai/dashboard",
-  auditeur_externe: "/ae/dashboard",
   direction:        "/dir/dashboard",
 };
 import Login from "./pages/auth/login.jsx";
@@ -26,13 +25,6 @@ import AIDashboard from "./pages/auditeur-interne/Dashboard.jsx";
 import AIReviewFiches from "./pages/auditeur-interne/ReviewFiches.jsx";
 import AIImprovements from "./pages/auditeur-interne/ImprovementRequests.jsx";
 import AIValidation from "./pages/auditeur-interne/ValidationPage.jsx";
-
-/* ── Auditeur Externe ── */
-import AEDashboard from "./pages/auditeur-externe/Dashboard.jsx";
-import AEAssignedAudits from "./pages/auditeur-externe/AssignedAudits.jsx";
-import AEEvaluation from "./pages/auditeur-externe/ProcessEvaluation.jsx";
-import AENonConformities from "./pages/auditeur-externe/NonConformities.jsx";
-import AEReport from "./pages/auditeur-externe/AuditReport.jsx";
 
 /* ── Direction ── */
 import DirDashboard from "./pages/direction/Dashboard.jsx";
@@ -81,15 +73,9 @@ export default function App() {
         {/* ── Auditeur Interne routes ── */}
         <Route path="/ai/dashboard" element={<AppLayout role="auditeur_interne"><AIDashboard /></AppLayout>} />
         <Route path="/ai/review" element={<AppLayout role="auditeur_interne"><AIReviewFiches /></AppLayout>} />
+        <Route path="/ai/fiche-processus/:id" element={<AppLayout role="auditeur_interne"><FicheProcessus /></AppLayout>} />
         <Route path="/ai/improvements" element={<AppLayout role="auditeur_interne"><AIImprovements /></AppLayout>} />
         <Route path="/ai/validation" element={<AppLayout role="auditeur_interne"><AIValidation /></AppLayout>} />
-
-        {/* ── Auditeur Externe routes ── */}
-        <Route path="/ae/dashboard" element={<AppLayout role="auditeur_externe"><AEDashboard /></AppLayout>} />
-        <Route path="/ae/audits" element={<AppLayout role="auditeur_externe"><AEAssignedAudits /></AppLayout>} />
-        <Route path="/ae/evaluation" element={<AppLayout role="auditeur_externe"><AEEvaluation /></AppLayout>} />
-        <Route path="/ae/nonconformites" element={<AppLayout role="auditeur_externe"><AENonConformities /></AppLayout>} />
-        <Route path="/ae/rapport" element={<AppLayout role="auditeur_externe"><AEReport /></AppLayout>} />
 
         {/* ── Direction routes ── */}
         <Route path="/dir/dashboard" element={<AppLayout role="direction"><DirDashboard /></AppLayout>} />

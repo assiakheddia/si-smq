@@ -247,6 +247,12 @@ class Processus(Base):
     # Dict "{activite_index}-{role_index}" -> "R"|"A"|"C"|"I"
 
     # -------------------------------------------------------------------------
+    # Diagramme BPMN (onglet "Déroulement")
+    # -------------------------------------------------------------------------
+    bpmn_data = Column(JSON, nullable=True)
+    # {nodes: [...], edges: [...], lanes: [...]} — produit par BpmnEditor.jsx
+
+    # -------------------------------------------------------------------------
     # Flags
     # -------------------------------------------------------------------------
     est_actif = Column(Boolean, default=True, nullable=False)
@@ -331,6 +337,31 @@ class Processus(Base):
         cascade="all, delete-orphan",
         order_by="ProcessusRevision.date_revision.desc()",
     )
+
+    # -------------------------------------------------------------------------
+    # Compteurs agrégés — toujours recalculés depuis les relations, jamais
+    # stockés en colonne (évite toute désynchronisation avec le détail).
+    # -------------------------------------------------------------------------
+    @property
+    def nb_diagnostics(self) -> int:
+        return len(self.diagnostics)
+
+    @property
+    def nb_sous_processus(self) -> int:
+        return len(self.sous_processus)
+
+    @property
+    def nb_risques_actifs(self) -> int:
+        from app.models.risque import StatutRisque
+        return sum(1 for r in self.risques if r.est_actif and r.statut != StatutRisque.clos)
+
+    @property
+    def nb_actions_ouvertes(self) -> int:
+        from app.models.action import StatutAction
+        return sum(
+            1 for a in self.actions
+            if a.est_active and a.statut not in (StatutAction.close, StatutAction.annulee)
+        )
 
     def __repr__(self) -> str:
         return f"<Processus [{self.code}] {self.nom} — {self.statut}>"

@@ -128,6 +128,25 @@ async function requestBlob(method, path, body) {
   return { blob: await res.blob(), filename };
 }
 
+async function upload(path, formData) {
+  const headers = {};
+  const token = getToken();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  const res = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    headers,
+    body: formData,
+  });
+
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    const message = data?.detail ?? `Erreur ${res.status}`;
+    throw new Error(Array.isArray(message) ? message[0]?.msg : message);
+  }
+  return data;
+}
+
 export const api = {
   get:    (path)        => request("GET",    path),
   post:   (path, body)  => request("POST",   path, body),
@@ -135,4 +154,5 @@ export const api = {
   patch:  (path, body)  => request("PATCH",  path, body),
   delete: (path)        => request("DELETE", path),
   postBlob: (path, body) => requestBlob("POST", path, body),
+  upload,
 };

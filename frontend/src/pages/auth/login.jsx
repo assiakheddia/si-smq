@@ -7,7 +7,6 @@ const ROLES = [
   { id: "preparateur",      label: "Préparateur",       sub: "Gestion des processus",    color: "#2D604F", path: "/dashboard",    initials: "PR" },
   { id: "auditeur_interne", label: "Auditeur Interne",  sub: "Révision & validation",    color: "#1e40af", path: "/ai/dashboard", initials: "AI" },
   { id: "direction",        label: "Direction",          sub: "Supervision stratégique",  color: "#7c3aed", path: "/dir/dashboard",initials: "DR" },
-  { id: "auditeur_externe", label: "Auditeur Externe",  sub: "Audit ISO externe",        color: "#b45309", path: "/ae/dashboard", initials: "AE" },
 ];
 
 

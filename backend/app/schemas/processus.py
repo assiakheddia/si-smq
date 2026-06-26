@@ -103,6 +103,9 @@ class ProcessusBase(_Base):
     raci_cells:      dict[str, str] | None = Field(default=None,
                                               description='Cellules "{activite}-{role}" -> R|A|C|I')
 
+    bpmn_data:       dict | None = Field(default=None,
+                                         description="Diagramme BPMN {nodes, edges, lanes} — onglet Déroulement")
+
     @field_validator("code")
     @classmethod
     def code_uppercase(cls, v: str | None) -> str | None:
@@ -178,6 +181,7 @@ class ProcessusUpdate(_Base):
     raci_roles:      list[str] | None = None
     raci_activities: list[str] | None = None
     raci_cells:      dict[str, str] | None = None
+    bpmn_data:       dict | None = None
     # Si fourni → remplace complètement la liste des parties (PUT sémantique sur la relation)
     # Si None   → liste des parties inchangée
 

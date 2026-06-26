@@ -551,18 +551,19 @@ function TabDashboard({ audits, ncs }) {
 
 /* ── Tab: Programme & Calendrier (Fusionné) ──────────────────────────── */
 function TabProgrammeCalendrier({ audits }) {
+  const today = new Date();
   const [viewMode, setViewMode] = useState("calendar");
-  const [curMonth, setCurMonth] = useState(4);
+  const [curMonth, setCurMonth] = useState(today.getMonth());
+  const [year, setYear] = useState(today.getFullYear());
   const [filterProcessus, setFilterProcessus] = useState("Tous");
   const [filterType, setFilterType] = useState("Tous");
   const [filterStatut, setFilterStatut] = useState("Tous");
-  
+
   const MONTHS = [
     "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
     "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre",
   ];
   const DAYS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
-  const year = 2026;
 
   // Get unique processus from audits
   const processusList = ["Tous", ...new Set(audits.map(a => a.processus).filter(Boolean))];
@@ -741,7 +742,14 @@ function TabProgrammeCalendrier({ audits }) {
               </div>
               <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                 <button
-                  onClick={() => setCurMonth((m) => Math.max(0, m - 1))}
+                  onClick={() => {
+                    if (curMonth === 0) {
+                      setCurMonth(11);
+                      setYear((y) => y - 1);
+                    } else {
+                      setCurMonth((m) => m - 1);
+                    }
+                  }}
                   style={{
                     width: 30,
                     height: 30,
@@ -762,7 +770,14 @@ function TabProgrammeCalendrier({ audits }) {
                   {MONTHS[curMonth]}
                 </span>
                 <button
-                  onClick={() => setCurMonth((m) => Math.min(11, m + 1))}
+                  onClick={() => {
+                    if (curMonth === 11) {
+                      setCurMonth(0);
+                      setYear((y) => y + 1);
+                    } else {
+                      setCurMonth((m) => m + 1);
+                    }
+                  }}
                   style={{
                     width: 30,
                     height: 30,

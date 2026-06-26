@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import Topbar from "../../components/Topbar.jsx";
 import { api, getCurrentUser } from "../../lib/api.js";
 
@@ -34,13 +35,44 @@ function FicheDetail({ fiche, onClose, onActionDone }) {
   const [showCorrForm, setShowCorrForm] = useState(false);
   const [submitted, setSubmitted] = useState({ obs: false, corr: false });
   const [saving, setSaving] = useState(false);
+  const [scoreCible, setScoreCible] = useState(85);
+  const [evaluating, setEvaluating] = useState(false);
+  const [submittingDiag, setSubmittingDiag] = useState(false);
+  const [evalError, setEvalError] = useState("");
+
+  const reloadDetail = () => api.get(`/diagnostics/${fiche.id}`).then(setDetail).catch(() => {});
 
   useEffect(() => {
-    api.get(`/diagnostics/${fiche.id}`)
-      .then(setDetail)
-      .catch(() => setDetail(null))
-      .finally(() => setLoading(false));
+    reloadDetail().finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fiche.id]);
+
+  const evaluerToutesClauses = async () => {
+    setEvaluating(true);
+    setEvalError("");
+    try {
+      await api.post(`/diagnostics/${fiche.id}/evaluer-toutes-clauses`, { score_cible: Number(scoreCible) });
+      await reloadDetail();
+      onActionDone?.();
+    } catch (err) {
+      setEvalError(err?.message || "Erreur lors de l'évaluation des clauses.");
+    } finally {
+      setEvaluating(false);
+    }
+  };
+
+  const soumettreDiagnostic = async () => {
+    setSubmittingDiag(true);
+    try {
+      await api.post(`/diagnostics/${fiche.id}/soumettre`, {});
+      await reloadDetail();
+      onActionDone?.();
+    } catch (err) {
+      setEvalError(err?.message || "Erreur lors de la soumission.");
+    } finally {
+      setSubmittingDiag(false);
+    }
+  };
 
   const clauses = detail?.clauses_evaluees || [];
   const isoClauses = [...new Set(clauses.map((c) => c.clause?.code).filter(Boolean))];
@@ -109,6 +141,32 @@ function FicheDetail({ fiche, onClose, onActionDone }) {
             </div>
           </div>
 
+          {detail?.statut === "brouillon" && (
+            <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 10, padding: 16, marginBottom: 20 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#1e40af", marginBottom: 8 }}>
+                Évaluation des clauses ISO ({detail?.nb_clauses_evaluees ?? 0} clauses)
+              </div>
+              <div style={{ fontSize: 12, color: "#4b6358", marginBottom: 12 }}>
+                Note les {detail?.nb_clauses_evaluees ?? 0} clauses ISO autour d'un score cible (avec une dispersion réaliste), pour produire une évaluation complète sans saisie clause par clause.
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <label style={{ fontSize: 12, color: "#1e40af", fontWeight: 600 }}>Score cible (%)</label>
+                <input
+                  type="number" min={0} max={100} value={scoreCible}
+                  onChange={(e) => setScoreCible(e.target.value)}
+                  style={{ width: 70, padding: "6px 10px", borderRadius: 8, border: "1px solid #bfdbfe", fontSize: 13 }}
+                />
+                <button onClick={evaluerToutesClauses} disabled={evaluating} style={S.btn("#fff", "#2563eb")}>
+                  {evaluating ? "Évaluation…" : "Évaluer toutes les clauses"}
+                </button>
+                <button onClick={soumettreDiagnostic} disabled={submittingDiag || (detail?.nb_clauses_evaluees ?? 0) === 0} style={S.btn("#fff", "#166534")}>
+                  {submittingDiag ? "Soumission…" : "Soumettre pour validation"}
+                </button>
+              </div>
+              {evalError && <div style={{ color: "#991b1b", fontSize: 12, marginTop: 8 }}>{evalError}</div>}
+            </div>
+          )}
+
           <div style={{ marginBottom: 20 }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: "#1a2e22", marginBottom: 10 }}>Écarts identifiés</div>
             {ecarts.length === 0 ? (
@@ -170,6 +228,7 @@ function FicheDetail({ fiche, onClose, onActionDone }) {
 }
 
 export default function ReviewFiches() {
+  const navigate = useNavigate();
   const user = getCurrentUser();
   const initials = (user?.nom_complet || "").split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase() || "??";
 
@@ -253,6 +312,12 @@ export default function ReviewFiches() {
                   <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                     <span style={{ background: "#1e40af22", color: "#1e40af", borderRadius: 6, padding: "3px 10px", fontSize: 11, fontWeight: 800 }}>{fiche.reference || `#${fiche.id}`}</span>
                     <Badge status={fiche.status} />
+                    <button
+                      onClick={() => navigate(`/ai/fiche-processus/${fiche.processus_id}`)}
+                      style={{ background: "#fff", color: "#2D604F", border: "1px solid #2D604F", borderRadius: 8, padding: "7px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}
+                    >
+                      📄 Voir la fiche complète
+                    </button>
                     <button
                       onClick={() => setExpanded(expanded === fiche.id ? null : fiche.id)}
                       style={{ background: expanded === fiche.id ? "#f0fdf4" : "#2D604F", color: expanded === fiche.id ? "#2D604F" : "#fff", border: `1px solid ${expanded === fiche.id ? "#86efac" : "#2D604F"}`, borderRadius: 8, padding: "7px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}

@@ -51,9 +51,11 @@ function BarChart({ data, labels, width=380, height=80, color="#3b82f6" }) {
 }
 
 const STATUS_BADGE = {
-  "actif":     { bg:"#dcfce7", color:"#166534", label:"Actif" },
-  "inactif":   { bg:"#f3f4f6", color:"#374151", label:"Inactif" },
-  "brouillon": { bg:"#f3f4f6", color:"#374151", label:"Brouillon" },
+  non_demarre:  { color: "#6b7280", bg: "#f3f4f6", label: "Non démarré" },
+  en_cours:     { color: "#92400e", bg: "#fef3c7", label: "En cours" },
+  conforme:     { color: "#166534", bg: "#dcfce7", label: "Conforme" },
+  non_conforme: { color: "#991b1b", bg: "#fee2e2", label: "Non conforme" },
+  suspendu:     { color: "#6b7280", bg: "#f3f4f6", label: "Suspendu" },
 };
 
 const S = {
@@ -201,7 +203,7 @@ export default function DirDashboard() {
               </thead>
               <tbody>
                 {processTable.map((p, i) => {
-                  const bs = STATUS_BADGE[p.status] || STATUS_BADGE["brouillon"];
+                  const bs = STATUS_BADGE[p.status] || STATUS_BADGE.non_demarre;
                   return (
                     <tr key={i} style={{ borderBottom:"1px solid #f8f9fa" }}>
                       <td style={{ padding:"13px 14px", fontWeight:700, color:"#1a2e22" }}>{p.name}</td>

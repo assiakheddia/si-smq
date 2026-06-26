@@ -53,7 +53,7 @@ class TypeDocument(str, Enum):
 # Validators réutilisables
 # ---------------------------------------------------------------------------
 
-_RE_CODE_PROCESSUS = re.compile(r"^PROC-[A-Z]+-[A-Z]+(-[A-Z]+)*$")
+_RE_CODE_PROCESSUS = re.compile(r"^PROC-[A-Z0-9]+(-[A-Z0-9]+)*$")
 
 
 def _valider_code_processus(v: str | None) -> str | None:
@@ -63,7 +63,7 @@ def _valider_code_processus(v: str | None) -> str | None:
     if not _RE_CODE_PROCESSUS.match(v):
         raise ValueError(
             f"Code processus invalide : '{v}'. "
-            "Format attendu : PROC-LABO-ACHAT, PROC-DOC-AVANCEMENT, etc."
+            "Format attendu : PROC-LABO-ACHAT, PROC-001, PROC-DOC-AVANCEMENT, etc."
         )
     return v
 

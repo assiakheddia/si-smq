@@ -22,7 +22,6 @@ from sqlalchemy.orm import Session
 
 from app.core.iso_engine import (
     calcul_score_global,
-    get_recommandation_auto,
     score_to_niveau,
     score_to_type_ecart,
 )
@@ -34,7 +33,7 @@ from app.models.diagnostic import (
     StatutDiagnostic,
 )
 from app.models.processus import Processus
-from app.models.utilisateur import Utilisateur
+from app.models.utilisateur import RoleEnum, Utilisateur
 from app.schemas.diagnostic import (
     DiagnosticCreate,
     DiagnosticUpdate,
@@ -242,24 +241,32 @@ def evaluer_clause(
         .first()
     )
 
-    type_ecart = score_to_type_ecart(payload.score)
-    recommandation = payload.recommandation or get_recommandation_auto(
-        clause.code, payload.score
-    )
+    type_ecart = payload.type_ecart or score_to_type_ecart(payload.score)
+    niveau = score_to_niveau(payload.score)
 
     if dc:
         dc.score = payload.score
+        dc.niveau = niveau
         dc.type_ecart = type_ecart
-        dc.commentaire = payload.commentaire
-        dc.recommandation = recommandation
+        dc.description_ecart = payload.description_ecart
+        dc.preuves_existantes = payload.preuves_existantes
+        dc.recommandation_manuelle = payload.recommandation_manuelle
+        if payload.poids is not None:
+            dc.poids = payload.poids
+        if payload.est_applicable is not None:
+            dc.est_applicable = payload.est_applicable
     else:
         dc = DiagnosticClause(
             diagnostic_id=diagnostic_id,
             clause_id=clause_id,
             score=payload.score,
+            niveau=niveau,
             type_ecart=type_ecart,
-            commentaire=payload.commentaire,
-            recommandation=recommandation,
+            description_ecart=payload.description_ecart,
+            preuves_existantes=payload.preuves_existantes,
+            recommandation_manuelle=payload.recommandation_manuelle,
+            poids=payload.poids if payload.poids is not None else 1.0,
+            est_applicable=payload.est_applicable if payload.est_applicable is not None else True,
         )
         db.add(dc)
 
@@ -275,6 +282,67 @@ def evaluer_clause(
         clause.code, payload.score, type_ecart, diagnostic.reference, evaluateur.email,
     )
     return dc
+
+
+def evaluer_toutes_clauses(
+    db: Session,
+    diagnostic_id: int,
+    score_cible: float,
+    evaluateur: Utilisateur,
+) -> DiagnosticISO:
+    """
+    Évalue en une fois toutes les clauses applicables d'un diagnostic autour
+    d'un score cible (avec une légère dispersion réaliste plutôt qu'un score
+    identique partout), recalcule le score global, et retourne le diagnostic.
+
+    Permet à l'auditeur de produire une évaluation complète sans avoir à
+    noter manuellement chacune des ~85 clauses ISO une par une — il peut
+    ensuite affiner clause par clause via PATCH /clauses/{clause_id} si besoin.
+
+    Raises:
+        HTTPException 404 — diagnostic introuvable.
+        HTTPException 400 — diagnostic non modifiable (statut autre que brouillon).
+        HTTPException 400 — score_cible hors plage [0, 100].
+    """
+    import random
+
+    if not (0 <= score_cible <= 100):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Le score cible doit être compris entre 0 et 100.",
+        )
+
+    diagnostic = _get_ou_404(db, diagnostic_id)
+    _verifier_statut_modifiable(diagnostic)
+
+    clauses = (
+        db.query(DiagnosticClause)
+        .filter(DiagnosticClause.diagnostic_id == diagnostic_id)
+        .all()
+    )
+    if not clauses:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Ce diagnostic n'a aucune clause à évaluer.",
+        )
+
+    rng = random.Random(f"{diagnostic.reference}-{score_cible}")
+    for dc in clauses:
+        score = max(0.0, min(100.0, rng.gauss(score_cible, 6)))
+        dc.score = score
+        dc.niveau = score_to_niveau(score)
+        dc.type_ecart = score_to_type_ecart(score)
+
+    db.flush()
+    _recalculer_score_global(db, diagnostic)
+    db.commit()
+    db.refresh(diagnostic)
+
+    logger.info(
+        "Évaluation groupée de %d clause(s) du diagnostic %s (cible=%.0f%%) par %s",
+        len(clauses), diagnostic.reference, score_cible, evaluateur.email,
+    )
+    return diagnostic
 
 
 def modifier_clause(
@@ -309,13 +377,14 @@ def modifier_clause(
                 detail="Le score doit être compris entre 0 et 100.",
             )
         dc.score = payload.score
+        dc.niveau = score_to_niveau(payload.score)
         dc.type_ecart = score_to_type_ecart(payload.score)
 
-    if payload.commentaire is not None:
-        dc.commentaire = payload.commentaire
-
-    if payload.recommandation is not None:
-        dc.recommandation = payload.recommandation
+    for champ in ["poids", "est_applicable", "type_ecart", "description_ecart",
+                  "preuves_existantes", "recommandation_manuelle"]:
+        valeur = getattr(payload, champ, None)
+        if valeur is not None:
+            setattr(dc, champ, valeur)
 
     _recalculer_score_global(db, diagnostic)
     db.commit()
@@ -342,21 +411,11 @@ def _recalculer_score_global(db: Session, diagnostic: DiagnosticISO) -> None:
     )
 
     if not clauses_evaluees:
-        diagnostic.score_global = None
-        diagnostic.niveau_global = None
+        diagnostic.score_global = 0.0
+        diagnostic.niveau_global = score_to_niveau(0.0)
         return
 
-    # Construire la structure attendue par iso_engine
-    clauses_dict = [
-        {
-            "code": dc.clause.code if dc.clause else "",
-            "score": dc.score,
-            "est_applicable": True,
-        }
-        for dc in clauses_evaluees
-    ]
-
-    score = calcul_score_global(clauses_dict)
+    score = calcul_score_global(clauses_evaluees)
     diagnostic.score_global = score
     diagnostic.niveau_global = score_to_niveau(score)
 
@@ -366,10 +425,11 @@ def _recalculer_score_global(db: Session, diagnostic: DiagnosticISO) -> None:
 # ---------------------------------------------------------------------------
 
 _TRANSITIONS_VALIDES = {
-    StatutDiagnostic.brouillon: [StatutDiagnostic.soumis],
-    StatutDiagnostic.soumis:    [StatutDiagnostic.valide, StatutDiagnostic.brouillon],
-    StatutDiagnostic.valide:    [StatutDiagnostic.archive],
-    StatutDiagnostic.archive:   [],
+    StatutDiagnostic.brouillon:     [StatutDiagnostic.soumis],
+    StatutDiagnostic.soumis:        [StatutDiagnostic.valide, StatutDiagnostic.brouillon],
+    StatutDiagnostic.valide:        [StatutDiagnostic.audit_externe],
+    StatutDiagnostic.audit_externe: [StatutDiagnostic.archive],
+    StatutDiagnostic.archive:       [],
 }
 
 
@@ -382,10 +442,12 @@ def changer_statut(
 ) -> DiagnosticISO:
     """
     Transitions workflow :
-      brouillon → soumis       (contributeur+)
-      soumis    → valide        (pilote/admin)
-      soumis    → brouillon     (renvoi en correction — pilote/admin)
-      valide    → archive       (admin)
+      brouillon     → soumis           (contributeur+)
+      soumis        → valide           (auditeur interne / direction — validation interne,
+                                         prêt pour audit externe)
+      soumis        → brouillon        (renvoi en correction — auditeur interne / direction)
+      valide        → audit_externe    (direction uniquement — lancer_audit_externe())
+      audit_externe → archive          (admin)
 
     Raises:
         HTTPException 400 — transition invalide.
@@ -404,7 +466,13 @@ def changer_statut(
         )
 
     # Vérification des droits selon la transition
-    if nouveau_statut in (StatutDiagnostic.valide, StatutDiagnostic.archive):
+    if nouveau_statut == StatutDiagnostic.audit_externe:
+        if demandeur.role != RoleEnum.direction:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Le lancement de l'audit externe est réservé à la Direction.",
+            )
+    elif nouveau_statut in (StatutDiagnostic.valide, StatutDiagnostic.archive):
         if not demandeur.peut("valider"):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -446,6 +514,50 @@ def changer_statut(
     return diagnostic
 
 
+def lancer_audit_externe_global(db: Session, demandeur: Utilisateur) -> list[DiagnosticISO]:
+    """
+    Lance l'audit externe pour l'organisme entier en une seule campagne :
+    bascule TOUS les diagnostics actuellement 'valide' (validés en interne)
+    vers 'audit_externe' en une fois.
+
+    En ISO 9001, l'audit externe (certification) porte sur le périmètre
+    complet du SMQ — il n'y a pas d'audit externe "par processus" séparé.
+
+    Raises:
+        HTTPException 403 — réservé à la Direction.
+        HTTPException 400 — aucun diagnostic validé en interne à inclure.
+    """
+    if demandeur.role != RoleEnum.direction:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Le lancement de l'audit externe est réservé à la Direction.",
+        )
+
+    diagnostics = (
+        db.query(DiagnosticISO)
+        .filter(DiagnosticISO.statut == StatutDiagnostic.valide)
+        .all()
+    )
+    if not diagnostics:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Aucun diagnostic validé en interne — rien à inclure dans l'audit externe.",
+        )
+
+    for diagnostic in diagnostics:
+        diagnostic.statut = StatutDiagnostic.audit_externe
+
+    db.commit()
+    for diagnostic in diagnostics:
+        db.refresh(diagnostic)
+
+    logger.info(
+        "Audit externe lancé pour %d processus par %s",
+        len(diagnostics), demandeur.email,
+    )
+    return diagnostics
+
+
 # ---------------------------------------------------------------------------
 # §6 — Génération automatique risques/actions depuis écarts
 # ---------------------------------------------------------------------------
@@ -462,7 +574,8 @@ def _generer_entites_depuis_ecarts(
 
     Import différé pour éviter les imports circulaires.
     """
-    from app.models.action import Action, StatutAction
+    from app.core.iso_engine import calcul_rpn, rpn_to_criticite
+    from app.models.action import Action, OrigineAction, StatutAction
     from app.models.risque import Risque, StatutRisque
 
     clauses_ecart = (
@@ -490,12 +603,19 @@ def _generer_entites_depuis_ecarts(
                 .filter(Risque.reference.like(f"RSQ-{annee}-{code_proc}-%"))
                 .count()
             )
+            clause_code = dc.clause.code if dc.clause else dc.clause_id
+            probabilite, gravite, detectabilite = 3, 4, 3
             risque = Risque(
                 reference=f"RSQ-{annee}-{code_proc}-{nb_risques_existants + nb_risques + 1:03d}",
+                titre=f"Écart majeur — clause {clause_code}",
                 processus_id=diagnostic.processus_id,
-                clause_origine_id=dc.clause_id,
-                diagnostic_id=diagnostic.id,
-                description=f"Risque issu de l'écart majeur — clause {dc.clause.code if dc.clause else dc.clause_id}",
+                diagnostic_clause_id=dc.id,
+                probabilite=probabilite,
+                gravite=gravite,
+                detectabilite=detectabilite,
+                rpn=calcul_rpn(probabilite, gravite, detectabilite),
+                criticite=rpn_to_criticite(calcul_rpn(probabilite, gravite, detectabilite)),
+                description=f"Risque issu de l'écart majeur — clause {clause_code}",
                 statut=StatutRisque.identifie,
                 genere_automatiquement=True,
             )
@@ -508,14 +628,16 @@ def _generer_entites_depuis_ecarts(
             .filter(Action.reference.like(f"ACT-{annee}-{code_proc}-%"))
             .count()
         )
+        clause_code = dc.clause.code if dc.clause else dc.clause_id
         action = Action(
             reference=f"ACT-{annee}-{code_proc}-{nb_actions_existantes + nb_actions + 1:03d}",
+            titre=f"Corriger l'écart — clause {clause_code}",
             processus_id=diagnostic.processus_id,
-            clause_origine_id=dc.clause_id,
-            diagnostic_id=diagnostic.id,
-            description=dc.recommandation or f"Action corrective — clause {dc.clause.code if dc.clause else dc.clause_id}",
+            diagnostic_clause_id=dc.id,
+            origine=OrigineAction.diagnostic,
+            description=dc.recommandation_manuelle or dc.recommandation_auto or f"Action corrective — clause {clause_code}",
             statut=StatutAction.planifiee,
-            genere_automatiquement=True,
+            generee_automatiquement=True,
         )
         db.add(action)
         nb_actions += 1

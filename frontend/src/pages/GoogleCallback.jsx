@@ -33,7 +33,6 @@ export default function GoogleCallback() {
     const roleDest = {
       preparateur: "/dashboard",
       auditeur_interne: "/ai/dashboard",
-      auditeur_externe: "/ae/dashboard",
       direction: "/dir/dashboard",
     };
     const dest = roleDest[user?.role];

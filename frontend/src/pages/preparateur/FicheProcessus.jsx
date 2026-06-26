@@ -43,6 +43,7 @@ function normalizeProcessus(p) {
     moyensAlloues:       p.ressources_cles ? p.ressources_cles.split('\n').filter(Boolean) : [],
     documentsDescription: '',
     dysfonctionnementsDescription: '',
+    bpmnData:            p.bpmn_data || null,
     /* raw counts for header badges */
     nb_diagnostics:      p.nb_diagnostics      || 0,
     nb_risques_actifs:   p.nb_risques_actifs   || 0,
@@ -1185,8 +1186,11 @@ const Tab4 = ({ processus, documents }) => {
           border: `1px solid ${C.border}`,
         }}
       >
-        {processus.documentsDescription ||
-          'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.'}
+        {processus.documentsDescription || (
+          <span style={{ color: C.muted, fontStyle: 'italic' }}>
+            Aucune description renseignée pour les documents de ce processus.
+          </span>
+        )}
       </div>
 
       <div style={{ marginBottom: 20 }}>
@@ -1310,8 +1314,11 @@ const Tab5 = ({ processus, dysfonctionnements, onLancerDiagnostic, diagLoading, 
           border: `1px solid ${C.border}`,
         }}
       >
-        {processus.dysfonctionnementsDescription ||
-          'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.'}
+        {processus.dysfonctionnementsDescription || (
+          <span style={{ color: C.muted, fontStyle: 'italic' }}>
+            Aucun dysfonctionnement renseigné pour ce processus.
+          </span>
+        )}
       </div>
 
       <div
@@ -1645,18 +1652,75 @@ const Tab6 = ({ processus }) => (
       sub="Modélisez le diagramme de flux du processus"
     />
     <BpmnEditor
-      initialData={BPMN_VIERGE}
-      onChange={(data) => console.log('BPMN updated:', data)}
+      initialData={processus.bpmnData || BPMN_VIERGE}
+      onChange={() => {}}
     />
   </div>
 );
 
+const ncInputStyle = {
+  padding: '8px 12px',
+  borderRadius: 8,
+  border: `1.5px solid ${C.border}`,
+  fontSize: 13,
+  outline: 'none',
+  fontFamily: "'Plus Jakarta Sans', sans-serif",
+};
+
 /* ── TAB 7 — Non-conformité et action ── */
-const Tab7 = ({ processus, nonConformites }) => {
+const Tab7 = ({ processus, processusId, nonConformites, onActionAdded }) => {
   const ncData = nonConformites || [];
   const [search, setSearch] = useState('');
   const [statutFilter, setStatutFilter] = useState('Tous');
   const [graviteFilter, setGraviteFilter] = useState('Tous');
+  const isAuditeurInterne = getCurrentUser()?.role === 'auditeur_interne';
+  const [ncForm, setNcForm] = useState({ clause: '', titre: '', description: '', gravite: 'haute', action: '' });
+  const [ncSaving, setNcSaving] = useState(false);
+  const [ncError, setNcError] = useState('');
+  const [editingEcheance, setEditingEcheance] = useState(null);
+  const [echeanceDraft, setEcheanceDraft] = useState('');
+  const [echeanceSaving, setEcheanceSaving] = useState(false);
+
+  const saveEcheance = async (ncId) => {
+    const actionId = ncId.replace('act-', '');
+    setEcheanceSaving(true);
+    try {
+      await api.put(`/actions/${actionId}`, {
+        date_echeance: echeanceDraft ? `${echeanceDraft}T00:00:00` : null,
+      });
+      setEditingEcheance(null);
+      onActionAdded?.();
+    } catch {
+      // laisse le champ ouvert pour réessayer
+    } finally {
+      setEcheanceSaving(false);
+    }
+  };
+
+  const submitNc = async () => {
+    if (!ncForm.titre.trim() || !ncForm.action.trim()) {
+      setNcError('Le titre et la recommandation sont obligatoires.');
+      return;
+    }
+    setNcSaving(true);
+    setNcError('');
+    try {
+      await api.post('/actions/', {
+        titre: ncForm.clause ? `${ncForm.clause} — ${ncForm.titre}` : ncForm.titre,
+        description: `${ncForm.description ? ncForm.description + '\n\n' : ''}Action recommandée : ${ncForm.action}`,
+        type: 'corrective',
+        priorite: ncForm.gravite,
+        processus_id: parseInt(processusId),
+        origine: 'audit_interne',
+      });
+      setNcForm({ clause: '', titre: '', description: '', gravite: 'haute', action: '' });
+      onActionAdded?.();
+    } catch (err) {
+      setNcError(err?.message || "Erreur lors de l'ajout de la non-conformité.");
+    } finally {
+      setNcSaving(false);
+    }
+  };
 
   const statuts = ['Tous', 'ouvert', 'en_cours', 'clos'];
   const gravites = ['Tous', 'Mineure', 'Majeure', 'Critique'];
@@ -1726,6 +1790,81 @@ const Tab7 = ({ processus, nonConformites }) => {
         en place pour y remédier. Chaque non-conformité est suivie jusqu'à sa
         clôture complète.
       </div>
+
+      {isAuditeurInterne && (
+        <div
+          style={{
+            background: C.white,
+            border: `1.5px solid ${C.border}`,
+            borderRadius: 12,
+            padding: '18px 20px',
+            marginBottom: 24,
+          }}
+        >
+          <div style={{ fontWeight: 700, fontSize: 13, color: C.text, marginBottom: 12 }}>
+            ➕ Ajouter une non-conformité
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 10, marginBottom: 10 }}>
+            <input
+              placeholder="Clause ISO (ex : §5)"
+              value={ncForm.clause}
+              onChange={(e) => setNcForm((f) => ({ ...f, clause: e.target.value }))}
+              style={ncInputStyle}
+            />
+            <input
+              placeholder="Titre de la non-conformité (ex : Absence de définition de la politique qualité et des objectifs qualité)"
+              value={ncForm.titre}
+              onChange={(e) => setNcForm((f) => ({ ...f, titre: e.target.value }))}
+              style={ncInputStyle}
+            />
+          </div>
+          <textarea
+            placeholder="Description de l'écart constaté…"
+            value={ncForm.description}
+            onChange={(e) => setNcForm((f) => ({ ...f, description: e.target.value }))}
+            rows={2}
+            style={{ ...ncInputStyle, width: '100%', marginBottom: 10, fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+          />
+          <textarea
+            placeholder="Action corrective recommandée…"
+            value={ncForm.action}
+            onChange={(e) => setNcForm((f) => ({ ...f, action: e.target.value }))}
+            rows={2}
+            style={{ ...ncInputStyle, width: '100%', marginBottom: 10, fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+          />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <select
+              value={ncForm.gravite}
+              onChange={(e) => setNcForm((f) => ({ ...f, gravite: e.target.value }))}
+              style={ncInputStyle}
+            >
+              <option value="faible">Mineure</option>
+              <option value="normale">Modérée</option>
+              <option value="haute">Majeure</option>
+              <option value="critique">Critique</option>
+            </select>
+            <button
+              type="button"
+              disabled={ncSaving}
+              onClick={submitNc}
+              style={{
+                padding: '8px 18px',
+                borderRadius: 9,
+                border: 'none',
+                background: C.primary,
+                color: 'white',
+                fontWeight: 700,
+                fontSize: 12,
+                cursor: ncSaving ? 'not-allowed' : 'pointer',
+                opacity: ncSaving ? 0.7 : 1,
+              }}
+            >
+              {ncSaving ? 'Ajout…' : 'Ajouter la non-conformité'}
+            </button>
+            {ncError && <span style={{ color: C.danger, fontSize: 12 }}>{ncError}</span>}
+          </div>
+        </div>
+      )}
 
       {/* Filter bar */}
       <div
@@ -1951,11 +2090,69 @@ const Tab7 = ({ processus, nonConformites }) => {
                     </td>
                     <td style={S.td}>{nc.responsable}</td>
                     <td style={S.td}>
-                      <span style={{ fontSize: 12 }}>
-                        {nc.dateLimit
-                          ? new Date(nc.dateLimit).toLocaleDateString('fr-FR')
-                          : '—'}
-                      </span>
+                      {editingEcheance === nc.id ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <input
+                            type="date"
+                            value={echeanceDraft}
+                            onChange={(e) => setEcheanceDraft(e.target.value)}
+                            style={{
+                              fontSize: 12,
+                              padding: '3px 6px',
+                              borderRadius: 6,
+                              border: `1px solid ${C.border}`,
+                            }}
+                          />
+                          <button
+                            type="button"
+                            disabled={echeanceSaving}
+                            onClick={() => saveEcheance(nc.id)}
+                            style={{
+                              fontSize: 11,
+                              fontWeight: 700,
+                              color: '#fff',
+                              background: C.primary,
+                              border: 'none',
+                              borderRadius: 6,
+                              padding: '3px 8px',
+                              cursor: echeanceSaving ? 'not-allowed' : 'pointer',
+                            }}
+                          >
+                            ✓
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingEcheance(null)}
+                            style={{
+                              fontSize: 11,
+                              color: C.muted,
+                              background: 'none',
+                              border: 'none',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ) : (
+                        <span
+                          style={{
+                            fontSize: 12,
+                            cursor: nc.id.startsWith('act-') ? 'pointer' : 'default',
+                          }}
+                          title={nc.id.startsWith('act-') ? "Cliquer pour modifier l'échéance" : undefined}
+                          onClick={() => {
+                            if (!nc.id.startsWith('act-')) return;
+                            setEditingEcheance(nc.id);
+                            setEcheanceDraft(nc.dateLimit ? nc.dateLimit.slice(0, 10) : '');
+                          }}
+                        >
+                          {nc.dateLimit
+                            ? new Date(nc.dateLimit).toLocaleDateString('fr-FR')
+                            : '—'}
+                          {nc.id.startsWith('act-') && <span style={{ marginLeft: 4, color: C.muted }}>✎</span>}
+                        </span>
+                      )}
                     </td>
                     <td style={S.td}>
                       <span
@@ -2993,6 +3190,11 @@ export default function FicheProcessus() {
   const [documents, setDocuments] = useState([]);
   const [nonConformites, setNonConformites] = useState([]);
   const [revisions, setRevisions] = useState([]);
+  const [actions, setActions] = useState([]);
+
+  const refetchActions = useCallback(() => {
+    api.get(`/actions/?processus_id=${id}`).then(setActions).catch(() => {});
+  }, [id]);
 
   useEffect(() => {
     api
@@ -3013,24 +3215,37 @@ export default function FicheProcessus() {
       .get(`/processus/${id}/dysfonctionnements`)
       .then(setDysfonctionnements)
       .catch(() => {}); // pas bloquant — la fiche reste utilisable sans diagnostic existant
-  }, [id]);
 
-  /* Non-conformités (Tab7) — dérivées du même run du Moteur Analytique que Tab5 */
+    refetchActions();
+  }, [id, refetchActions]);
+
+  /* Non-conformités (Tab7) — Actions réelles (dont celles levées par l'auditeur interne)
+     + dysfonctionnements détectés par le moteur analytique (Tab5) */
   useEffect(() => {
-    setNonConformites(
-      dysfonctionnements.map((d) => ({
-        id: d.id,
-        ref: d.clause_iso_code ? `§${d.clause_iso_code}` : `DSF-${d.id}`,
-        titre: d.titre,
-        clause: d.clause_iso_code ? `§${d.clause_iso_code}` : '—',
-        gravite: { mineur: 'Mineure', moyen: 'Majeure', majeur: 'Majeure', critique: 'Critique' }[d.gravite] || 'Mineure',
-        statut: { ouvert: 'ouvert', en_cours: 'en_cours', resolu: 'clos' }[d.statut] || 'ouvert',
-        responsable: d.responsable ? `${d.responsable.prenom} ${d.responsable.nom}` : '—',
-        dateLimit: d.echeance || null,
-        action: (d.ameliorations || '').split('\n').filter(Boolean)[0] || '',
-      })),
-    );
-  }, [dysfonctionnements]);
+    const fromActions = actions.map((a) => ({
+      id: `act-${a.id}`,
+      ref: a.reference || `ACT-${a.id}`,
+      titre: a.titre,
+      clause: a.diagnostic_clause?.clause_code ? `§${a.diagnostic_clause.clause_code}` : '—',
+      gravite: { faible: 'Mineure', normale: 'Mineure', haute: 'Majeure', critique: 'Critique' }[a.priorite] || 'Mineure',
+      statut: { planifiee: 'ouvert', en_cours: 'en_cours', en_verification: 'en_cours', close: 'clos', annulee: 'clos' }[a.statut] || 'ouvert',
+      responsable: a.responsable ? `${a.responsable.prenom} ${a.responsable.nom}` : '—',
+      dateLimit: a.date_echeance || null,
+      action: a.description || '',
+    }));
+    const fromDysf = dysfonctionnements.map((d) => ({
+      id: `dsf-${d.id}`,
+      ref: d.clause_iso_code ? `§${d.clause_iso_code}` : `DSF-${d.id}`,
+      titre: d.titre,
+      clause: d.clause_iso_code ? `§${d.clause_iso_code}` : '—',
+      gravite: { mineur: 'Mineure', moyen: 'Majeure', majeur: 'Majeure', critique: 'Critique' }[d.gravite] || 'Mineure',
+      statut: { ouvert: 'ouvert', en_cours: 'en_cours', resolu: 'clos' }[d.statut] || 'ouvert',
+      responsable: d.responsable ? `${d.responsable.prenom} ${d.responsable.nom}` : '—',
+      dateLimit: d.echeance || null,
+      action: (d.ameliorations || '').split('\n').filter(Boolean)[0] || '',
+    }));
+    setNonConformites([...fromActions, ...fromDysf]);
+  }, [actions, dysfonctionnements]);
 
   const handleLancerDiagnostic = useCallback(() => {
     setDiagLoading(true);
@@ -3083,7 +3298,13 @@ export default function FicheProcessus() {
       diagError={diagError}
     />,
     <Tab6 key="tab6" processus={processus} />,
-    <Tab7 key="tab7" processus={processus} nonConformites={nonConformites} />,
+    <Tab7
+      key="tab7"
+      processus={processus}
+      processusId={id}
+      nonConformites={nonConformites}
+      onActionAdded={refetchActions}
+    />,
   ];
 
   return (

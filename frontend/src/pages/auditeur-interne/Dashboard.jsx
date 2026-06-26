@@ -68,9 +68,8 @@ export default function AIDashboard() {
   const valides = diagnostics.filter((d) => d.statut === "valide");
   const correctionsDemandees = actions.filter((a) => a.type === "corrective" && a.statut !== "close" && a.statut !== "annulee");
 
-  const totalEvaluees = diagnostics.reduce((sum, d) => sum + (d.nb_clauses_evaluees || 0), 0);
-  const totalConformes = diagnostics.reduce((sum, d) => sum + (d.nb_clauses_conformes || 0), 0);
-  const tauxConformite = totalEvaluees > 0 ? Math.round((totalConformes / totalEvaluees) * 100) : 0;
+  const scores = diagnostics.filter((d) => d.score_global > 0).map((d) => d.score_global);
+  const tauxConformite = scores.length ? Math.round(scores.reduce((s, v) => s + v, 0) / scores.length) : 0;
 
   const KPI = [
     { label: "Fiches en attente", value: String(soumis.length), sub: "En attente de révision", color: "#92400e", bg: "#fef3c7", icon: "⏳" },

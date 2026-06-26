@@ -20,10 +20,10 @@ function ConfirmModal({ fiche, onConfirm, onClose, validating }) {
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 9000, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ background: "#fff", borderRadius: 16, padding: 32, maxWidth: 460, width: "90%", boxShadow: "0 24px 64px rgba(0,0,0,0.2)" }}>
         <div style={{ fontSize: 40, textAlign: "center", marginBottom: 16 }}>✅</div>
-        <h3 style={{ fontSize: 18, fontWeight: 800, color: "#1a2e22", textAlign: "center", marginBottom: 8 }}>Confirmer la validation interne</h3>
+        <h3 style={{ fontSize: 18, fontWeight: 800, color: "#1a2e22", textAlign: "center", marginBottom: 8 }}>Confirmer la validation pour l'audit externe</h3>
         <p style={{ fontSize: 13, color: "#5a7a66", textAlign: "center", marginBottom: 24, lineHeight: 1.6 }}>
-          Vous êtes sur le point de valider internement la fiche <strong>"{fiche.name}"</strong>.<br />
-          Elle sera marquée comme conforme et pourra être autorisée pour l'audit externe.
+          Vous êtes sur le point de valider en interne la fiche <strong>"{fiche.name}"</strong>.<br />
+          Elle sera marquée comme conforme et transmise à la Direction, seule habilitée à lancer l'audit externe.
         </p>
         <div style={{ background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 10, padding: "12px 16px", marginBottom: 24 }}>
           <div style={{ fontSize: 12, color: "#166534" }}>
@@ -47,7 +47,6 @@ export default function ValidationPage() {
   const [loading, setLoading] = useState(true);
   const [confirmFiche, setConfirmFiche] = useState(null);
   const [validating, setValidating] = useState(false);
-  const [authorizedIds, setAuthorizedIds] = useState([]);
 
   const load = () => {
     Promise.all([
@@ -85,10 +84,6 @@ export default function ValidationPage() {
     }
   };
 
-  const toggleAuthorize = (id) => {
-    setAuthorizedIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
-  };
-
   const validated = fiches.filter((f) => f.status === "validated");
   const ready = fiches.filter((f) => f.status === "ready");
   const pendingObs = fiches.filter((f) => f.status === "pending-obs");
@@ -112,11 +107,10 @@ export default function ValidationPage() {
       <Topbar title="Validation interne" userName={user?.nom_complet || "—"} userRole="Auditeur Interne" userInitials={initials} />
       <div style={S.inner}>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, marginBottom: 28 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 16, marginBottom: 28 }}>
           {[
             { label: "En attente de validation", value: ready.length, color: "#92400e", bg: "#fef3c7" },
-            { label: "Validées internement", value: validated.length, color: "#166534", bg: "#dcfce7" },
-            { label: "Autorisées pour audit externe", value: authorizedIds.length, color: "#1e40af", bg: "#dbeafe" },
+            { label: "Validées — transmises à la Direction", value: validated.length, color: "#166534", bg: "#dcfce7" },
           ].map((s) => (
             <div key={s.label} style={{ ...S.card, display: "flex", alignItems: "center", gap: 16, borderLeft: `4px solid ${s.color}` }}>
               <div style={{ fontSize: 36, fontWeight: 800, color: s.color }}>{s.value}</div>
@@ -155,7 +149,7 @@ export default function ValidationPage() {
                     <td style={{ padding: "14px 12px" }}><ScoreBadge score={f.score} /></td>
                     <td style={{ padding: "14px 12px" }}>
                       <button onClick={() => setConfirmFiche(f)} style={{ background: "#2D604F", color: "#fff", border: "none", borderRadius: 8, padding: "7px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-                        ✅ Valider internement
+                        ✅ Valider pour audit externe
                       </button>
                     </td>
                   </tr>
@@ -185,31 +179,18 @@ export default function ValidationPage() {
         {validated.length > 0 && (
           <div style={S.card}>
             <div style={{ fontSize: 15, fontWeight: 700, color: "#166534", marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
-              <span>✅</span> Validées internement ({validated.length})
+              <span>✅</span> Validées — en attente de lancement de l'audit externe par la Direction ({validated.length})
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {validated.map((f) => {
-                const isAuth = authorizedIds.includes(f.id);
-                return (
-                  <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 16, padding: "16px 20px", background: isAuth ? "#f0fdf4" : "#fafafa", borderRadius: 10, border: `1px solid ${isAuth ? "#86efac" : "#e8f0eb"}`, flexWrap: "wrap" }}>
-                    <div style={{ flex: 1, minWidth: 160 }}>
-                      <div style={{ fontWeight: 700, color: "#1a2e22" }}>{f.name}</div>
-                      <div style={{ fontSize: 12, color: "#9ca3af" }}>{f.owner} · Score : {Math.round(f.score)}%</div>
-                    </div>
-                    <span style={{ background: "#dcfce7", color: "#166534", borderRadius: 20, padding: "3px 12px", fontSize: 11, fontWeight: 700 }}>Validé ✓</span>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <span style={{ fontSize: 12, color: "#4b6358", fontWeight: 600 }}>Autoriser pour audit externe</span>
-                      <div
-                        onClick={() => toggleAuthorize(f.id)}
-                        style={{ width: 44, height: 24, borderRadius: 12, background: isAuth ? "#22c55e" : "#d1d5db", cursor: "pointer", position: "relative", transition: "background 0.2s" }}
-                      >
-                        <div style={{ position: "absolute", top: 3, left: isAuth ? 22 : 3, width: 18, height: 18, borderRadius: "50%", background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.2)", transition: "left 0.2s" }} />
-                      </div>
-                      {isAuth && <span style={{ fontSize: 11, color: "#166534", fontWeight: 700 }}>✓ Autorisé</span>}
-                    </div>
+              {validated.map((f) => (
+                <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 16, padding: "16px 20px", background: "#fafafa", borderRadius: 10, border: "1px solid #e8f0eb", flexWrap: "wrap" }}>
+                  <div style={{ flex: 1, minWidth: 160 }}>
+                    <div style={{ fontWeight: 700, color: "#1a2e22" }}>{f.name}</div>
+                    <div style={{ fontSize: 12, color: "#9ca3af" }}>{f.owner} · Score : {Math.round(f.score)}%</div>
                   </div>
-                );
-              })}
+                  <span style={{ background: "#dcfce7", color: "#166534", borderRadius: 20, padding: "3px 12px", fontSize: 11, fontWeight: 700 }}>Validé ✓</span>
+                </div>
+              ))}
             </div>
           </div>
         )}

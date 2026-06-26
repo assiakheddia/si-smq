@@ -30,17 +30,33 @@ export default function AuditManagement() {
   const user = getCurrentUser();
   const [diagnostics, setDiagnostics] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [launching, setLaunching] = useState(null);
 
-  useEffect(() => {
+  const reload = () => {
     api.get("/diagnostics/").catch(() => []).then((diags) => {
       setDiagnostics(Array.isArray(diags) ? diags : (diags?.items || []));
       setLoading(false);
     });
-  }, []);
+  };
+
+  useEffect(() => { reload(); }, []);
 
   const ready = diagnostics.filter(d => d.statut === "soumis");
-  const inProgress = diagnostics.filter(d => d.statut === "brouillon");
-  const completed = diagnostics.filter(d => ["valide","archive"].includes(d.statut));
+  const readyForExternal = diagnostics.filter(d => d.statut === "valide");
+  const inExternalAudit = diagnostics.filter(d => d.statut === "audit_externe");
+  const completed = diagnostics.filter(d => d.statut === "archive");
+
+  const lancerAuditExterneGlobal = async () => {
+    setLaunching(true);
+    try {
+      await api.post("/diagnostics/lancer-audit-externe", {});
+      reload();
+    } catch (err) {
+      window.alert(err?.message || "Erreur lors du lancement de l'audit externe.");
+    } finally {
+      setLaunching(false);
+    }
+  };
 
   return (
     <div style={S.page}>
@@ -48,21 +64,21 @@ export default function AuditManagement() {
       <div style={S.inner}>
 
         <div style={{ marginBottom:24 }}>
-          <h1 style={{ fontSize:20, fontWeight:800, color:"#1a2e22", marginBottom:4 }}>Gestion des audits (diagnostics ISO)</h1>
-          <p style={{ fontSize:13, color:"#5a7a66" }}>Vue d'ensemble des diagnostics ISO 9001 réalisés par les auditeurs.</p>
+          <h1 style={{ fontSize:20, fontWeight:800, color:"#1a2e22", marginBottom:4 }}>Gestion des audits</h1>
+          <p style={{ fontSize:13, color:"#5a7a66" }}>Vue d'ensemble des audits ISO 9001 réalisés par les auditeurs.</p>
         </div>
 
         <div style={S.card}>
           <div style={{ fontSize:15, fontWeight:700, color:"#1a2e22", marginBottom:16, display:"flex", alignItems:"center", gap:8 }}>
             <span style={{ width:10, height:10, borderRadius:"50%", background:"#1e40af", display:"inline-block" }} />
-            Soumis — en attente de validation ({ready.length})
+            Soumis — en attente de validation interne ({ready.length})
           </div>
           {loading ? (
             <div style={{ textAlign:"center", padding:"32px 20px", color:"#9ca3af" }}>Chargement...</div>
           ) : ready.length === 0 ? (
             <div style={{ textAlign:"center", padding:"32px 20px", color:"#9ca3af" }}>
               <div style={{ fontSize:28, marginBottom:8 }}>✅</div>
-              <div style={{ fontWeight:600 }}>Aucun diagnostic en attente.</div>
+              <div style={{ fontWeight:600 }}>Aucun audit en attente.</div>
             </div>
           ) : (
             <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
@@ -89,30 +105,60 @@ export default function AuditManagement() {
         </div>
 
         <div style={S.card}>
-          <div style={{ fontSize:15, fontWeight:700, color:"#1e40af", marginBottom:16 }}>🔄 Diagnostics en brouillon ({inProgress.length})</div>
-          {inProgress.length === 0 ? (
-            <div style={{ textAlign:"center", padding:"20px", color:"#9ca3af" }}>Aucun diagnostic en cours.</div>
-          ) : inProgress.map((d) => (
-            <div key={d.id} style={{ display:"flex", alignItems:"center", gap:14, padding:"14px 0", borderBottom:"1px solid #f0f2f4", flexWrap:"wrap" }}>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16, flexWrap:"wrap", gap:10 }}>
+            <div style={{ fontSize:15, fontWeight:700, color:"#1e40af" }}>🚀 Validés en interne — prêts pour l'audit externe ({readyForExternal.length})</div>
+            {readyForExternal.length > 0 && (
+              <button
+                type="button"
+                disabled={launching}
+                onClick={lancerAuditExterneGlobal}
+                style={{ ...S.btn("#fff", "#1e40af"), padding:"10px 20px", fontSize:13 }}
+              >
+                {launching ? "Lancement…" : `🚀 Lancer l'audit externe (${readyForExternal.length} processus)`}
+              </button>
+            )}
+          </div>
+          {ready.length > 0 && readyForExternal.length > 0 && (
+            <div style={{ background:"#fef3c7", border:"1px solid #fde68a", borderRadius:10, padding:"10px 14px", marginBottom:14, fontSize:12, color:"#92400e" }}>
+              ⚠ {ready.length} processus sont encore en attente de validation interne et ne seront pas inclus dans cet audit externe.
+            </div>
+          )}
+          {readyForExternal.length === 0 ? (
+            <div style={{ textAlign:"center", padding:"20px", color:"#9ca3af" }}>Aucun audit prêt pour l'audit externe.</div>
+          ) : (
+            <div style={{ fontSize:12, color:"#6b8c75", marginBottom:8 }}>
+              L'audit externe ISO 9001 porte sur le périmètre complet du SMQ — un seul lancement couvre tous les processus ci-dessous.
+            </div>
+          )}
+          {readyForExternal.map((d) => (
+            <div key={d.id} style={{ display:"flex", alignItems:"center", gap:14, padding:"10px 0", borderBottom:"1px solid #f0f2f4", flexWrap:"wrap" }}>
               <div style={{ flex:1, minWidth:180 }}>
                 <div style={{ fontWeight:700, color:"#1a2e22" }}>{d.processus?.nom || "—"}</div>
-                <div style={{ fontSize:12, color:"#6b8c75" }}>Auditeur : {d.auditeur ? `${d.auditeur.prenom} ${d.auditeur.nom}` : "—"} · {d.periode_couverte || "—"}</div>
+                <div style={{ fontSize:12, color:"#6b8c75" }}>Auditeur : {d.auditeur ? `${d.auditeur.prenom} ${d.auditeur.nom}` : "—"} · Score {Math.round(d.score_global)}%</div>
               </div>
-              <div style={{ display:"flex", alignItems:"center", gap:8, minWidth:140 }}>
-                <div style={{ flex:1, height:8, background:"#f0f2f4", borderRadius:4, overflow:"hidden" }}>
-                  <div style={{ width:`${Math.min(100, d.nb_clauses_evaluees ? Math.round((d.nb_clauses_conformes / d.nb_clauses_evaluees) * 100) : 0)}%`, height:"100%", background:"#3b82f6", borderRadius:4 }} />
-                </div>
-                <span style={{ fontSize:12, fontWeight:700, color:"#1e40af" }}>{d.nb_clauses_evaluees} clauses</span>
-              </div>
-              <span style={{ background:"#dbeafe", color:"#1e40af", borderRadius:20, padding:"2px 12px", fontSize:11, fontWeight:700 }}>Brouillon</span>
             </div>
           ))}
         </div>
 
         <div style={S.card}>
-          <div style={{ fontSize:15, fontWeight:700, color:"#166534", marginBottom:16 }}>✅ Diagnostics validés / archivés ({completed.length})</div>
+          <div style={{ fontSize:15, fontWeight:700, color:"#92400e", marginBottom:16 }}>🔍 Audit externe en cours ({inExternalAudit.length})</div>
+          {inExternalAudit.length === 0 ? (
+            <div style={{ textAlign:"center", padding:"20px", color:"#9ca3af" }}>Aucun audit externe en cours.</div>
+          ) : inExternalAudit.map((d) => (
+            <div key={d.id} style={{ display:"flex", alignItems:"center", gap:14, padding:"12px 0", borderBottom:"1px solid #f0f2f4", flexWrap:"wrap" }}>
+              <div style={{ flex:1, minWidth:180 }}>
+                <div style={{ fontWeight:700, color:"#1a2e22" }}>{d.processus?.nom || "—"}</div>
+                <div style={{ fontSize:12, color:"#6b8c75" }}>Auditeur : {d.auditeur ? `${d.auditeur.prenom} ${d.auditeur.nom}` : "—"}</div>
+              </div>
+              <span style={{ background:"#fef3c7", color:"#92400e", borderRadius:20, padding:"2px 12px", fontSize:11, fontWeight:700 }}>Audit externe en cours</span>
+            </div>
+          ))}
+        </div>
+
+        <div style={S.card}>
+          <div style={{ fontSize:15, fontWeight:700, color:"#166534", marginBottom:16 }}>✅ Audits archivés ({completed.length})</div>
           {completed.length === 0 ? (
-            <div style={{ textAlign:"center", padding:"20px", color:"#9ca3af" }}>Aucun diagnostic clôturé.</div>
+            <div style={{ textAlign:"center", padding:"20px", color:"#9ca3af" }}>Aucun audit clôturé.</div>
           ) : completed.map((d) => {
             const verdict = verdictFor(d.score_global);
             const vs = VERDICT_STYLE[verdict];

@@ -75,34 +75,38 @@ def creer_indicateur(
         HTTPException 400 — formula_kpi absente pour source auto.
         HTTPException 404 — processus introuvable.
     """
-    if payload.source in (SourceKPI.auto, SourceKPI.mixte) and not payload.formula_kpi:
+    if payload.source in (SourceKPI.auto, SourceKPI.mixte) and not payload.formule:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Une formula_kpi est requise pour les indicateurs à calcul automatique.",
+            detail="Une formule est requise pour les indicateurs à calcul automatique.",
         )
 
-    processus_id = None
-    if payload.processus_code:
-        processus = _get_processus_ou_none(db, payload.processus_code)
+    if payload.processus_id is not None:
+        processus = db.query(Processus).filter(Processus.id == payload.processus_id).first()
         if not processus:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Processus '{payload.processus_code}' introuvable.",
+                detail=f"Processus {payload.processus_id} introuvable.",
             )
-        processus_id = processus.id
 
     indicateur = Indicateur(
         nom=payload.nom,
         description=payload.description,
+        code=payload.code,
         unite=payload.unite,
+        unite_custom=payload.unite_custom,
+        sens=payload.sens,
+        frequence=payload.frequence,
         source=payload.source,
-        formula_kpi=payload.formula_kpi,
-        cible=payload.cible,
-        seuil_alerte_bas=payload.seuil_alerte_bas,
-        seuil_alerte_haut=payload.seuil_alerte_haut,
-        processus_id=processus_id,
+        formule=payload.formule,
+        valeur_initiale=payload.valeur_initiale,
+        valeur_cible=payload.valeur_cible,
+        seuil_attention=payload.seuil_attention,
+        seuil_alerte=payload.seuil_alerte,
+        processus_id=payload.processus_id,
         responsable_id=payload.responsable_id,
-        est_actif=True,
+        est_actif=payload.est_actif,
+        afficher_dashboard=payload.afficher_dashboard,
     )
     db.add(indicateur)
     db.commit()
@@ -161,9 +165,10 @@ def modifier_indicateur(
     indicateur = _get_indicateur_ou_404(db, indicateur_id)
 
     for champ in [
-        "nom", "description", "unite", "cible",
-        "seuil_alerte_bas", "seuil_alerte_haut",
-        "responsable_id", "est_actif",
+        "nom", "description", "code", "unite", "unite_custom", "sens",
+        "frequence", "source", "formule", "valeur_initiale", "valeur_cible",
+        "seuil_attention", "seuil_alerte", "responsable_id", "est_actif",
+        "afficher_dashboard",
     ]:
         valeur = getattr(payload, champ, None)
         if valeur is not None:

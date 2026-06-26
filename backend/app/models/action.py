@@ -278,6 +278,22 @@ class Action(Base):
         foreign_keys=[verificateur_id],
     )
 
+    # -------------------------------------------------------------------------
+    # Indicateurs de retard — toujours recalculés depuis date_echeance,
+    # jamais stockés en colonne (évite toute désynchronisation).
+    # -------------------------------------------------------------------------
+    @property
+    def jours_restants(self) -> int | None:
+        if not self.date_echeance:
+            return None
+        return (self.date_echeance - datetime.utcnow()).days
+
+    @property
+    def est_en_retard(self) -> bool:
+        if not self.date_echeance or self.statut in (StatutAction.close, StatutAction.annulee):
+            return False
+        return self.date_echeance < datetime.utcnow()
+
     def __repr__(self) -> str:
         return (
             f"<Action [{self.reference}] "

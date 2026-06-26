@@ -215,6 +215,7 @@ def creer_processus(
         raci_roles=payload.raci_roles,
         raci_activities=payload.raci_activities,
         raci_cells=payload.raci_cells,
+        bpmn_data=payload.bpmn_data,
     )
     db.add(processus)
     db.flush()
@@ -332,7 +333,7 @@ def modifier_processus(
         "nom", "description", "objectif", "type", "statut",
         "frequence_cycle", "declencheur", "entrees", "sorties",
         "ressources_cles", "ordre", "est_actif",
-        "raci_roles", "raci_activities", "raci_cells",
+        "raci_roles", "raci_activities", "raci_cells", "bpmn_data",
     ]:
         valeur = getattr(payload, champ, None)
         if valeur is not None:

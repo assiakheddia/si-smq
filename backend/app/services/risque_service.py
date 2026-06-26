@@ -101,40 +101,35 @@ def creer_risque(
         HTTPException 400 — scores P/G/D hors plage [1, 10].
     """
     processus = db.query(Processus).filter(
-        Processus.code == payload.processus_code
+        Processus.id == payload.processus_id
     ).first()
     if not processus:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Processus '{payload.processus_code}' introuvable.",
+            detail=f"Processus {payload.processus_id} introuvable.",
         )
 
-    for champ, valeur in [
-        ("probabilite", payload.probabilite),
-        ("gravite", payload.gravite),
-        ("detectabilite", payload.detectabilite),
-    ]:
-        if valeur is not None and not (1 <= valeur <= 10):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"'{champ}' doit être compris entre 1 et 10.",
-            )
-
     annee = datetime.now(tz=timezone.utc).year
-    reference = _generer_reference(db, payload.processus_code, annee)
+    reference = _generer_reference(db, processus.code, annee)
 
     risque = Risque(
         reference=reference,
         processus_id=processus.id,
+        titre=payload.titre,
         description=payload.description,
-        cause=payload.cause,
-        effet=payload.effet,
+        type=payload.type,
         probabilite=payload.probabilite,
         gravite=payload.gravite,
         detectabilite=payload.detectabilite,
+        plan_attenuation=payload.plan_attenuation,
+        risque_residuel=payload.risque_residuel,
+        rpn_cible=payload.rpn_cible,
+        strategie=payload.strategie,
+        date_echeance=payload.date_echeance,
+        diagnostic_clause_id=payload.diagnostic_clause_id,
         statut=StatutRisque.identifie,
         responsable_id=payload.responsable_id,
-        genere_automatiquement=False,
+        genere_automatiquement=payload.genere_automatiquement,
     )
     _appliquer_rpn(risque)
     db.add(risque)
@@ -156,7 +151,7 @@ def _creer_action_depuis_risque(
     db: Session, risque: Risque, createur: Utilisateur
 ) -> None:
     """Crée automatiquement une action corrective pour un risque critique."""
-    from app.models.action import Action, StatutAction
+    from app.models.action import Action, OrigineAction, StatutAction
 
     annee = datetime.now(tz=timezone.utc).year
     processus = db.query(Processus).filter(
@@ -174,12 +169,14 @@ def _creer_action_depuis_risque(
     )
     action = Action(
         reference=f"ACT-{annee}-{code_proc}-{count + 1:03d}",
+        titre=f"Traiter le risque critique {risque.reference}",
         processus_id=risque.processus_id,
         risque_id=risque.id,
+        origine=OrigineAction.risque,
         description=f"Action corrective — risque critique {risque.reference}",
         statut=StatutAction.planifiee,
         priorite=priorite,
-        genere_automatiquement=True,
+        generee_automatiquement=True,
     )
     db.add(action)
     db.commit()
@@ -257,7 +254,10 @@ def modifier_risque(
         )
 
     rpn_modifie = False
-    for champ in ["description", "cause", "effet", "responsable_id"]:
+    for champ in [
+        "titre", "description", "type", "plan_attenuation", "risque_residuel",
+        "rpn_cible", "strategie", "date_echeance", "responsable_id", "est_actif",
+    ]:
         valeur = getattr(payload, champ, None)
         if valeur is not None:
             setattr(risque, champ, valeur)
@@ -265,11 +265,6 @@ def modifier_risque(
     for champ in ["probabilite", "gravite", "detectabilite"]:
         valeur = getattr(payload, champ, None)
         if valeur is not None:
-            if not (1 <= valeur <= 10):
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"'{champ}' doit être compris entre 1 et 10.",
-                )
             setattr(risque, champ, valeur)
             rpn_modifie = True
 

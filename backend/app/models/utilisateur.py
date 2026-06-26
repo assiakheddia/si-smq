@@ -10,10 +10,16 @@ Ajouts par rapport à la version initiale :
   - Matrice de permissions par rôle documentée ici (référence pour les services)
 
 Rôles et périmètres (alignés sur les espaces applicatifs du frontend) :
-  direction        → accès total, supervision stratégique, gestion des utilisateurs
+  direction        → accès total, supervision stratégique, gestion des utilisateurs,
+                     lance l'audit externe une fois un diagnostic validé en interne
   preparateur       → pilote un ou plusieurs processus, saisit diagnostics/risques/actions/KPI
-  auditeur_interne  → audits internes : évalue, valide les diagnostics, lève des actions
-  auditeur_externe  → audit ISO externe : évalue les processus, lecture étendue, pas de validation
+  auditeur_interne  → audits internes : évalue, valide les diagnostics (prêt pour audit externe),
+                     lève des actions / non-conformités
+
+Le rôle "auditeur_externe" a été retiré : l'application prépare les processus
+à la certification ISO 9001 mais ne réalise plus l'audit de certification
+externe lui-même — celui-ci est désormais simplement "lancé" par la Direction
+une fois le diagnostic validé en interne (cf. StatutDiagnostic.audit_externe).
 """
 
 import enum
@@ -38,24 +44,23 @@ class RoleEnum(str, enum.Enum):
 
     Matrice de permissions (appliquée dans les services, pas en DB) :
 
-    Ressource              │direction│preparateur│auditeur_interne│auditeur_externe
-    ───────────────────────┼─────────┼───────────┼────────────────┼─────────────────
-    Utilisateurs           │   CRUD  │     R     │       R        │        R
-    Processus              │   CRUD  │     RU    │       R        │        R
-    DiagnosticISO          │   CRUD  │    CRU    │      CRU       │       CR
-    DiagnosticClause       │   CRUD  │    CRU    │      CRU       │       CR
-    Risque                 │   CRUD  │    CRUD   │       CR       │        R
-    Action                 │   CRUD  │    CRUD   │       CR       │        R
-    Indicateur              │   CRUD  │    CRU    │       R        │        R
-    MesureKPI               │   CRUD  │    CRUD   │       R        │        R
-    Document                │   CRUD  │    CRUD   │       R        │        R
-    ClauseISO                │   CRU   │     R     │       R        │        R
+    Ressource              │direction│preparateur│auditeur_interne
+    ───────────────────────┼─────────┼───────────┼────────────────
+    Utilisateurs           │   CRUD  │     R     │       R
+    Processus              │   CRUD  │     RU    │       R
+    DiagnosticISO          │   CRUD  │    CRU    │      CRU
+    DiagnosticClause       │   CRUD  │    CRU    │      CRU
+    Risque                 │   CRUD  │    CRUD   │       CR
+    Action                 │   CRUD  │    CRUD   │       CR
+    Indicateur              │   CRUD  │    CRU    │       R
+    MesureKPI               │   CRUD  │    CRUD   │       R
+    Document                │   CRUD  │    CRUD   │       R
+    ClauseISO                │   CRU   │     R     │       R
 
     Légende : C=Create R=Read U=Update D=Delete
     """
     preparateur      = "preparateur"
     auditeur_interne = "auditeur_interne"
-    auditeur_externe = "auditeur_externe"
     direction        = "direction"
 
 
@@ -196,19 +201,32 @@ class Utilisateur(Base):
             return False
         return datetime.utcnow() < self.verrouille_jusqu_a
 
-    def peut(self, action: str, ressource: str) -> bool:
+    def peut(self, action: str, ressource: str | None = None) -> bool:
         """
         Vérification rapide de permission par rôle.
         Utilisé dans les services pour les gardes d'accès.
 
-        Actions : "create" | "read" | "update" | "delete"
-        Ressources : "processus" | "diagnostic" | "risque" | "action" |
-                     "indicateur" | "mesure" | "document" | "utilisateur"
+        Deux formes :
+          - peut(action, ressource) : permission CRUD scopée à une ressource.
+            Actions : "create" | "read" | "update" | "delete"
+            Ressources : "processus" | "diagnostic" | "risque" | "action" |
+                         "indicateur" | "mesure" | "document" | "utilisateur"
+          - peut(capacite) : capacité transverse non scopée à une ressource
+            (ex: "valider", "administrer") — utilisée pour les transitions
+            de workflow (validation diagnostic/document/risque, archivage...).
 
         Exemple :
           user.peut("update", "diagnostic")  → True si preparateur, auditeur_interne ou direction
           user.peut("delete", "risque")      → True si direction uniquement
+          user.peut("valider")               → True si preparateur, auditeur_interne ou direction
         """
+        if ressource is None:
+            _CAPACITES: dict[str, set[str]] = {
+                "valider":    {RoleEnum.preparateur, RoleEnum.auditeur_interne, RoleEnum.direction},
+                "administrer": {RoleEnum.direction},
+            }
+            return self.role in _CAPACITES.get(action, set())
+
         _PERMISSIONS: dict[str, dict[str, set[str]]] = {
             RoleEnum.direction: {
                 "create": {"*"},
@@ -227,12 +245,6 @@ class Utilisateur(Base):
                 "create": {"diagnostic", "action"},
                 "read":   {"*"},
                 "update": {"diagnostic", "action"},
-                "delete": set(),
-            },
-            RoleEnum.auditeur_externe: {
-                "create": {"diagnostic"},
-                "read":   {"*"},
-                "update": set(),
                 "delete": set(),
             },
         }

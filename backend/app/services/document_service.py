@@ -253,11 +253,11 @@ def upload_fichier(
         )
 
     # Suppression de l'ancien fichier MinIO si existant
-    if document.minio_path:
+    if document.chemin_minio:
         try:
             _get_minio().remove_object(
                 settings.MINIO_BUCKET_DOCUMENTS,
-                document.minio_path,
+                document.chemin_minio,
             )
         except S3Error as exc:
             logger.warning("Impossible de supprimer l'ancien fichier MinIO : %s", exc)
@@ -285,7 +285,7 @@ def upload_fichier(
     )
 
     # Mise à jour des métadonnées
-    document.minio_path = minio_path
+    document.chemin_minio = minio_path
     document.taille_octets = taille
     document.mime_type = mime_type
     db.commit()
@@ -353,12 +353,12 @@ def get_document(
     Le minio_path n'est exposé qu'aux admins.
     """
     document = _get_ou_404(db, document_id)
-    url = _generer_url_presignee(document.minio_path, document.est_confidentiel)
+    url = _generer_url_presignee(document.chemin_minio, document.est_confidentiel)
 
     result = {
         "document": document,
         "url_telechargement": url,
-        "minio_path": document.minio_path if demandeur.peut("administrer") else None,
+        "minio_path": document.chemin_minio if demandeur.peut("administrer") else None,
     }
     return result
 
@@ -469,7 +469,7 @@ def changer_statut(
         )
 
     # Validation : fichier obligatoire
-    if nouveau_statut == StatutDocument.approuve and not document.minio_path:
+    if nouveau_statut == StatutDocument.approuve and not document.chemin_minio:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Impossible de valider un document sans fichier uploadé.",
@@ -522,13 +522,13 @@ def supprimer_document(
         )
 
     # Suppression fichier MinIO
-    if document.minio_path:
+    if document.chemin_minio:
         try:
             _get_minio().remove_object(
                 settings.MINIO_BUCKET_DOCUMENTS,
-                document.minio_path,
+                document.chemin_minio,
             )
-            logger.info("Fichier MinIO supprimé : %s", document.minio_path)
+            logger.info("Fichier MinIO supprimé : %s", document.chemin_minio)
         except S3Error as exc:
             logger.warning("Impossible de supprimer le fichier MinIO : %s", exc)
 

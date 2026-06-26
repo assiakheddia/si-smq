@@ -11,13 +11,15 @@ Contient uniquement les données structurelles stables :
 """
 
 import logging
+import random
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 
+from app.core.iso_engine import calcul_score_global, score_to_niveau, score_to_type_ecart
 from app.models.clause_iso import ClauseISO
 from app.models.processus import Processus, PartieInteressee, TypeProcessus, StatutProcessus, FrequenceCycle
 from app.models.utilisateur import Utilisateur, RoleEnum
-from app.models.diagnostic import DiagnosticISO, StatutDiagnostic, NiveauMaturite
+from app.models.diagnostic import DiagnosticClause, DiagnosticISO, StatutDiagnostic, NiveauMaturite
 from app.models.risque import Risque, NiveauCriticite, StatutRisque, TypeRisque, StrategieTraitement
 from app.models.action import Action, StatutAction, PrioriteAction, TypeAction, OrigineAction
 from app.models.indicateur import (
@@ -145,6 +147,34 @@ def _niveau_maturite(score: float) -> NiveauMaturite:
     return NiveauMaturite.non_conforme
 
 
+def _generer_clauses_diagnostic(
+    db: Session, diagnostic: DiagnosticISO, score_cible: float, clauses_iso: list,
+) -> None:
+    """
+    Génère une DiagnosticClause par clause applicable, avec un score individuel
+    dispersé autour de score_cible (±20, clampé 0-100) — pour que score_global,
+    nb_clauses_evaluees et nb_ecarts_majeurs/mineurs soient des valeurs réelles
+    calculées depuis le détail, pas des chiffres fixés à la main.
+    """
+    rng = random.Random(diagnostic.reference)
+    clauses_evaluees = []
+    for clause in clauses_iso:
+        score = max(0.0, min(100.0, rng.gauss(score_cible, 15)))
+        dc = DiagnosticClause(
+            diagnostic_id=diagnostic.id,
+            clause_id=clause.id,
+            score=score,
+            type_ecart=score_to_type_ecart(score),
+            poids=1.0,
+            est_applicable=True,
+        )
+        db.add(dc)
+        clauses_evaluees.append(dc)
+
+    diagnostic.score_global = calcul_score_global(clauses_evaluees)
+    diagnostic.niveau_global = score_to_niveau(diagnostic.score_global)
+
+
 def _statut_alerte(valeur: float, seuil_attention: float, seuil_alerte: float, sens: str) -> StatutAlerte:
     if sens == "hausse":
         if valeur < seuil_alerte:
@@ -167,7 +197,7 @@ def seed_demo_data(db: Session) -> None:
 
     Idempotent : ignoré si PROC-LABO existe déjà.
     """
-    if db.query(Processus).filter(Processus.code == "PROC-LABO").first():
+    if db.query(Processus).filter(Processus.code == "PROC-001").first():
         logger.info("seed_demo_data : données démo déjà présentes — ignoré.")
         return
 
@@ -197,11 +227,11 @@ def seed_demo_data(db: Session) -> None:
         departement="Audit", poste="Auditeur Interne",
         hashed_password=hash_password("demo1234"),
     )
-    auditeur_externe = Utilisateur(
+    auditeur_interne_2 = Utilisateur(
         email="sofia.amrani@si-smq.local",
         nom="Amrani", prenom="Sofia",
-        role=RoleEnum.auditeur_externe, est_actif=True,
-        departement="Cabinet Certification ISO", poste="Auditrice ISO 9001 Externe",
+        role=RoleEnum.auditeur_interne, est_actif=True,
+        departement="Audit", poste="Auditrice Qualité Interne",
         hashed_password=hash_password("demo1234"),
     )
     chef_equipe = Utilisateur(
@@ -239,7 +269,7 @@ def seed_demo_data(db: Session) -> None:
         departement="Équipe Génie Logiciel", poste="Doctorante — 1re année",
         hashed_password=hash_password("demo1234"),
     )
-    db.add_all([directeur, resp_qualite, auditeur_interne, auditeur_externe, chef_equipe, dir_these, comptable, doctorant1, doctorant2])
+    db.add_all([directeur, resp_qualite, auditeur_interne, auditeur_interne_2, chef_equipe, dir_these, comptable, doctorant1, doctorant2])
     db.flush()
 
     # =========================================================================
@@ -247,7 +277,7 @@ def seed_demo_data(db: Session) -> None:
     # Sous-processus : Budget · Intégration Membres · Achats · Bilan KPI
     # =========================================================================
     proc_labo = Processus(
-        code="PROC-LABO",
+        code="PROC-001",
         nom="Gestion du Laboratoire",
         type=TypeProcessus.support,
         statut=StatutProcessus.en_cours,
@@ -273,7 +303,7 @@ def seed_demo_data(db: Session) -> None:
     db.flush()
 
     proc_budget = Processus(
-        code="PROC-LABO-BUDGET",
+        code="PROC-002",
         nom="Gestion Budgétaire Annuelle",
         type=TypeProcessus.support,
         statut=StatutProcessus.conforme,
@@ -288,7 +318,7 @@ def seed_demo_data(db: Session) -> None:
         ressources_cles="Directeur, Comptable, service financier du Ministère",
     )
     proc_integration = Processus(
-        code="PROC-LABO-INTEGRATION",
+        code="PROC-003",
         nom="Intégration des Membres",
         type=TypeProcessus.support,
         statut=StatutProcessus.conforme,
@@ -306,7 +336,7 @@ def seed_demo_data(db: Session) -> None:
         ressources_cles="Directeur du laboratoire, commission d'intégration",
     )
     proc_achat = Processus(
-        code="PROC-LABO-ACHAT",
+        code="PROC-004",
         nom="Gestion des Achats et Dépenses",
         type=TypeProcessus.support,
         statut=StatutProcessus.en_cours,
@@ -324,7 +354,7 @@ def seed_demo_data(db: Session) -> None:
         ressources_cles="Service des Marchés, Directeur (signature), seuils réglementaires appel d'offres",
     )
     proc_kpi = Processus(
-        code="PROC-LABO-KPI",
+        code="PROC-005",
         nom="Bilan et Suivi des KPI Annuels",
         type=TypeProcessus.strategique,
         statut=StatutProcessus.en_cours,
@@ -349,7 +379,7 @@ def seed_demo_data(db: Session) -> None:
     # Sous-processus : Inscription · Suivi Avancement · Soutenance
     # =========================================================================
     proc_doc = Processus(
-        code="PROC-DOC",
+        code="PROC-006",
         nom="Encadrement Doctoral",
         type=TypeProcessus.operationnel,
         statut=StatutProcessus.en_cours,
@@ -369,7 +399,7 @@ def seed_demo_data(db: Session) -> None:
     db.flush()
 
     proc_inscription = Processus(
-        code="PROC-DOC-INSCRIPTION",
+        code="PROC-007",
         nom="Inscription et Affectation",
         type=TypeProcessus.operationnel,
         statut=StatutProcessus.conforme,
@@ -384,7 +414,7 @@ def seed_demo_data(db: Session) -> None:
         ressources_cles="Commission doctorale, Directeur de thèse, administration",
     )
     proc_avancement = Processus(
-        code="PROC-DOC-AVANCEMENT",
+        code="PROC-008",
         nom="Suivi de l'Avancement",
         type=TypeProcessus.operationnel,
         statut=StatutProcessus.en_cours,
@@ -399,7 +429,7 @@ def seed_demo_data(db: Session) -> None:
         ressources_cles="Directeur de thèse, co-encadrant",
     )
     proc_soutenance = Processus(
-        code="PROC-DOC-SOUTENANCE",
+        code="PROC-009",
         nom="Préparation et Soutenance",
         type=TypeProcessus.operationnel,
         statut=StatutProcessus.en_cours,
@@ -539,6 +569,17 @@ def seed_demo_data(db: Session) -> None:
     ]
     for d in diags:
         db.add(d)
+    db.flush()
+
+    # Génère des DiagnosticClause réelles autour du score cible de chaque diagnostic
+    # pour que score_global, nb_clauses_evaluees et nb_ecarts_majeurs/mineurs soient
+    # de vraies valeurs calculées, pas des chiffres fixés à la main.
+    clauses_iso_applicables = (
+        db.query(ClauseISO).filter(ClauseISO.est_applicable == True).all()  # noqa: E712
+    )
+    for d in diags:
+        score_cible = d.score_global
+        _generer_clauses_diagnostic(db, d, score_cible, clauses_iso_applicables)
     db.flush()
 
     # -------------------------------------------------------------------------

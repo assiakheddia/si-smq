@@ -10,7 +10,7 @@ from app.services import diagnostic_service
 from app.schemas.diagnostic import (
     DiagnosticCreate, DiagnosticUpdate, DiagnosticResponse,
     DiagnosticResponseDetail, DiagnosticClauseCreate, DiagnosticClauseUpdate, DiagnosticClauseResponse,
-    RapportMaturiteResponse,
+    RapportMaturiteResponse, EvaluerToutesClausesRequest,
 )
 
 router = APIRouter()
@@ -92,6 +92,27 @@ def valider(id: int, db: Session = Depends(get_db), current_user: CurrentUser = 
 @router.post("/{id}/archiver")
 def archiver(id: int, db: Session = Depends(get_db), current_user: CurrentUser = None):
     return diagnostic_service.changer_statut(db, id, StatutDiagnostic.archive, current_user)
+
+
+@router.post("/lancer-audit-externe", response_model=List[DiagnosticResponse])
+def lancer_audit_externe(db: Session = Depends(get_db), current_user: CurrentUser = None):
+    """
+    Réservé à la Direction — lance l'audit externe pour l'organisme entier en
+    une seule campagne : bascule TOUS les diagnostics 'valide' vers 'audit_externe'.
+    L'audit externe ISO 9001 porte sur le périmètre complet du SMQ, pas processus par processus.
+    """
+    return diagnostic_service.lancer_audit_externe_global(db, current_user)
+
+
+@router.post("/{id}/evaluer-toutes-clauses", response_model=DiagnosticResponseDetail)
+def evaluer_toutes_clauses(
+    id: int,
+    data: EvaluerToutesClausesRequest,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = None,
+):
+    """Évalue en une fois toutes les clauses du diagnostic autour d'un score cible."""
+    return diagnostic_service.evaluer_toutes_clauses(db, id, data.score_cible, current_user)
 
 
 @router.patch("/{id}/clauses/{clause_id}", response_model=DiagnosticClauseResponse)

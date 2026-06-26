@@ -2,8 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, getCurrentUser } from "../../lib/api.js";
 
-const MONTHS   = ["Jan", "Fév", "Mar", "Avr", "Mai", "Juin"];
-const OBJECTIF = [85, 85, 85, 85, 85, 85];
+const OBJECTIF_CONFORMITE = 85;
 const DEPT_COLORS = ["#2d9e5f","#1e40af","#92400e","#6b21a8","#0e7490","#991b1b"];
 
 function getInitials(name) {
@@ -49,6 +48,9 @@ function Donut({ data }) {
 
 /* ── Line chart SVG ── */
 function LineChart({ values, target, labels }) {
+  if (!values || values.length < 2) {
+    return <div style={{ color: "#9ca3af", fontSize: 11, textAlign: "center", padding: 20, width: "100%" }}>Pas assez de diagnostics pour afficher une tendance</div>;
+  }
   const W = 320, H = 100, pad = { t: 8, r: 8, b: 20, l: 24 };
   const iW = W - pad.l - pad.r, iH = H - pad.t - pad.b;
   const mn = 60, mx = 100;
@@ -144,7 +146,7 @@ function CardHead({ title, sub, right }) {
 }
 
 /* ── Tab: Vue globale ── */
-function TabGlobal({ navigate, kpi, deptData, conformite, recent, alerts }) {
+function TabGlobal({ navigate, kpi, deptData, conformite, objectif, months, recent, alerts }) {
   return (
     <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: 10 }}>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, flexShrink: 0 }}>
@@ -187,7 +189,7 @@ function TabGlobal({ navigate, kpi, deptData, conformite, recent, alerts }) {
             }
           />
           <div style={{ flex: 1, minHeight: 0, padding: "10px 14px 8px", display: "flex", alignItems: "center" }}>
-            <LineChart values={conformite} target={OBJECTIF} labels={MONTHS} />
+            <LineChart values={conformite} target={objectif} labels={months} />
           </div>
         </Card>
 
@@ -423,7 +425,15 @@ export default function DashboardPage() {
   processus.forEach(p => { const k = p.type || "Autre"; typeGroups[k] = (typeGroups[k] || 0) + 1; });
   const deptData = Object.entries(typeGroups).map(([label, value], i) => ({ label, value, color: DEPT_COLORS[i % DEPT_COLORS.length] }));
 
-  const conformite = scores.length >= 6 ? scores.slice(-6) : [75, 78, 80, 82, 84, tauxConf || 85];
+  const historique = diagnostics
+    .filter(d => d.score_global > 0 && d.date_lancement)
+    .sort((a, b) => new Date(a.date_lancement) - new Date(b.date_lancement))
+    .slice(-6);
+  const conformite = historique.map(d => d.score_global);
+  const months = historique.map(d =>
+    new Date(d.date_lancement).toLocaleDateString("fr-FR", { month: "short" })
+  );
+  const objectif = conformite.map(() => OBJECTIF_CONFORMITE);
 
   const recent = processus.slice(0, 4).map(p => ({
     id: p.code || `P-${p.id}`,
@@ -445,7 +455,7 @@ export default function DashboardPage() {
     <div style={{ display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden", background: "#eaf5eb", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
       <Topbar tab={tab} setTab={setTab} navigate={navigate} user={user} />
       <div style={{ flex: 1, minHeight: 0, padding: "12px 18px 12px", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-        {tab === 0 && <TabGlobal navigate={navigate} kpi={kpi} deptData={deptData} conformite={conformite} recent={recent} alerts={alerts} />}
+        {tab === 0 && <TabGlobal navigate={navigate} kpi={kpi} deptData={deptData} conformite={conformite} objectif={objectif} months={months} recent={recent} alerts={alerts} />}
         {tab === 1 && <TabProcessus navigate={navigate} processus={processus} />}
         {tab === 2 && <TabAudits navigate={navigate} diagnostics={diagnostics} />}
       </div>

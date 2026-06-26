@@ -53,10 +53,11 @@ class NiveauMaturite(str, enum.Enum):
 
 
 class StatutDiagnostic(str, enum.Enum):
-    brouillon   = "brouillon"    # En cours de saisie
-    soumis      = "soumis"       # Soumis pour validation
-    valide      = "valide"       # Validé par le pilote / admin
-    archive     = "archive"      # Historique — remplacé par un diagnostic plus récent
+    brouillon     = "brouillon"      # En cours de saisie
+    soumis        = "soumis"         # Soumis pour validation (auditeur interne)
+    valide        = "valide"         # Validé en interne — prêt pour l'audit externe
+    audit_externe = "audit_externe"  # Audit externe lancé par la Direction
+    archive       = "archive"        # Historique — remplacé par un diagnostic plus récent
 
 
 class TypeEcart(str, enum.Enum):
@@ -165,6 +166,74 @@ class DiagnosticISO(Base):
         cascade="all, delete-orphan",
         order_by="DiagnosticClause.id",
     )
+
+    # -------------------------------------------------------------------------
+    # Compteurs agrégés — toujours recalculés depuis clauses_evaluees, jamais
+    # stockés en colonne (évite toute désynchronisation avec le détail).
+    # -------------------------------------------------------------------------
+    @property
+    def nb_clauses_evaluees(self) -> int:
+        return len(self.clauses_evaluees)
+
+    @property
+    def nb_clauses_conformes(self) -> int:
+        return sum(1 for c in self.clauses_evaluees if c.niveau == NiveauMaturite.conforme)
+
+    @property
+    def nb_ecarts_majeurs(self) -> int:
+        return sum(1 for c in self.clauses_evaluees if c.type_ecart == TypeEcart.majeur)
+
+    @property
+    def nb_ecarts_mineurs(self) -> int:
+        return sum(1 for c in self.clauses_evaluees if c.type_ecart == TypeEcart.mineur)
+
+    @property
+    def nb_observations(self) -> int:
+        return sum(1 for c in self.clauses_evaluees if c.type_ecart == TypeEcart.observation)
+
+    @property
+    def synthese_par_section(self) -> list[dict]:
+        """
+        Agrège les DiagnosticClause par section ISO de tête (4, 5, 6, 7, 8, 9, 10)
+        — déduite du préfixe du code de clause ("7.5.3" -> section "7").
+        Utilisé pour le radar chart / la vue "Conformité par groupe de clauses".
+        """
+        from app.core.iso_engine import score_to_niveau
+
+        sections: dict[str, dict] = {}
+        for c in self.clauses_evaluees:
+            if not c.est_applicable or not c.clause:
+                continue
+            code_section = c.clause.code.split(".")[0]
+            agg = sections.setdefault(code_section, {
+                "code_section": code_section,
+                "titre_section": c.clause.titre if c.clause.code == code_section else None,
+                "total_pondere": 0.0,
+                "total_poids": 0.0,
+                "nb_clauses": 0,
+                "nb_conformes": 0,
+            })
+            if c.clause.code == code_section:
+                agg["titre_section"] = c.clause.titre
+            agg["total_pondere"] += c.score * c.poids
+            agg["total_poids"] += c.poids
+            agg["nb_clauses"] += 1
+            if c.niveau == NiveauMaturite.conforme:
+                agg["nb_conformes"] += 1
+
+        resultats = []
+        for code_section in sorted(sections.keys(), key=lambda x: int(x)):
+            agg = sections[code_section]
+            score = round(agg["total_pondere"] / agg["total_poids"], 2) if agg["total_poids"] else 0.0
+            resultats.append({
+                "code_section": code_section,
+                "titre_section": agg["titre_section"] or f"Section {code_section}",
+                "score_section": score,
+                "niveau_section": score_to_niveau(score),
+                "nb_clauses": agg["nb_clauses"],
+                "nb_conformes": agg["nb_conformes"],
+            })
+        return resultats
 
     def __repr__(self) -> str:
         return (

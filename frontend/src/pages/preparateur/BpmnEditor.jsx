@@ -1,20 +1,8 @@
-/* ═══════════════════════════════════════════════════════════════════
-   INSTRUCTIONS D'INTÉGRATION
-   ─────────────────────────────────────────────────────────────────
-   1. Copiez TOUT ce fichier dans ProcessFormPage.jsx
-   2. Remplacez la ligne :
-        import BpmnEditor from "./BpmnEditor";
-      par RIEN (supprimez-la)
-   3. Collez le composant BpmnEditor (ci-dessous) AVANT le composant
-      ProcessFormPage (export default)
-   4. Remplacez votre ancienne const Tab6 = () => (...) par celle
-      qui est tout en bas de ce fichier
-═══════════════════════════════════════════════════════════════════ */
+import React, { useState, useRef, useEffect, useCallback } from "react";
 
-/* ─────────────────────────────────────────────────────────────────
-   PARTIE 1 — BpmnEditor (à coller avant ProcessFormPage)
-   Supprimez votre import BpmnEditor existant et collez ce bloc.
-───────────────────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════
+   BpmnEditor — éditeur BPMN SVG (onglet "Déroulement")
+═══════════════════════════════════════════════════════════════════ */
 
 const NODE_COLORS = {
   task: { fill: "#B5D4F4", stroke: "#185FA5", text: "#0C447C" },
@@ -263,50 +251,39 @@ function BpmnNodeShape({
 }
 
 function BpmnEditor({ onChange, initialData }) {
-  const {
-    useState: _useState,
-    useRef: _useRef,
-    useEffect: _useEffect,
-    useCallback: _useCallback,
-  } = React;
-
-  const [bNodes, setBNodes] = _useState(
-    () => initialData?.nodes ?? BPMN_SAMPLE.nodes,
+  const [bNodes, setBNodes] = useState(() => initialData?.nodes ?? []);
+  const [bEdges, setBEdges] = useState(() => initialData?.edges ?? []);
+  const [bLanes, setBLanes] = useState(
+    () => initialData?.lanes ?? [{ id: "l1", label: "Lane 1", h: 110 }],
   );
-  const [bEdges, setBEdges] = _useState(
-    () => initialData?.edges ?? BPMN_SAMPLE.edges,
-  );
-  const [bLanes, setBLanes] = _useState(
-    () => initialData?.lanes ?? BPMN_SAMPLE.lanes,
-  );
-  const [bSelected, setBSelected] = _useState(null);
-  const [bMode, setBMode_] = _useState("select");
-  const [bConnectFrom, setBConnectFrom] = _useState(null);
-  const [bZoom, setBZoom] = _useState(1);
-  const [bPan, setBPan] = _useState({ x: 0, y: 0 });
-  const [editingEdge, setEditingEdge] = _useState(null);
-  const [edgeLabel, setEdgeLabel] = _useState("");
-  const [labelInput, setLabelInput] = _useState("");
-  const [laneInput, setLaneInput] = _useState("");
+  const [bSelected, setBSelected] = useState(null);
+  const [bMode, setBMode_] = useState("select");
+  const [bConnectFrom, setBConnectFrom] = useState(null);
+  const [bZoom, setBZoom] = useState(1);
+  const [bPan, setBPan] = useState({ x: 0, y: 0 });
+  const [editingEdge, setEditingEdge] = useState(null);
+  const [edgeLabel, setEdgeLabel] = useState("");
+  const [labelInput, setLabelInput] = useState("");
+  const [laneInput, setLaneInput] = useState("");
 
-  const dragRef = _useRef(null);
-  const panRef = _useRef(null);
-  const movedRef = _useRef(false);
-  const wrapRef = _useRef(null);
+  const dragRef = useRef(null);
+  const panRef = useRef(null);
+  const movedRef = useRef(false);
+  const wrapRef = useRef(null);
 
-  _useEffect(() => {
+  useEffect(() => {
     onChange?.({ nodes: bNodes, edges: bEdges, lanes: bLanes });
   }, [bNodes, bEdges, bLanes]);
 
   const selNode = bNodes.find((n) => n.id === bSelected);
-  _useEffect(() => {
+  useEffect(() => {
     if (selNode) {
       setLabelInput(selNode.label);
       setLaneInput(selNode.lane || "");
     }
   }, [bSelected]);
 
-  const svgCoords = _useCallback(
+  const svgCoords = useCallback(
     (e) => {
       const r = wrapRef.current.getBoundingClientRect();
       return {
@@ -938,218 +915,5 @@ function BpmnEditor({ onChange, initialData }) {
   );
 }
 
-/* ─────────────────────────────────────────────────────────────────
-   PARTIE 2 — Tab6 (remplacez votre ancienne const Tab6 par ceci)
-───────────────────────────────────────────────────────────────── */
+export default BpmnEditor;
 
-const Tab6 = () => {
-  return (
-    <div>
-      <SectionHeader
-        num="6"
-        title="Déroulement et Modélisation"
-        sub="Détailler les grandes étapes chronologiques du processus."
-      />
-
-      {/* ── Tâches chronologiques ── */}
-      <div
-        style={{
-          fontSize: 14,
-          fontWeight: 700,
-          color: C.text,
-          marginBottom: 16,
-        }}
-      >
-        Tâches chronologiques
-      </div>
-
-      <div style={{ display: "flex", gap: 20, marginBottom: 32 }}>
-        {/* Fil de progression */}
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            paddingTop: 8,
-          }}
-        >
-          {form.etapes.map((_, i) => (
-            <div
-              key={i}
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-              }}
-            >
-              <div
-                style={{
-                  width: 28,
-                  height: 28,
-                  borderRadius: "50%",
-                  background: C.primary,
-                  color: "#fff",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontWeight: 800,
-                  fontSize: 12,
-                  flexShrink: 0,
-                  zIndex: 1,
-                }}
-              >
-                {i + 1}
-              </div>
-              {i < form.etapes.length - 1 && (
-                <div
-                  style={{
-                    width: 2,
-                    flex: 1,
-                    minHeight: 16,
-                    background: C.accent,
-                    opacity: 0.5,
-                    margin: "2px 0",
-                  }}
-                />
-              )}
-            </div>
-          ))}
-        </div>
-
-        {/* Cartes étapes */}
-        <div
-          style={{ flex: 1, display: "flex", flexDirection: "column", gap: 10 }}
-        >
-          {form.etapes.map((e, i) => (
-            <div
-              key={i}
-              style={{
-                background: C.white,
-                border: `1px solid ${C.border}`,
-                borderRadius: 10,
-                padding: "12px 16px",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  marginBottom: 10,
-                }}
-              >
-                <span
-                  style={{ fontSize: 13, fontWeight: 700, color: C.primary }}
-                >
-                  Étape {e.numero}
-                </span>
-                <button
-                  type="button"
-                  style={styles.removeCard}
-                  onClick={() =>
-                    set(
-                      "etapes",
-                      form.etapes.filter((_, idx) => idx !== i),
-                    )
-                  }
-                >
-                  ✕
-                </button>
-              </div>
-              <div style={styles.grid3}>
-                {[
-                  {
-                    key: "nom",
-                    label: "Nom de l'étape",
-                    placeholder: "Ex : Lancement appel à sujets...",
-                  },
-                  {
-                    key: "acteur",
-                    label: "Acteur responsable",
-                    placeholder: "Enseignant, Admin...",
-                  },
-                  {
-                    key: "duree",
-                    label: "Durée estimée",
-                    placeholder: "Ex : 2 semaines",
-                  },
-                  {
-                    key: "entree",
-                    label: "Entrée",
-                    placeholder: "Données / documents d'entrée...",
-                  },
-                  {
-                    key: "sortie",
-                    label: "Sortie",
-                    placeholder: "Résultats produits...",
-                  },
-                  {
-                    key: "document",
-                    label: "Document associé",
-                    placeholder: "Référence documentaire...",
-                  },
-                ].map(({ key, label, placeholder }) => (
-                  <Field key={key} label={label}>
-                    <Input
-                      value={e[key]}
-                      onChange={(ev) => {
-                        const u = [...form.etapes];
-                        u[i] = { ...u[i], [key]: ev.target.value };
-                        set("etapes", u);
-                      }}
-                      placeholder={placeholder}
-                    />
-                  </Field>
-                ))}
-                <div style={styles.gridFull}>
-                  <Field label="Description">
-                    <TextArea
-                      value={e.description}
-                      onChange={(ev) => {
-                        const u = [...form.etapes];
-                        u[i] = { ...u[i], description: ev.target.value };
-                        set("etapes", u);
-                      }}
-                      placeholder="Détailler l'activité réalisée dans cette étape..."
-                      rows={2}
-                    />
-                  </Field>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <button
-        type="button"
-        style={styles.addBtn}
-        onClick={() =>
-          set("etapes", [...form.etapes, makeEtape(form.etapes.length + 1)])
-        }
-      >
-        ＋ Ajouter une étape
-      </button>
-
-      <div style={styles.divider} />
-
-      {/* ── Cartographie BPMN ── */}
-      <div
-        style={{
-          fontSize: 16,
-          fontWeight: 700,
-          color: C.text,
-          marginBottom: 16,
-        }}
-      >
-        Cartographie BPMN
-      </div>
-
-      {/* ✅ L'éditeur BPMN — affiche le diagramme exemple dès le chargement */}
-      <BpmnEditor
-        initialData={form.bpmnData || undefined}
-        onChange={(data) => set("bpmnData", data)}
-      />
-    </div>
-  );
-};

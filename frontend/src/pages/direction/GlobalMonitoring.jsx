@@ -7,9 +7,9 @@ function getInitials(name) {
   return name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
 }
 
-const STAGES = ["Brouillon","Soumis","Validé","Archivé"];
-const STAGE_COLORS = ["#9ca3af","#92400e","#1e40af","#166534"];
-const STAGE_MAP = { brouillon:0, soumis:1, valide:2, archive:3 };
+const STAGES = ["Brouillon","Soumis","Validé","Audit externe","Archivé"];
+const STAGE_COLORS = ["#9ca3af","#92400e","#1e40af","#7c3aed","#166534"];
+const STAGE_MAP = { brouillon:0, soumis:1, valide:2, audit_externe:3, archive:4 };
 
 const S = {
   page:{ minHeight:"100vh", background:"#eaf5eb", fontFamily:"'Plus Jakarta Sans','DM Sans',sans-serif" },

@@ -130,7 +130,7 @@ def creer_action(
         priorite=priorite,
         date_planifiee=payload.date_planifiee,
         date_echeance=payload.date_echeance,
-        genere_automatiquement=payload.generee_automatiquement,
+        generee_automatiquement=payload.generee_automatiquement,
     )
     db.add(action)
     db.commit()

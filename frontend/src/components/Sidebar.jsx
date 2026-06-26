@@ -217,113 +217,6 @@ const NAV_AUDITEUR_INTERNE = [
   },
 ];
 
-const NAV_AUDITEUR_EXTERNE = [
-  {
-    id: 'dashboard',
-    path: '/ae/dashboard',
-    label: 'Tableau de bord',
-    sub: "Vue d'ensemble",
-    icon: (
-      <svg
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.9"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <rect x="3" y="3" width="7" height="7" rx="1" />
-        <rect x="14" y="3" width="7" height="7" rx="1" />
-        <rect x="3" y="14" width="7" height="7" rx="1" />
-        <rect x="14" y="14" width="7" height="7" rx="1" />
-      </svg>
-    ),
-  },
-  {
-    id: 'audits',
-    path: '/ae/audits',
-    label: 'Audits assignés',
-    sub: 'Processus à auditer',
-    icon: (
-      <svg
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.9"
-        strokeLinecap="round"
-      >
-        <path d="M9 11l3 3L22 4" />
-        <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" />
-      </svg>
-    ),
-  },
-  {
-    id: 'evaluation',
-    path: '/ae/evaluation',
-    label: 'Évaluation',
-    sub: 'Conformité ISO',
-    icon: (
-      <svg
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.9"
-        strokeLinecap="round"
-      >
-        <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2" />
-        <rect x="9" y="3" width="6" height="4" rx="1" />
-        <path d="M9 12h6M9 16h4" />
-      </svg>
-    ),
-  },
-  {
-    id: 'nonconformites',
-    path: '/ae/nonconformites',
-    label: 'Non-conformités',
-    sub: 'Constats & findings',
-    icon: (
-      <svg
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.9"
-        strokeLinecap="round"
-      >
-        <circle cx="12" cy="12" r="10" />
-        <path d="M12 8v4M12 16h.01" />
-      </svg>
-    ),
-  },
-  {
-    id: 'rapport',
-    path: '/ae/rapport',
-    label: "Rapport d'audit",
-    sub: 'Génération rapports',
-    icon: (
-      <svg
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.9"
-        strokeLinecap="round"
-      >
-        <path d="M3 3v18h18" />
-        <path d="M7 16l4-5 4 3 4-6" />
-      </svg>
-    ),
-  },
-];
-
 const NAV_DIRECTION = [
   {
     id: 'dashboard',
@@ -445,12 +338,6 @@ const ROLE_CONFIG = {
     label: 'Auditeur Interne',
     initials: 'AI',
     color: '#1e40af',
-  },
-  auditeur_externe: {
-    nav: NAV_AUDITEUR_EXTERNE,
-    label: 'Auditeur Externe',
-    initials: 'AE',
-    color: '#b45309',
   },
   direction: {
     nav: NAV_DIRECTION,

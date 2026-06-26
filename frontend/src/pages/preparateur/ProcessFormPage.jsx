@@ -1,10 +1,11 @@
-import { useState, useCallback, useEffect, createContext, useContext } from "react";
+import { useState, useCallback, useEffect, useRef, createContext, useContext } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import NotificationsPanel, {
   pushNotification,
   getUnreadCount,
 } from "../../components/NotificationsPanel.jsx";
 import { api, getCurrentUser } from "../../lib/api.js";
+import BpmnEditor from "./BpmnEditor.jsx";
 
 /* ── Mapping types ↔ libellés du formulaire (cf. backend TypeProcessus) ── */
 const TYPE_FORM_TO_BACKEND = {
@@ -35,6 +36,7 @@ function denormalizeProcessus(p) {
     ...(p.raci_roles && p.raci_activities
       ? { raci: { roles: p.raci_roles, activities: p.raci_activities, cells: p.raci_cells || {} } }
       : {}),
+    ...(p.bpmn_data ? { bpmnData: p.bpmn_data } : {}),
   };
 }
 
@@ -57,6 +59,7 @@ function buildProcessusPayload(form, { isEdit }) {
     raci_roles: form.raci.roles,
     raci_activities: form.raci.activities,
     raci_cells: form.raci.cells,
+    bpmn_data: form.bpmnData || null,
   };
   // Le code affiché côté création est un placeholder local — laisser le
   // backend en générer un réel. En édition, on renvoie le code existant.
@@ -1643,25 +1646,19 @@ function RaciMatrix({ raci, onChange }) {
 /* ═══════════════════════════════════════════════════════════════════
    AUDIT MODAL
 ═══════════════════════════════════════════════════════════════════ */
-function AuditModal({ onClose, onSend }) {
-  const [email, setEmail] = useState("");
+function AuditModal({ onClose, onSend, auditeurs }) {
+  const [auditeurId, setAuditeurId] = useState("");
   const [msg, setMsg] = useState("");
-  const [emailError, setEmailError] = useState("");
 
   const handleSend = () => {
-    if (!isValidEmail(email)) {
-      setEmailError("Veuillez entrer une adresse email valide.");
-      return;
-    }
-    setEmailError("");
-    onSend(email, msg);
+    onSend(auditeurId, msg);
   };
 
   return (
     <div style={styles.auditOverlay}>
       <div style={styles.auditBox}>
         <div style={{ fontSize: 32, marginBottom: 12, textAlign: "center" }}>
-          📧
+          📤
         </div>
         <div
           style={{
@@ -1672,7 +1669,7 @@ function AuditModal({ onClose, onSend }) {
             textAlign: "center",
           }}
         >
-          Envoyer à un auditeur externe
+          Soumettre à l'auditeur interne
         </div>
         <div
           style={{
@@ -1683,23 +1680,24 @@ function AuditModal({ onClose, onSend }) {
             lineHeight: 1.6,
           }}
         >
-          L'auditeur recevra la fiche processus complète ainsi que les
-          dysfonctionnements identifiés pour confirmation et recommandations.
+          L'auditeur interne recevra la fiche processus complète ainsi que les
+          dysfonctionnements identifiés pour révision et recommandations.
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <div style={styles.fieldWrap}>
-            <label style={styles.label}>Email de l'auditeur *</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="auditeur@organisme.dz"
-              style={{
-                ...styles.input,
-                ...(emailError ? styles.inputError : {}),
-              }}
-            />
-            {emailError && <span style={styles.errorMsg}>⚠ {emailError}</span>}
+            <label style={styles.label}>Auditeur interne (optionnel)</label>
+            <select
+              value={auditeurId}
+              onChange={(e) => setAuditeurId(e.target.value)}
+              style={styles.input}
+            >
+              <option value="">— Non assigné —</option>
+              {auditeurs.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.prenom} {a.nom}
+                </option>
+              ))}
+            </select>
           </div>
           <div style={styles.fieldWrap}>
             <label style={styles.label}>Message (optionnel)</label>
@@ -1716,15 +1714,8 @@ function AuditModal({ onClose, onSend }) {
           <button onClick={onClose} style={{ ...styles.btnCancel, flex: 1 }}>
             Annuler
           </button>
-          <button
-            onClick={handleSend}
-            style={{
-              ...styles.btnPublish,
-              flex: 1,
-              opacity: isValidEmail(email) ? 1 : 0.5,
-            }}
-          >
-            Envoyer la fiche
+          <button onClick={handleSend} style={{ ...styles.btnPublish, flex: 1 }}>
+            Soumettre la fiche
           </button>
         </div>
       </div>
@@ -1783,129 +1774,11 @@ function DiagnosticOverlay() {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   DIAGNOSTIC ENGINE
-═══════════════════════════════════════════════════════════════════ */
-function generateDysfonctionnements(form) {
-  const dysf = [];
-  const soon = (days) =>
-    new Date(Date.now() + days * 86400000).toISOString().split("T")[0];
-
-  if (form.kpis.length === 0) {
-    dysf.push({
-      titre: "Absence d'indicateurs de performance (KPIs)",
-      description:
-        "Aucun KPI n'est défini pour ce processus, rendant le suivi des performances impossible.",
-      consequences:
-        "Impossibilité de mesurer l'efficacité du processus et de détecter les dérives qualité.",
-      causes:
-        "Manque de définition des objectifs mesurables lors de la conception du processus.",
-      gravite: "Majeur",
-      ameliorations:
-        "Définir au minimum 2–3 KPIs pertinents avec valeurs cibles et seuils d'alerte documentés.",
-      responsable: form.pilote || "Pilote",
-      echeance: soon(30),
-      statut: "Ouvert",
-    });
-  }
-
-  const highRisks = form.risques.filter(
-    (r) => parseInt(r.probabilite) * parseInt(r.gravite) >= 6,
-  );
-  if (highRisks.length > 0) {
-    dysf.push({
-      titre: `${highRisks.length} risque(s) critique(s) sans plan d'action complet`,
-      description: `${highRisks.length} risque(s) à criticité élevée (≥6) identifié(s) sans mesures d'atténuation suffisantes.`,
-      consequences:
-        "Exposition à des défaillances majeures pouvant affecter la qualité du service et la certification ISO 9001.",
-      causes:
-        "Plans de traitement des risques incomplets ou non formalisés dans la fiche processus.",
-      gravite: "Critique",
-      ameliorations:
-        "Mettre en place des actions préventives documentées pour chaque risque critique avec responsable et échéance.",
-      responsable: form.pilote || "Pilote",
-      echeance: soon(14),
-      statut: "Ouvert",
-    });
-  }
-
-  if (form.documents.length === 0) {
-    dysf.push({
-      titre: "Documentation de référence manquante",
-      description: "Aucun document de référence n'est associé à ce processus.",
-      consequences:
-        "Manque de traçabilité documentaire, non-conformité potentielle lors des audits ISO 9001 (clause 7.5).",
-      causes:
-        "Processus non encore documenté ou documentation non référencée dans le système qualité.",
-      gravite: "Majeur",
-      ameliorations:
-        "Identifier et référencer tous les documents applicables : procédures, modes opératoires, enregistrements.",
-      responsable: form.pilote || "Pilote",
-      echeance: soon(45),
-      statut: "Ouvert",
-    });
-  }
-
-  if (form.etapes.length === 0) {
-    dysf.push({
-      titre: "Déroulement du processus non formalisé",
-      description:
-        "Les étapes chronologiques du processus ne sont pas documentées.",
-      consequences:
-        "Risque d'exécution non homogène selon les intervenants, difficultés de formation et d'audit.",
-      causes:
-        "Processus décrit de manière informelle sans formalisation des étapes et acteurs responsables.",
-      gravite: "Majeur",
-      ameliorations:
-        "Décrire les étapes principales avec acteurs, entrées, sorties et durées. Compléter avec un diagramme BPMN.",
-      responsable: form.pilote || "Pilote",
-      echeance: soon(21),
-      statut: "Ouvert",
-    });
-  }
-
-  const hasCells = Object.values(form.raci.cells || {}).some(Boolean);
-  if (!hasCells) {
-    dysf.push({
-      titre: "Matrice RACI non renseignée",
-      description:
-        "Aucune responsabilité n'est attribuée dans la matrice RACI du processus.",
-      consequences:
-        "Ambiguïté sur les rôles et responsabilités pouvant mener à des doublons ou des lacunes dans l'exécution.",
-      causes:
-        "Matrice RACI non complétée lors de la création de la fiche processus.",
-      gravite: "Mineur",
-      ameliorations:
-        "Compléter la matrice RACI en attribuant R, A, C, I pour chaque activité et chaque acteur concerné.",
-      responsable: form.pilote || "Pilote",
-      echeance: soon(7),
-      statut: "Ouvert",
-    });
-  }
-
-  if (dysf.length === 0) {
-    dysf.push({
-      titre: "Conformité générale vérifiée",
-      description:
-        "L'analyse automatique n'a pas détecté de dysfonctionnements majeurs. Le processus est bien documenté.",
-      consequences: "Aucune conséquence critique identifiée à ce stade.",
-      causes: "N/A",
-      gravite: "Mineur",
-      ameliorations:
-        "Maintenir le suivi des KPIs définis et procéder à des révisions périodiques de la fiche.",
-      responsable: form.pilote || "Pilote",
-      echeance: soon(90),
-      statut: "En cours",
-    });
-  }
-
-  return dysf;
-}
-
-/* ═══════════════════════════════════════════════════════════════════
    HELPERS
 ═══════════════════════════════════════════════════════════════════ */
 function makeKpi() {
   return {
+    _dbId: null,
     nom: "",
     unite: "",
     valeurCible: "",
@@ -1916,21 +1789,37 @@ function makeKpi() {
 }
 function makeRisque() {
   return {
+    _dbId: null,
     description: "",
     probabilite: "1",
     gravite: "1",
+    detectabilite: "1",
     mesure: "",
     responsable: "",
   };
 }
+const DOC_TYPES = [
+  { value: "procedure", label: "Procédure" },
+  { value: "enregistrement", label: "Enregistrement" },
+  { value: "politique", label: "Politique" },
+  { value: "plan", label: "Plan" },
+  { value: "rapport", label: "Rapport" },
+  { value: "formulaire", label: "Formulaire" },
+  { value: "manuel", label: "Manuel" },
+  { value: "charte", label: "Charte" },
+  { value: "autre", label: "Autre" },
+];
+
 function makeDoc() {
   return {
+    _dbId: null,
     id: "",
     titre: "",
-    format: "PDF",
+    format: "procedure",
     version: "1.0",
     revue: "",
     statut: "Brouillon",
+    file: null,
   };
 }
 function makePreuve() {
@@ -2027,6 +1916,7 @@ const INIT = {
   dysfonctionnements: [],
   etapes: [],
   bpmnFile: null,
+  bpmnData: null,
   opportunites: [],
 };
 
@@ -2068,12 +1958,13 @@ export default function ProcessFormPage() {
   const [hiddenFields, setHiddenFields] = useState({});
   const [showAuditModal, setShowAuditModal] = useState(false);
   const [auditSent, setAuditSent] = useState(false);
-  const [auditEmail, setAuditEmail] = useState("");
   const [showNotifs, setShowNotifs] = useState(false);
   const [unreadCount, setUnreadCount] = useState(() => getUnreadCount());
   const [loadingProcess, setLoadingProcess] = useState(isEdit);
   const [dbId, setDbId] = useState(id ? Number(id) : null);
   const [saving, setSaving] = useState(false);
+  const loadedIdsRef = useRef({ kpis: [], risques: [], documents: [] });
+  const [internalAuditors, setInternalAuditors] = useState([]);
 
   /* ── Validation Helpers ── */
   const validateField = useCallback(
@@ -2189,11 +2080,56 @@ export default function ProcessFormPage() {
     let cancelled = false;
     api
       .get(`/processus/${id}`)
-      .then((p) => {
+      .then(async (p) => {
         if (cancelled) return;
         setForm((f) => ({ ...f, ...denormalizeProcessus(p) }));
         setDbId(p.id);
         setPublished(true);
+
+        const [kpisRes, risquesRes, documentsRes] = await Promise.all([
+          api.get(`/indicateurs/?processus_code=${encodeURIComponent(p.code)}`).catch(() => []),
+          api.get(`/risques/?processus_code=${encodeURIComponent(p.code)}`).catch(() => []),
+          api.get(`/documents/?processus_code=${encodeURIComponent(p.code)}`).catch(() => []),
+        ]);
+        if (cancelled) return;
+        setForm((f) => ({
+          ...f,
+          kpis: (kpisRes || []).map((k) => ({
+            _dbId: k.id,
+            nom: k.nom || "",
+            unite: k.unite_custom || k.unite || "",
+            valeurCible: k.valeur_cible != null ? String(k.valeur_cible) : "",
+            seuilAlerte: k.seuil_alerte != null ? String(k.seuil_alerte) : "",
+            frequence: k.frequence || "",
+            responsable: k.responsable ? `${k.responsable.prenom} ${k.responsable.nom}`.trim() : "",
+          })),
+          risques: (risquesRes || []).map((r) => ({
+            _dbId: r.id,
+            description: r.titre || "",
+            probabilite: String(r.probabilite ?? 1),
+            gravite: String(r.gravite ?? 1),
+            detectabilite: String(r.detectabilite ?? 1),
+            mesure: r.plan_attenuation || "",
+            responsable: r.responsable ? `${r.responsable.prenom} ${r.responsable.nom}`.trim() : "",
+          })),
+          documents: (documentsRes || []).map((d) => ({
+            _dbId: d.id,
+            id: d.reference || "",
+            titre: d.titre || "",
+            format: d.type || "procedure",
+            version: d.version || "1.0",
+            revue: d.statut || "",
+            statut:
+              { brouillon: "Brouillon", en_revue: "En révision", approuve: "Approuvé", obsolete: "Archivé", archive: "Archivé" }[d.statut] ||
+              "Brouillon",
+            file: null,
+          })),
+        }));
+        loadedIdsRef.current = {
+          kpis: (kpisRes || []).map((k) => k.id),
+          risques: (risquesRes || []).map((r) => r.id),
+          documents: (documentsRes || []).map((d) => d.id),
+        };
       })
       .catch((err) => {
         if (cancelled) return;
@@ -2208,6 +2144,20 @@ export default function ProcessFormPage() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, isEdit]);
+
+  /* ── Liste des auditeurs internes (pour la soumission après diagnostic) ── */
+  useEffect(() => {
+    api
+      .get("/users/")
+      .then((users) =>
+        setInternalAuditors(
+          (Array.isArray(users) ? users : []).filter(
+            (u) => u.role === "auditeur_interne",
+          ),
+        ),
+      )
+      .catch(() => setInternalAuditors([]));
+  }, []);
 
   const handleCancel = () => {
     if (dirty) {
@@ -2229,6 +2179,97 @@ export default function ProcessFormPage() {
     return api.post("/processus/", payload);
   };
 
+  /* ── Synchronisation KPIs / Risques / Documents (diff par _dbId, pas de delete-all) ── */
+  const syncRelatedEntities = async (processusId) => {
+    const loaded = loadedIdsRef.current;
+
+    const currentKpiIds = form.kpis.map((k) => k._dbId).filter(Boolean);
+    await Promise.all(
+      loaded.kpis
+        .filter((kid) => !currentKpiIds.includes(kid))
+        .map((kid) => api.delete(`/indicateurs/${kid}`).catch(() => null)),
+    );
+    const savedKpis = await Promise.all(
+      form.kpis.map((k) => {
+        const payload = {
+          nom: k.nom,
+          unite_custom: k.unite || null,
+          valeur_cible: k.valeurCible ? parseFloat(k.valeurCible) : null,
+          seuil_alerte: k.seuilAlerte ? parseFloat(k.seuilAlerte) : null,
+          frequence: k.frequence || undefined,
+          processus_id: processusId,
+        };
+        if (k._dbId) {
+          return api.put(`/indicateurs/${k._dbId}`, payload).then((r) => ({ ...k, _dbId: r.id }));
+        }
+        return api.post("/indicateurs/", payload).then((r) => ({ ...k, _dbId: r.id }));
+      }),
+    );
+
+    const currentRisqueIds = form.risques.map((r) => r._dbId).filter(Boolean);
+    await Promise.all(
+      loaded.risques
+        .filter((rid) => !currentRisqueIds.includes(rid))
+        .map((rid) => api.delete(`/risques/${rid}`).catch(() => null)),
+    );
+    const savedRisques = await Promise.all(
+      form.risques.map((r) => {
+        const payload = {
+          titre: r.description,
+          probabilite: parseInt(r.probabilite || 1),
+          gravite: parseInt(r.gravite || 1),
+          detectabilite: parseInt(r.detectabilite || 1),
+          plan_attenuation: r.mesure || null,
+          processus_id: processusId,
+        };
+        if (r._dbId) {
+          return api.put(`/risques/${r._dbId}`, payload).then((res) => ({ ...r, _dbId: res.id }));
+        }
+        return api.post("/risques/", payload).then((res) => ({ ...r, _dbId: res.id }));
+      }),
+    );
+
+    const currentDocIds = form.documents.map((d) => d._dbId).filter(Boolean);
+    await Promise.all(
+      loaded.documents
+        .filter((did) => !currentDocIds.includes(did))
+        .map((did) => api.delete(`/documents/${did}`).catch(() => null)),
+    );
+    const savedDocuments = await Promise.all(
+      form.documents.map(async (d) => {
+        let dbId = d._dbId;
+        if (!dbId) {
+          const created = await api.post("/documents/", {
+            titre: d.titre,
+            type_document: d.format,
+            version: d.version || "1.0",
+            processus_code: form.identifiant,
+          });
+          dbId = created.id;
+        } else {
+          await api.put(`/documents/${dbId}`, {
+            titre: d.titre,
+            type_document: d.format,
+            version: d.version || "1.0",
+          });
+        }
+        if (d.file) {
+          const fd = new FormData();
+          fd.append("file", d.file);
+          await api.upload(`/documents/${dbId}/upload`, fd);
+        }
+        return { ...d, _dbId: dbId, file: null };
+      }),
+    );
+
+    setForm((f) => ({ ...f, kpis: savedKpis, risques: savedRisques, documents: savedDocuments }));
+    loadedIdsRef.current = {
+      kpis: savedKpis.map((k) => k._dbId),
+      risques: savedRisques.map((r) => r._dbId),
+      documents: savedDocuments.map((d) => d._dbId),
+    };
+  };
+
   const handleDraft = async () => {
     if (!isNotEmpty(form.designation)) {
       showToast(
@@ -2246,6 +2287,7 @@ export default function ProcessFormPage() {
         navigate(`/processus/${saved.id}`, { replace: true });
       }
       setForm((f) => ({ ...f, identifiant: saved.code || f.identifiant }));
+      await syncRelatedEntities(saved.id);
       setDirty(false);
       showToast("Brouillon enregistré ✓");
     } catch (err) {
@@ -2292,6 +2334,7 @@ export default function ProcessFormPage() {
         navigate(`/processus/${saved.id}`, { replace: true });
       }
       setForm((f) => ({ ...f, identifiant: saved.code || f.identifiant }));
+      await syncRelatedEntities(saved.id);
       setPublished(true);
       setDirty(false);
       pushNotification(
@@ -2311,12 +2354,27 @@ export default function ProcessFormPage() {
     }
   };
 
-  const handleDiagnostic = () => {
+  const handleDiagnostic = async () => {
+    if (!dbId) return;
     setDiagRunning(true);
-    setTimeout(() => {
-      const results = generateDysfonctionnements(form);
+    try {
+      await api.post(`/processus/${dbId}/diagnostic-smq`, {});
+      const dysf = await api.get(`/processus/${dbId}/dysfonctionnements`);
+      const results = (Array.isArray(dysf) ? dysf : []).map((d) => ({
+        titre: d.titre,
+        description: d.description,
+        consequences: d.consequences || "",
+        causes: d.causes || "",
+        ameliorations: d.ameliorations || "",
+        gravite:
+          { mineur: "Mineur", moyen: "Mineur", majeur: "Majeur", critique: "Critique" }[d.gravite] ||
+          "Mineur",
+        responsable: form.pilote || "Pilote",
+        echeance: d.echeance || "",
+        statut:
+          { ouvert: "Ouvert", en_cours: "En cours", resolu: "Résolu" }[d.statut] || "Ouvert",
+      }));
       set("dysfonctionnements", results);
-      setDiagRunning(false);
       setDiagDone(true);
       pushNotification(
         "diagnostic",
@@ -2327,31 +2385,33 @@ export default function ProcessFormPage() {
       showToast(
         `Analyse terminée — ${results.length} dysfonctionnement(s) identifié(s) ✓`,
       );
-    }, 2800);
+    } catch (err) {
+      showToast(err?.message || "Erreur lors du diagnostic SMQ.", "error");
+    } finally {
+      setDiagRunning(false);
+    }
   };
 
-  const handleSendToAuditor = (email, message) => {
-    const auditRecord = {
-      processId: form.identifiant,
-      processName: form.designation,
-      auditorEmail: email,
-      message,
-      sentAt: new Date().toISOString(),
-      dysfonctionnements: form.dysfonctionnements,
-    };
-    const records = JSON.parse(localStorage.getItem("smq_audits") || "[]");
-    records.push(auditRecord);
-    localStorage.setItem("smq_audits", JSON.stringify(records));
-    setAuditEmail(email);
-    setAuditSent(true);
-    setShowAuditModal(false);
-    pushNotification(
-      "audit",
-      "Fiche envoyée à l'auditeur",
-      `Le processus «${form.designation}» a été transmis à ${email} pour audit externe.`,
-    );
-    setUnreadCount((n) => n + 1);
-    showToast(`Fiche envoyée à ${email} pour audit externe ✓`);
+  const handleSendToAuditor = async (auditeurId, message) => {
+    try {
+      await api.post("/diagnostics/", {
+        processus_id: dbId,
+        auditeur_id: auditeurId ? parseInt(auditeurId) : null,
+        commentaire_global: message || null,
+        initialiser_toutes_clauses: true,
+      });
+      setAuditSent(true);
+      setShowAuditModal(false);
+      pushNotification(
+        "audit",
+        "Fiche soumise à l'auditeur interne",
+        `Le processus «${form.designation}» a été transmis pour révision interne.`,
+      );
+      setUnreadCount((n) => n + 1);
+      showToast("Fiche soumise à l'auditeur interne ✓");
+    } catch (err) {
+      showToast(err?.message || "Erreur lors de la soumission.", "error");
+    }
   };
 
   /* ═══════════════════════════════════════════════════════════════
@@ -2375,7 +2435,6 @@ export default function ProcessFormPage() {
     const sourceStyles = {
       Préparateur: { color: "#1e40af", bg: "#dbeafe" },
       "Auditeur Interne": { color: "#991b1b", bg: "#fee2e2" },
-      "Auditeur Externe": { color: "#166534", bg: "#dcfce7" },
       Direction: { color: "#92400e", bg: "#fef3c7" },
     };
 
@@ -3220,8 +3279,11 @@ export default function ProcessFormPage() {
         sub="Probabilité × Gravité = Criticité calculée automatiquement"
       />
       {form.risques.map((r, i) => {
-        const crit = parseInt(r.probabilite || 1) * parseInt(r.gravite || 1);
-        const critColor = crit >= 9 ? C.danger : crit >= 4 ? C.warn : "#4caf50";
+        const rpn =
+          parseInt(r.probabilite || 1) *
+          parseInt(r.gravite || 1) *
+          parseInt(r.detectabilite || 1);
+        const critColor = rpn >= 60 ? C.danger : rpn >= 21 ? C.warn : "#4caf50";
         return (
           <div key={i} style={styles.riskCard}>
             <div style={styles.kpiCardHeader}>
@@ -3234,7 +3296,7 @@ export default function ProcessFormPage() {
                     color: critColor,
                   }}
                 >
-                  Criticité : {crit}
+                  RPN : {rpn}
                 </span>
               </span>
               <button
@@ -3264,7 +3326,7 @@ export default function ProcessFormPage() {
                   />
                 </Field>
               </div>
-              <Field label="Probabilité (1–3)">
+              <Field label="Probabilité (1–5)">
                 <Select
                   value={r.probabilite}
                   onChange={(e) => {
@@ -3273,13 +3335,15 @@ export default function ProcessFormPage() {
                     set("risques", u);
                   }}
                   options={[
-                    { value: "1", label: "1 – Faible" },
-                    { value: "2", label: "2 – Moyenne" },
-                    { value: "3", label: "3 – Élevée" },
+                    { value: "1", label: "1 – Rare" },
+                    { value: "2", label: "2 – Peu probable" },
+                    { value: "3", label: "3 – Possible" },
+                    { value: "4", label: "4 – Probable" },
+                    { value: "5", label: "5 – Quasi certain" },
                   ]}
                 />
               </Field>
-              <Field label="Gravité (1–3)">
+              <Field label="Gravité (1–5)">
                 <Select
                   value={r.gravite}
                   onChange={(e) => {
@@ -3288,9 +3352,28 @@ export default function ProcessFormPage() {
                     set("risques", u);
                   }}
                   options={[
-                    { value: "1", label: "1 – Mineure" },
-                    { value: "2", label: "2 – Modérée" },
-                    { value: "3", label: "3 – Sévère" },
+                    { value: "1", label: "1 – Négligeable" },
+                    { value: "2", label: "2 – Mineure" },
+                    { value: "3", label: "3 – Modérée" },
+                    { value: "4", label: "4 – Majeure" },
+                    { value: "5", label: "5 – Critique" },
+                  ]}
+                />
+              </Field>
+              <Field label="Détectabilité (1–5)">
+                <Select
+                  value={r.detectabilite}
+                  onChange={(e) => {
+                    const u = [...form.risques];
+                    u[i] = { ...u[i], detectabilite: e.target.value };
+                    set("risques", u);
+                  }}
+                  options={[
+                    { value: "1", label: "1 – Immédiate" },
+                    { value: "2", label: "2 – Facile" },
+                    { value: "3", label: "3 – Modérée" },
+                    { value: "4", label: "4 – Difficile" },
+                    { value: "5", label: "5 – Indétectable" },
                   ]}
                 />
               </Field>
@@ -3358,6 +3441,7 @@ export default function ProcessFormPage() {
                 "Version",
                 "Revue & Approbation",
                 "Statut",
+                "Fichier",
                 "",
               ].map((h) => (
                 <th key={h} style={styles.th}>
@@ -3406,10 +3490,27 @@ export default function ProcessFormPage() {
                       fontSize: 12,
                     }}
                   >
-                    {["PDF", "Word", "Excel", "Image"].map((f) => (
-                      <option key={f}>{f}</option>
+                    {DOC_TYPES.map((t) => (
+                      <option key={t.value} value={t.value}>{t.label}</option>
                     ))}
                   </select>
+                </td>
+                <td style={styles.td}>
+                  <input
+                    type="file"
+                    onChange={(e) => {
+                      const u = [...form.documents];
+                      u[i] = { ...u[i], file: e.target.files?.[0] || null };
+                      set("documents", u);
+                    }}
+                    style={{ fontSize: 11, width: "100%", maxWidth: 140 }}
+                  />
+                  {doc.file && (
+                    <div style={{ fontSize: 10, color: C.muted }}>{doc.file.name}</div>
+                  )}
+                  {!doc.file && doc._dbId && (
+                    <div style={{ fontSize: 10, color: C.muted }}>Fichier déjà associé</div>
+                  )}
                 </td>
                 <td style={styles.td}>
                   <select
@@ -3647,8 +3748,8 @@ export default function ProcessFormPage() {
                   dysfonctionnement(s) identifié(s)
                 </div>
                 <div style={{ color: "#92400e", fontSize: 12 }}>
-                  Vous pouvez modifier ces résultats avant de les envoyer à
-                  l'auditeur externe.
+                  Vous pouvez modifier ces résultats avant de les soumettre à
+                  l'auditeur interne.
                 </div>
               </div>
             </div>
@@ -3826,7 +3927,7 @@ export default function ProcessFormPage() {
                   marginBottom: 8,
                 }}
               >
-                📤 Envoyer à un auditeur externe
+                📤 Soumettre à l'auditeur interne
               </div>
               <div
                 style={{
@@ -3836,19 +3937,16 @@ export default function ProcessFormPage() {
                   lineHeight: 1.7,
                 }}
               >
-                Une fois satisfait des résultats, envoyez la fiche processus et
-                ses dysfonctionnements à un auditeur externe. L'auditeur pourra
-                confirmer l'analyse et formuler des recommandations
-                d'amélioration.
+                Une fois satisfait des résultats, soumettez la fiche processus
+                et ses dysfonctionnements à l'auditeur interne. Il pourra
+                confirmer l'analyse, demander des corrections et valider la
+                fiche pour l'audit externe.
               </div>
               {auditSent ? (
                 <div style={styles.auditSentBanner}>
                   <span style={{ fontSize: 20 }}>✅</span>
                   <div>
-                    <div>
-                      Fiche envoyée à <strong>{auditEmail}</strong> pour audit
-                      externe.
-                    </div>
+                    <div>Fiche soumise pour révision interne.</div>
                     <div
                       style={{
                         fontSize: 12,
@@ -3857,8 +3955,8 @@ export default function ProcessFormPage() {
                         marginTop: 2,
                       }}
                     >
-                      En attente de confirmation et de recommandations de
-                      l'auditeur.
+                      En attente de revue et de recommandations de l'auditeur
+                      interne.
                     </div>
                   </div>
                 </div>
@@ -3874,7 +3972,7 @@ export default function ProcessFormPage() {
                   }}
                   onClick={() => setShowAuditModal(true)}
                 >
-                  <span>📧</span> Envoyer à un auditeur externe
+                  <span>📤</span> Soumettre à l'auditeur interne
                 </button>
               )}
             </div>
@@ -4003,41 +4101,13 @@ export default function ProcessFormPage() {
       <SectionHeader
         num="6b"
         title="Cartographie BPMN"
-        sub="Importer ou dessiner le diagramme de flux du processus"
+        sub="Dessiner le diagramme de flux du processus"
       />
-      <div style={styles.bpmnBox}>
-        <div style={{ color: C.muted, fontSize: 38 }}>⬡</div>
-        <div style={{ fontSize: 14, color: C.muted, fontWeight: 500 }}>
-          Aucune cartographie BPMN importée
-        </div>
-        <div style={styles.bpmnBtnRow}>
-          <button
-            type="button"
-            style={styles.bpmnBtn}
-            onClick={() => showToast("Import BPMN — à intégrer")}
-          >
-            📂 Importer BPMN
-          </button>
-          <button
-            type="button"
-            style={styles.bpmnBtn}
-            onClick={() => showToast("Éditeur BPMN — à intégrer")}
-          >
-            ✏️ Dessiner BPMN
-          </button>
-          <button
-            type="button"
-            style={{
-              ...styles.bpmnBtn,
-              background: C.lightBg,
-              borderColor: C.accent,
-              color: C.primary,
-            }}
-            onClick={() => showToast("Cartographie validée ✓")}
-          >
-            ✅ Valider
-          </button>
-        </div>
+      <div style={{ border: `1.5px solid ${C.border}`, borderRadius: 12, overflow: "hidden" }}>
+        <BpmnEditor
+          initialData={form.bpmnData}
+          onChange={(data) => set("bpmnData", data)}
+        />
       </div>
     </div>
   );
@@ -4372,7 +4442,7 @@ export default function ProcessFormPage() {
                   }}
                   onClick={() => setShowAuditModal(true)}
                 >
-                  📧 Envoyer à l'auditeur
+                  📤 Soumettre à l'auditeur
                 </button>
               )}
               {!published && (
@@ -4409,6 +4479,7 @@ export default function ProcessFormPage() {
           <AuditModal
             onClose={() => setShowAuditModal(false)}
             onSend={handleSendToAuditor}
+            auditeurs={internalAuditors}
           />
         )}
 
