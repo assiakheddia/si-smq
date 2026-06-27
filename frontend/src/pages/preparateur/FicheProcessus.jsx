@@ -2284,22 +2284,28 @@ const Tab7 = ({ processus, processusId, nonConformites, onActionAdded }) => {
                           </button>
                         </div>
                       ) : (
-                        <span
-                          style={{
-                            fontSize: 12,
-                            cursor: 'pointer',
-                          }}
-                          title="Cliquer pour modifier l'échéance"
-                          onClick={() => {
-                            setEditingEcheance(nc.id);
-                            setEcheanceDraft(nc.dateLimit ? nc.dateLimit.slice(0, 10) : '');
-                          }}
-                        >
-                          {nc.dateLimit
-                            ? new Date(nc.dateLimit).toLocaleDateString('fr-FR')
-                            : '—'}
-                          <span style={{ marginLeft: 4, color: C.muted }}>✎</span>
-                        </span>
+                        (() => {
+                          // La date d'échéance d'une Action (act-) est fixée par
+                          // l'auditeur interne, pas le préparateur — les non-conformités
+                          // du Moteur Analytique (dsf-) restent éditables par tous.
+                          const canEdit = nc.id.startsWith('dsf-') || (nc.id.startsWith('act-') && isAuditeurInterne);
+                          return (
+                            <span
+                              style={{ fontSize: 12, cursor: canEdit ? 'pointer' : 'default' }}
+                              title={canEdit ? "Cliquer pour modifier l'échéance" : "Échéance fixée par l'auditeur interne"}
+                              onClick={() => {
+                                if (!canEdit) return;
+                                setEditingEcheance(nc.id);
+                                setEcheanceDraft(nc.dateLimit ? nc.dateLimit.slice(0, 10) : '');
+                              }}
+                            >
+                              {nc.dateLimit
+                                ? new Date(nc.dateLimit).toLocaleDateString('fr-FR')
+                                : '—'}
+                              {canEdit && <span style={{ marginLeft: 4, color: C.muted }}>✎</span>}
+                            </span>
+                          );
+                        })()
                       )}
                     </td>
                     <td style={S.td}>

@@ -98,6 +98,14 @@ def creer_action(
             detail="La date d'échéance ne peut pas être dans le passé.",
         )
 
+    if payload.date_echeance is not None and createur.role not in (
+        RoleEnum.auditeur_interne, RoleEnum.direction,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="La date d'échéance est réservée à l'auditeur interne et à la direction.",
+        )
+
     # Calcul automatique de la priorité depuis la source liée
     priorite = payload.priorite
     if payload.risque_id:
@@ -257,6 +265,16 @@ def modifier_action(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Une action '{action.statut.value}' ne peut plus être modifiée.",
+        )
+
+    # La date d'échéance est fixée par l'auditeur interne (ou la direction) —
+    # le préparateur exécute l'action mais ne décide pas de son délai.
+    if payload.date_echeance is not None and modificateur.role not in (
+        RoleEnum.auditeur_interne, RoleEnum.direction,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="La date d'échéance est réservée à l'auditeur interne et à la direction.",
         )
 
     champs = [

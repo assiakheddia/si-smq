@@ -26,8 +26,11 @@ const S = {
   btn: (color, bg, border) => ({ background: bg, color, border: `1px solid ${border || color + "33"}`, borderRadius: 8, padding: "8px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }),
 };
 
-function ItemCard({ item, type }) {
+function ItemCard({ item, type, onUpdated }) {
   const [expanded, setExpanded] = useState(false);
+  const [editingEcheance, setEditingEcheance] = useState(false);
+  const [echeanceDraft, setEcheanceDraft] = useState(item.date_echeance ? item.date_echeance.slice(0, 10) : "");
+  const [saving, setSaving] = useState(false);
   const s = STATUS_MAP[item.statut] || STATUS_MAP.planifiee;
   const typeColors = {
     observations:    { icon: "💬", color: "#374151", bg: "#f3f4f6" },
@@ -36,6 +39,21 @@ function ItemCard({ item, type }) {
   };
   const tc = typeColors[type];
   const text = item.description || item.titre || "";
+
+  const saveEcheance = async () => {
+    setSaving(true);
+    try {
+      await api.put(`/actions/${item.id}`, {
+        date_echeance: echeanceDraft ? `${echeanceDraft}T00:00:00` : null,
+      });
+      setEditingEcheance(false);
+      onUpdated?.();
+    } catch {
+      // le champ reste ouvert pour réessayer
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div style={{ background: "#fff", border: "1px solid #f0f2f4", borderRadius: 12, overflow: "hidden" }}>
@@ -63,6 +81,32 @@ function ItemCard({ item, type }) {
               <div style={{ fontSize: 12, color: "#14532d" }}>{item.responsable.prenom} {item.responsable.nom}</div>
             </div>
           )}
+          {type === "corrections" && (
+            <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 10, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase" }}>Échéance</span>
+              {editingEcheance ? (
+                <>
+                  <input
+                    type="date"
+                    value={echeanceDraft}
+                    onChange={(e) => setEcheanceDraft(e.target.value)}
+                    style={{ fontSize: 12, padding: "3px 6px", borderRadius: 6, border: "1px solid #e8f0eb" }}
+                  />
+                  <button onClick={saveEcheance} disabled={saving} style={{ fontSize: 11, fontWeight: 700, color: "#fff", background: "#2D604F", border: "none", borderRadius: 6, padding: "3px 8px", cursor: saving ? "not-allowed" : "pointer" }}>✓</button>
+                  <button onClick={() => setEditingEcheance(false)} style={{ fontSize: 11, color: "#6b7280", background: "none", border: "none", cursor: "pointer" }}>✕</button>
+                </>
+              ) : (
+                <span
+                  onClick={() => setEditingEcheance(true)}
+                  style={{ fontSize: 12, color: "#1a2e22", cursor: "pointer" }}
+                  title="Cliquer pour modifier l'échéance"
+                >
+                  {item.date_echeance ? new Date(item.date_echeance).toLocaleDateString("fr-FR") : "—"}
+                  <span style={{ marginLeft: 4, color: "#9ca3af" }}>✎</span>
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -78,7 +122,7 @@ export default function ImprovementRequests() {
   const [processusList, setProcessusList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ processus_id: "", type: "observations", titre: "", text: "", priorite: "normale" });
+  const [form, setForm] = useState({ processus_id: "", type: "observations", titre: "", text: "", priorite: "normale", date_echeance: "" });
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -103,13 +147,14 @@ export default function ImprovementRequests() {
         description: form.text,
         type: TAB_TO_TYPE[form.type],
         priorite: form.type === "corrections" ? form.priorite : "normale",
+        date_echeance: form.type === "corrections" && form.date_echeance ? `${form.date_echeance}T00:00:00` : null,
         processus_id: Number(form.processus_id),
         origine: "manuelle",
       });
       setActiveTab(form.type);
       setShowForm(false);
       setSaved(true);
-      setForm({ processus_id: "", type: "observations", titre: "", text: "", priorite: "normale" });
+      setForm({ processus_id: "", type: "observations", titre: "", text: "", priorite: "normale", date_echeance: "" });
       load();
       setTimeout(() => setSaved(false), 3000);
     } catch {
@@ -173,17 +218,28 @@ export default function ImprovementRequests() {
               </div>
             </div>
             {form.type === "corrections" && (
-              <div style={{ marginBottom: 14 }}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: "#4b6358", display: "block", marginBottom: 5 }}>Gravité de la non-conformité *</label>
-                <select
-                  value={form.priorite}
-                  onChange={(e) => setForm({ ...form, priorite: e.target.value })}
-                  style={{ width: 220, padding: "9px 12px", borderRadius: 8, border: "1px solid #e8f0eb", fontSize: 13, outline: "none", fontFamily: "inherit" }}
-                >
-                  <option value="normale">Mineure</option>
-                  <option value="haute">Majeure</option>
-                  <option value="critique">Critique</option>
-                </select>
+              <div style={{ display: "flex", gap: 14, marginBottom: 14 }}>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: "#4b6358", display: "block", marginBottom: 5 }}>Gravité de la non-conformité *</label>
+                  <select
+                    value={form.priorite}
+                    onChange={(e) => setForm({ ...form, priorite: e.target.value })}
+                    style={{ width: 220, padding: "9px 12px", borderRadius: 8, border: "1px solid #e8f0eb", fontSize: 13, outline: "none", fontFamily: "inherit" }}
+                  >
+                    <option value="normale">Mineure</option>
+                    <option value="haute">Majeure</option>
+                    <option value="critique">Critique</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: "#4b6358", display: "block", marginBottom: 5 }}>Date d'échéance</label>
+                  <input
+                    type="date"
+                    value={form.date_echeance}
+                    onChange={(e) => setForm({ ...form, date_echeance: e.target.value })}
+                    style={{ width: 180, padding: "9px 12px", borderRadius: 8, border: "1px solid #e8f0eb", fontSize: 13, outline: "none", fontFamily: "inherit" }}
+                  />
+                </div>
               </div>
             )}
             <div style={{ marginBottom: 16 }}>
@@ -220,7 +276,7 @@ export default function ImprovementRequests() {
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {currentItems.map((item) => <ItemCard key={item.id} item={item} type={activeTab} />)}
+            {currentItems.map((item) => <ItemCard key={item.id} item={item} type={activeTab} onUpdated={load} />)}
           </div>
         )}
       </div>
