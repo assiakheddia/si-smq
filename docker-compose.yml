@@ -50,7 +50,7 @@ services:
       MINIO_SECRET_KEY: minioadmin
       SECRET_KEY: "demo_secret_key_pour_evaluation_ne_pas_utiliser_en_production_32"
       FRONTEND_URL: http://localhost:5173
-      CORS_ORIGINS: "http://localhost:5173,http://localhost:3000"
+      CORS_ORIGINS: '["http://localhost:5173","http://localhost:3000"]'
       ANTHROPIC_API_KEY: "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"
       ANTHROPIC_MODEL: claude-haiku-4-5
       # GOOGLE_CLIENT_ID/SECRET : optionnels. Sans eux, l'app fonctionne

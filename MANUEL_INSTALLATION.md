@@ -1,5 +1,10 @@
 # Manuel d'installation et d'utilisation — SI-SMQ
 
+## Prérequis
+
+**Docker Desktop** doit être installé (gratuit) : https://www.docker.com/products/docker-desktop/
+C'est le seul logiciel à installer manuellement — il fournit Docker et Docker Compose. Une fois installé, lancer Docker Desktop avant l'étape suivante.
+
 ## Démarrage
 
 Depuis la racine du projet :
