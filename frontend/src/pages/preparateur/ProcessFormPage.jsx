@@ -56,6 +56,9 @@ function buildProcessusPayload(form, { isEdit }) {
     sorties: sorties || null,
     ressources_cles: ressources || null,
     pilote_nom: form.pilote ? form.pilote.trim() : null,
+    pilote_email: form.email ? form.email.trim() : null,
+    pilote_departement: form.sousDept ? form.sousDept.trim() : null,
+    pilote_telephone: form.telephone ? form.telephone.trim() : null,
     raci_roles: form.raci.roles,
     raci_activities: form.raci.activities,
     raci_cells: form.raci.cells,
@@ -1681,7 +1684,7 @@ function AuditModal({ onClose, onSend, auditeurs }) {
           }}
         >
           L'auditeur interne recevra la fiche processus complète ainsi que les
-          dysfonctionnements identifiés pour révision et recommandations.
+          non-conformités identifiées pour révision et recommandations.
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <div style={styles.fieldWrap}>
@@ -1780,13 +1783,51 @@ function makeKpi() {
   return {
     _dbId: null,
     nom: "",
-    unite: "",
+    unite: "pourcentage",
+    uniteCustom: "",
     valeurCible: "",
     seuilAlerte: "",
-    frequence: "",
+    frequence: "mensuel",
     responsable: "",
+    source: "manuel",
+    formule: "",
   };
 }
+
+/* ── Options des champs KPI — alignées sur les enums backend (models/indicateur.py) ── */
+const KPI_UNITE_OPTIONS = [
+  { value: "pourcentage", label: "Pourcentage (%)" },
+  { value: "nombre", label: "Nombre" },
+  { value: "score", label: "Score" },
+  { value: "jours", label: "Jours" },
+  { value: "heures", label: "Heures" },
+  { value: "euro", label: "Montant (€/DA)" },
+  { value: "ratio", label: "Ratio" },
+  { value: "autre", label: "Autre…" },
+];
+const KPI_FREQUENCE_OPTIONS = [
+  { value: "quotidien", label: "Quotidien" },
+  { value: "hebdomadaire", label: "Hebdomadaire" },
+  { value: "mensuel", label: "Mensuel" },
+  { value: "trimestriel", label: "Trimestriel" },
+  { value: "semestriel", label: "Semestriel" },
+  { value: "annuel", label: "Annuel" },
+  { value: "ponctuel", label: "Ponctuel (sur événement)" },
+];
+const KPI_SOURCE_OPTIONS = [
+  { value: "manuel", label: "Manuel (saisie par le pilote)" },
+  { value: "auto", label: "Automatique (calculé)" },
+  { value: "mixte", label: "Mixte (auto + ajustement manuel)" },
+];
+const KPI_FORMULE_OPTIONS = [
+  { value: "score_maturite_processus", label: "Score de maturité du processus" },
+  { value: "taux_actions_closes", label: "Taux d'actions clôturées" },
+  { value: "taux_conformite_clauses", label: "Taux de conformité des clauses" },
+  { value: "nb_risques_critiques", label: "Nombre de risques critiques" },
+  { value: "nb_risques_actifs", label: "Nombre de risques actifs" },
+  { value: "taux_documents_valides", label: "Taux de documents validés" },
+  { value: "score_global_diagnostic", label: "Score global du dernier diagnostic" },
+];
 function makeRisque() {
   return {
     _dbId: null,
@@ -1925,7 +1966,7 @@ const TABS = [
   { id: 1, label: "Éléments clés" },
   { id: 2, label: "Contexte" },
   { id: 3, label: "Documentation" },
-  { id: 4, label: "Dysfonctionnements" },
+  { id: 4, label: "Non-conformités détectées" },
   { id: 5, label: "Déroulement" },
 ];
 
@@ -2097,11 +2138,14 @@ export default function ProcessFormPage() {
           kpis: (kpisRes || []).map((k) => ({
             _dbId: k.id,
             nom: k.nom || "",
-            unite: k.unite_custom || k.unite || "",
+            unite: k.unite || "pourcentage",
+            uniteCustom: k.unite_custom || "",
             valeurCible: k.valeur_cible != null ? String(k.valeur_cible) : "",
             seuilAlerte: k.seuil_alerte != null ? String(k.seuil_alerte) : "",
-            frequence: k.frequence || "",
+            frequence: k.frequence || "mensuel",
             responsable: k.responsable ? `${k.responsable.prenom} ${k.responsable.nom}`.trim() : "",
+            source: k.source || "manuel",
+            formule: k.formule || "",
           })),
           risques: (risquesRes || []).map((r) => ({
             _dbId: r.id,
@@ -2180,7 +2224,7 @@ export default function ProcessFormPage() {
   };
 
   /* ── Synchronisation KPIs / Risques / Documents (diff par _dbId, pas de delete-all) ── */
-  const syncRelatedEntities = async (processusId) => {
+  const syncRelatedEntities = async (processusId, processusCode) => {
     const loaded = loadedIdsRef.current;
 
     const currentKpiIds = form.kpis.map((k) => k._dbId).filter(Boolean);
@@ -2193,10 +2237,13 @@ export default function ProcessFormPage() {
       form.kpis.map((k) => {
         const payload = {
           nom: k.nom,
-          unite_custom: k.unite || null,
+          unite: k.unite || undefined,
+          unite_custom: k.unite === "autre" ? (k.uniteCustom || null) : null,
           valeur_cible: k.valeurCible ? parseFloat(k.valeurCible) : null,
           seuil_alerte: k.seuilAlerte ? parseFloat(k.seuilAlerte) : null,
           frequence: k.frequence || undefined,
+          source: k.source || undefined,
+          formule: k.source !== "manuel" ? (k.formule || null) : null,
           processus_id: processusId,
         };
         if (k._dbId) {
@@ -2243,7 +2290,7 @@ export default function ProcessFormPage() {
             titre: d.titre,
             type_document: d.format,
             version: d.version || "1.0",
-            processus_code: form.identifiant,
+            processus_code: processusCode,
           });
           dbId = created.id;
         } else {
@@ -2287,7 +2334,7 @@ export default function ProcessFormPage() {
         navigate(`/processus/${saved.id}`, { replace: true });
       }
       setForm((f) => ({ ...f, identifiant: saved.code || f.identifiant }));
-      await syncRelatedEntities(saved.id);
+      await syncRelatedEntities(saved.id, saved.code || form.identifiant);
       setDirty(false);
       showToast("Brouillon enregistré ✓");
     } catch (err) {
@@ -2334,7 +2381,7 @@ export default function ProcessFormPage() {
         navigate(`/processus/${saved.id}`, { replace: true });
       }
       setForm((f) => ({ ...f, identifiant: saved.code || f.identifiant }));
-      await syncRelatedEntities(saved.id);
+      await syncRelatedEntities(saved.id, saved.code || form.identifiant);
       setPublished(true);
       setDirty(false);
       pushNotification(
@@ -2379,11 +2426,11 @@ export default function ProcessFormPage() {
       pushNotification(
         "diagnostic",
         "Diagnostic SMQ complété",
-        `L'analyse du processus «${form.designation}» a identifié ${results.length} dysfonctionnement(s).`,
+        `L'analyse du processus «${form.designation}» a identifié ${results.length} non-conformité(s).`,
       );
       setUnreadCount((n) => n + 1);
       showToast(
-        `Analyse terminée — ${results.length} dysfonctionnement(s) identifié(s) ✓`,
+        `Analyse terminée — ${results.length} non-conformité(s) identifiée(s) ✓`,
       );
     } catch (err) {
       showToast(err?.message || "Erreur lors du diagnostic SMQ.", "error");
@@ -3119,50 +3166,136 @@ export default function ProcessFormPage() {
             </button>
           </div>
           <div style={styles.grid3}>
-            {[
-              {
-                key: "nom",
-                label: "Nom du KPI",
-                placeholder: "Ex : Taux de réussite",
-              },
-              {
-                key: "unite",
-                label: "Unité",
-                placeholder: "%, jours, nombre...",
-              },
-              {
-                key: "valeurCible",
-                label: "Valeur cible",
-                placeholder: "Ex : ≥ 90%",
-              },
-              {
-                key: "seuilAlerte",
-                label: "Seuil d'alerte",
-                placeholder: "Ex : < 75%",
-              },
-              {
-                key: "frequence",
-                label: "Fréquence de collecte",
-                placeholder: "Mensuel, Annuel...",
-              },
-              {
-                key: "responsable",
-                label: "Responsable",
-                placeholder: "Nom ou rôle",
-              },
-            ].map(({ key, label, placeholder }) => (
-              <Field key={key} label={label}>
+            <Field label="Nom du KPI">
+              <Input
+                value={kpi.nom}
+                onChange={(e) => {
+                  const u = [...form.kpis];
+                  u[i] = { ...u[i], nom: e.target.value };
+                  set("kpis", u);
+                }}
+                placeholder="Ex : Taux de réussite"
+              />
+            </Field>
+
+            <Field label="Unité">
+              <select
+                value={kpi.unite}
+                onChange={(e) => {
+                  const u = [...form.kpis];
+                  u[i] = { ...u[i], unite: e.target.value };
+                  set("kpis", u);
+                }}
+                style={styles.select}
+              >
+                {KPI_UNITE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </Field>
+
+            {kpi.unite === "autre" && (
+              <Field label="Préciser l'unité">
                 <Input
-                  value={kpi[key]}
+                  value={kpi.uniteCustom}
                   onChange={(e) => {
                     const u = [...form.kpis];
-                    u[i] = { ...u[i], [key]: e.target.value };
+                    u[i] = { ...u[i], uniteCustom: e.target.value };
                     set("kpis", u);
                   }}
-                  placeholder={placeholder}
+                  placeholder="Ex : dossiers/mois"
                 />
               </Field>
-            ))}
+            )}
+
+            <Field label="Valeur cible">
+              <Input
+                type="number"
+                value={kpi.valeurCible}
+                onChange={(e) => {
+                  const u = [...form.kpis];
+                  u[i] = { ...u[i], valeurCible: e.target.value };
+                  set("kpis", u);
+                }}
+                placeholder="Ex : 90"
+              />
+            </Field>
+
+            <Field label="Seuil d'alerte">
+              <Input
+                type="number"
+                value={kpi.seuilAlerte}
+                onChange={(e) => {
+                  const u = [...form.kpis];
+                  u[i] = { ...u[i], seuilAlerte: e.target.value };
+                  set("kpis", u);
+                }}
+                placeholder="Ex : 75"
+              />
+            </Field>
+
+            <Field label="Fréquence de collecte">
+              <select
+                value={kpi.frequence}
+                onChange={(e) => {
+                  const u = [...form.kpis];
+                  u[i] = { ...u[i], frequence: e.target.value };
+                  set("kpis", u);
+                }}
+                style={styles.select}
+              >
+                {KPI_FREQUENCE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </Field>
+
+            <Field label="Responsable">
+              <Input
+                value={kpi.responsable}
+                onChange={(e) => {
+                  const u = [...form.kpis];
+                  u[i] = { ...u[i], responsable: e.target.value };
+                  set("kpis", u);
+                }}
+                placeholder="Nom ou rôle"
+              />
+            </Field>
+
+            <Field label="Mode de calcul">
+              <select
+                value={kpi.source}
+                onChange={(e) => {
+                  const u = [...form.kpis];
+                  u[i] = { ...u[i], source: e.target.value, formule: e.target.value === "manuel" ? "" : u[i].formule };
+                  set("kpis", u);
+                }}
+                style={styles.select}
+              >
+                {KPI_SOURCE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </Field>
+
+            {kpi.source !== "manuel" && (
+              <Field label="Formule de calcul automatique">
+                <select
+                  value={kpi.formule}
+                  onChange={(e) => {
+                    const u = [...form.kpis];
+                    u[i] = { ...u[i], formule: e.target.value };
+                    set("kpis", u);
+                  }}
+                  style={styles.select}
+                >
+                  <option value="">— Choisir une formule —</option>
+                  {KPI_FORMULE_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </Field>
+            )}
           </div>
         </div>
       ))}
@@ -3647,7 +3780,7 @@ export default function ProcessFormPage() {
               lineHeight: 1.7,
             }}
           >
-            L'analyse des dysfonctionnements n'est disponible qu'après la
+            L'analyse des non-conformités n'est disponible qu'après la
             publication de la fiche processus. Publiez votre processus pour
             débloquer cette section et lancer le diagnostic SMQ.
           </div>
@@ -3681,7 +3814,7 @@ export default function ProcessFormPage() {
       <div>
         <SectionHeader
           num="5"
-          title="Dysfonctionnements Majeurs"
+          title="Non-conformités ISO Majeures"
           sub="Analyse automatique SMQ et plan d'amélioration"
         />
 
@@ -3719,7 +3852,7 @@ export default function ProcessFormPage() {
               Notre moteur SMQ va analyser la complétude de votre fiche,
               identifier les écarts par rapport aux exigences ISO 9001 (KPIs,
               risques, documentation, RACI, déroulement) et générer
-              automatiquement les dysfonctionnements détectés.
+              automatiquement les non-conformités détectées.
             </div>
             <button
               type="button"
@@ -3745,7 +3878,7 @@ export default function ProcessFormPage() {
                   style={{ fontWeight: 700, color: "#92400e", marginBottom: 2 }}
                 >
                   Analyse terminée — {form.dysfonctionnements.length}{" "}
-                  dysfonctionnement(s) identifié(s)
+                  non-conformité(s) identifiée(s)
                 </div>
                 <div style={{ color: "#92400e", fontSize: 12 }}>
                   Vous pouvez modifier ces résultats avant de les soumettre à
@@ -3767,7 +3900,7 @@ export default function ProcessFormPage() {
                   <div
                     style={{ fontSize: 14, fontWeight: 700, color: C.primary }}
                   >
-                    Dysfonctionnement #{i + 1}
+                    Non-conformité #{i + 1}
                   </div>
                   <button
                     type="button"
@@ -3792,7 +3925,7 @@ export default function ProcessFormPage() {
                           u[i] = { ...u[i], titre: e.target.value };
                           set("dysfonctionnements", u);
                         }}
-                        placeholder="Titre court du dysfonctionnement..."
+                        placeholder="Titre court de la non-conformité..."
                       />
                     </Field>
                   </div>
@@ -3907,7 +4040,7 @@ export default function ProcessFormPage() {
                 ])
               }
             >
-              ＋ Ajouter un dysfonctionnement
+              ＋ Ajouter une non-conformité
             </button>
 
             <div
@@ -3938,7 +4071,7 @@ export default function ProcessFormPage() {
                 }}
               >
                 Une fois satisfait des résultats, soumettez la fiche processus
-                et ses dysfonctionnements à l'auditeur interne. Il pourra
+                et ses non-conformités à l'auditeur interne. Il pourra
                 confirmer l'analyse, demander des corrections et valider la
                 fiche pour l'audit externe.
               </div>

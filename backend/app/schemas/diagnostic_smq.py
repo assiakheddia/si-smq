@@ -31,6 +31,7 @@ class ResponsableResume(_Base):
 
 class DysfonctionnementResponse(_Base):
     id: int
+    reference: str | None = None
     clause_iso_code: str | None
     titre: str
     description: str | None
@@ -44,6 +45,13 @@ class DysfonctionnementResponse(_Base):
     responsable: ResponsableResume | None = None
     echeance: date | None
     ordre: int
+
+
+class DysfonctionnementUpdate(_Base):
+    """Mise à jour partielle — pour l'instant seule l'échéance est éditable depuis la fiche."""
+    echeance: date | None = None
+    statut: StatutDysfonctionnement | None = None
+    responsable_id: int | None = None
 
 
 class DiagnosticSMQResponse(_Base):

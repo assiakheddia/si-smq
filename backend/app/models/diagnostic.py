@@ -135,6 +135,12 @@ class DiagnosticISO(Base):
     )
 
     date_diagnostic  = Column(DateTime, default=datetime.utcnow, nullable=False)
+    # Date de création de l'enregistrement (horodatage technique).
+
+    date_planifiee   = Column(DateTime, nullable=True)
+    # Date à laquelle l'audit/diagnostic est programmé (choisie par
+    # l'utilisateur dans le calendrier) — distincte de date_diagnostic.
+
     date_validation  = Column(DateTime, nullable=True)
     # Renseignée quand statut passe à "valide"
 
@@ -172,8 +178,14 @@ class DiagnosticISO(Base):
     # stockés en colonne (évite toute désynchronisation avec le détail).
     # -------------------------------------------------------------------------
     @property
-    def nb_clauses_evaluees(self) -> int:
+    def nb_clauses_total(self) -> int:
+        """Nombre de clauses applicables rattachées à ce diagnostic (évaluées ou non)."""
         return len(self.clauses_evaluees)
+
+    @property
+    def nb_clauses_evaluees(self) -> int:
+        """Nombre de clauses réellement évaluées (est_evalue=True) — cf. DiagnosticClause.est_evalue."""
+        return sum(1 for c in self.clauses_evaluees if c.est_evalue)
 
     @property
     def nb_clauses_conformes(self) -> int:
@@ -294,6 +306,16 @@ class DiagnosticClause(Base):
     score = Column(Float, nullable=False, default=0.0)
     # Saisi par l'auditeur : 0.0 → 100.0
     # Représente le pourcentage de conformité à cette clause
+    # ATTENTION : ce champ vaut 0.0 par défaut (NOT NULL) — il ne permet PAS
+    # de distinguer "noté 0 volontairement" de "jamais évalué". C'est le rôle
+    # de est_evalue ci-dessous (ne jamais se fier à score.is_(None), toujours
+    # NULL-safe puisque la colonne ne contient jamais NULL).
+
+    est_evalue = Column(Boolean, nullable=False, default=False)
+    # True dès qu'un score réel a été saisi (evaluer_clause / modifier_clause /
+    # evaluer_toutes_clauses). Seule source de vérité pour la complétude d'un
+    # diagnostic — score/niveau/type_ecart ont des valeurs par défaut non-NULL
+    # qui ne peuvent pas servir à ça.
 
     niveau = Column(
         SAEnum(NiveauMaturite),

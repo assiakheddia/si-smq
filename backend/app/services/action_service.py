@@ -30,7 +30,7 @@ from app.models.action import Action, StatutAction
 from app.models.diagnostic import DiagnosticClause
 from app.models.processus import Processus
 from app.models.risque import Risque
-from app.models.utilisateur import Utilisateur
+from app.models.utilisateur import RoleEnum, Utilisateur
 from app.schemas.action import (
     ActionCreate,
     ActionUpdate,
@@ -123,6 +123,7 @@ def creer_action(
         processus_id=processus.id,
         risque_id=payload.risque_id,
         diagnostic_clause_id=payload.diagnostic_clause_id,
+        clause_iso_code=payload.clause_iso_code,
         responsable_id=payload.responsable_id,
         verificateur_id=payload.verificateur_id,
         cause_racine=payload.cause_racine,
@@ -140,6 +141,7 @@ def creer_action(
         "Action créée : %s (priorité=%s) par %s",
         reference, priorite, createur.email,
     )
+    action.processus_nom = processus.nom
     return action
 
 
@@ -181,6 +183,8 @@ def lister_actions(
     q = q.order_by(Action.date_echeance.asc().nullslast())
     total = q.count()
     items = q.offset((page - 1) * taille_page).limit(taille_page).all()
+    for item in items:
+        item.processus_nom = item.processus.nom if item.processus else None
 
     nb_planifiees = db.query(Action).filter(Action.statut == StatutAction.planifiee).count()
     nb_en_cours = db.query(Action).filter(Action.statut == StatutAction.en_cours).count()
@@ -207,7 +211,9 @@ def lister_actions(
 
 
 def get_action(db: Session, action_id: int) -> Action:
-    return _get_ou_404(db, action_id)
+    action = _get_ou_404(db, action_id)
+    action.processus_nom = action.processus.nom if action.processus else None
+    return action
 
 
 def get_kanban(db: Session, processus_id: int | None = None) -> dict:
@@ -222,6 +228,7 @@ def get_kanban(db: Session, processus_id: int | None = None) -> dict:
     actions = q.all()
     kanban: dict[str, list] = {s.value: [] for s in StatutAction}
     for action in actions:
+        action.processus_nom = action.processus.nom if action.processus else None
         kanban[action.statut.value].append(action)
 
     return kanban
@@ -254,7 +261,7 @@ def modifier_action(
 
     champs = [
         "titre", "description", "type", "priorite", "cause_racine",
-        "date_planifiee", "date_echeance", "responsable_id",
+        "clause_iso_code", "date_planifiee", "date_echeance", "responsable_id",
         "verificateur_id", "avancement",
     ]
     for champ in champs:
@@ -266,6 +273,7 @@ def modifier_action(
     db.refresh(action)
 
     logger.info("Action modifiée : %s par %s", action.reference, modificateur.email)
+    action.processus_nom = action.processus.nom if action.processus else None
     return action
 
 
@@ -307,12 +315,21 @@ def transitionner_statut(
             ),
         )
 
-    # Droits selon la transition cible
-    transitions_admin = {StatutAction.close, StatutAction.annulee}
-    if nouveau_statut in transitions_admin and not demandeur.peut("delete", "action"):
+    # Droits selon la transition cible.
+    # Annulation : réservée aux préparateurs et à la direction (décision destructive).
+    if nouveau_statut == StatutAction.annulee and not demandeur.peut("delete", "action"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Clôture/annulation réservée aux préparateurs et à la direction.",
+            detail="L'annulation est réservée aux préparateurs et à la direction.",
+        )
+    # Clôture (en_verification → close) : vérification d'efficacité §10.2.1 —
+    # c'est précisément le rôle de l'auditeur interne, en plus des préparateurs/direction.
+    if nouveau_statut == StatutAction.close and not (
+        demandeur.peut("delete", "action") or demandeur.role == RoleEnum.auditeur_interne
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="La clôture est réservée aux préparateurs, à l'auditeur interne et à la direction.",
         )
 
     action.statut = nouveau_statut
@@ -321,6 +338,10 @@ def transitionner_statut(
         action.date_cloture = datetime.utcnow()
     elif nouveau_statut == StatutAction.close:
         action.date_cloture = datetime.utcnow()
+        # Traçabilité §10.2.1 : la personne qui valide l'efficacité devient le
+        # vérificateur si aucun n'était déjà désigné.
+        if not action.verificateur_id:
+            action.verificateur_id = demandeur.id
     elif nouveau_statut == StatutAction.en_verification:
         action.date_realisation = datetime.utcnow()
 
@@ -336,6 +357,7 @@ def transitionner_statut(
         "Action %s → %s par %s",
         action.reference, nouveau_statut.value, demandeur.email,
     )
+    action.processus_nom = action.processus.nom if action.processus else None
     return action
 
 
@@ -387,4 +409,5 @@ def verifier_efficacite(
         "efficace" if payload.efficacite_verifiee else "non efficace",
         verificateur.email,
     )
+    action.processus_nom = action.processus.nom if action.processus else None
     return action

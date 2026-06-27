@@ -145,6 +145,11 @@ class Dysfonctionnement(Base):
 
     id = Column(Integer, primary_key=True, index=True)
 
+    reference = Column(String(50), unique=True, nullable=True, index=True)
+    # ex: "ECT-2026-PROC-010-003" — même schéma que Action.reference /
+    # DiagnosticISO.reference pour une identification homogène dans toute
+    # l'appli, peu importe l'origine (audit interne ou Moteur Analytique).
+
     diagnostic_id = Column(
         Integer,
         ForeignKey("diagnostics_smq.id", ondelete="CASCADE"),

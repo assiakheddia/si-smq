@@ -10,6 +10,22 @@ const STATUS = {
   archive:   { label: "Archivée", bg: "#f3f4f6", color: "#374151" },
 };
 
+// Score représentatif envoyé au backend pour chaque niveau choisi — reste
+// cohérent avec les seuils réels de iso_engine.score_to_niveau() (75/50/25).
+const NIVEAU_SCORE = { conforme: 90, avance: 65, partiel: 35, non_conforme: 10 };
+const NIVEAU_OPTIONS = [
+  { value: "conforme", label: "Conforme" },
+  { value: "avance", label: "Avancé" },
+  { value: "partiel", label: "Partiel" },
+  { value: "non_conforme", label: "Non conforme" },
+];
+const NIVEAU_STYLE = {
+  conforme: { bg: "#dcfce7", color: "#166534" },
+  avance: { bg: "#dbeafe", color: "#1e40af" },
+  partiel: { bg: "#fef3c7", color: "#92400e" },
+  non_conforme: { bg: "#fee2e2", color: "#991b1b" },
+};
+
 const S = {
   page: { minHeight: "100vh", background: "#eaf5eb", fontFamily: "'Plus Jakarta Sans', 'DM Sans', sans-serif" },
   inner: { padding: "28px 32px", maxWidth: 1280 },
@@ -39,8 +55,25 @@ function FicheDetail({ fiche, onClose, onActionDone }) {
   const [evaluating, setEvaluating] = useState(false);
   const [submittingDiag, setSubmittingDiag] = useState(false);
   const [evalError, setEvalError] = useState("");
+  const [savingClauseId, setSavingClauseId] = useState(null);
 
   const reloadDetail = () => api.get(`/diagnostics/${fiche.id}`).then(setDetail).catch(() => {});
+
+  const setClauseNiveau = async (c, niveau) => {
+    setSavingClauseId(c.id);
+    try {
+      await api.patch(`/diagnostics/${fiche.id}/clauses/${c.clause_id}`, {
+        clause_id: c.clause_id,
+        score: NIVEAU_SCORE[niveau],
+      });
+      await reloadDetail();
+      onActionDone?.();
+    } catch {
+      // le sélecteur reste modifiable pour réessayer
+    } finally {
+      setSavingClauseId(null);
+    }
+  };
 
   useEffect(() => {
     reloadDetail().finally(() => setLoading(false));
@@ -76,7 +109,15 @@ function FicheDetail({ fiche, onClose, onActionDone }) {
 
   const clauses = detail?.clauses_evaluees || [];
   const isoClauses = [...new Set(clauses.map((c) => c.clause?.code).filter(Boolean))];
-  const ecarts = clauses.filter((c) => c.type_ecart);
+  const clausesTriees = [...clauses].sort((a, b) => {
+    const pa = (a.clause?.code || "").split(".").map(Number);
+    const pb = (b.clause?.code || "").split(".").map(Number);
+    for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+      const diff = (pa[i] || 0) - (pb[i] || 0);
+      if (diff) return diff;
+    }
+    return 0;
+  });
 
   const submitAction = async (type, text) => {
     setSaving(true);
@@ -125,7 +166,7 @@ function FicheDetail({ fiche, onClose, onActionDone }) {
         <>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
             {[
-              ["Auditeur", fiche.owner], ["Score global", `${detail?.score_global ?? fiche.score_global ?? 0}%`],
+              ["Auditeur", fiche.owner], ["Score de maturité", `${detail?.score_global ?? fiche.score_global ?? 0}%`],
               ["Période couverte", detail?.periode_couverte || "—"], ["Clauses évaluées", String(detail?.nb_clauses_evaluees ?? 0)],
               ["Clauses conformes", String(detail?.nb_clauses_conformes ?? 0)], ["Écarts majeurs", String(detail?.nb_ecarts_majeurs ?? 0)],
               ["Commentaire global", detail?.commentaire_global || "—"],
@@ -168,20 +209,47 @@ function FicheDetail({ fiche, onClose, onActionDone }) {
           )}
 
           <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "#1a2e22", marginBottom: 10 }}>Écarts identifiés</div>
-            {ecarts.length === 0 ? (
-              <div style={{ fontSize: 12, color: "#9ca3af" }}>Aucun écart relevé.</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#1a2e22", marginBottom: 4 }}>Clauses évaluées — détail</div>
+            <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 10 }}>
+              {detail?.statut === "brouillon"
+                ? "Cochez le niveau de conformité de chaque clause — le score est calculé automatiquement."
+                : "Diagnostic soumis — niveaux figés, non modifiables."}
+            </div>
+            {clausesTriees.length === 0 ? (
+              <div style={{ fontSize: 12, color: "#9ca3af" }}>Aucune clause évaluée.</div>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {ecarts.map((c) => (
-                  <div key={c.id} style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "10px 14px", background: "#fff", borderRadius: 8, border: "1px solid #e8f0eb" }}>
-                    <span style={{ background: c.type_ecart === "majeur" ? "#fee2e2" : "#fef3c7", color: c.type_ecart === "majeur" ? "#991b1b" : "#92400e", borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 800, flexShrink: 0 }}>
-                      {c.clause?.code || "—"}
-                    </span>
-                    <span style={{ fontSize: 12, color: "#4b6358", flex: 1 }}>{c.description_ecart || c.recommandation_finale || "—"}</span>
-                    <span style={{ fontSize: 11, color: "#9ca3af" }}>score {c.score}</span>
-                  </div>
-                ))}
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 420, overflowY: "auto" }}>
+                {clausesTriees.map((c) => {
+                  const ns = NIVEAU_STYLE[c.niveau] || NIVEAU_STYLE.non_conforme;
+                  return (
+                    <div key={c.id} style={{ display: "flex", gap: 12, alignItems: "center", padding: "8px 14px", background: "#fff", borderRadius: 8, border: "1px solid #e8f0eb" }}>
+                      <span style={{ background: "#ede9fe", color: "#5b21b6", borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 800, flexShrink: 0, minWidth: 40, textAlign: "center" }}>
+                        {c.clause?.code || "—"}
+                      </span>
+                      <span style={{ fontSize: 12, color: "#4b6358", flex: 1 }}>{c.description_ecart || c.recommandation_finale || c.clause?.titre || "—"}</span>
+                      {detail?.statut === "brouillon" ? (
+                        <select
+                          value={c.niveau}
+                          disabled={savingClauseId === c.id}
+                          onChange={(e) => setClauseNiveau(c, e.target.value)}
+                          style={{
+                            fontSize: 11, fontWeight: 700, borderRadius: 6, border: "none",
+                            padding: "4px 8px", background: ns.bg, color: ns.color,
+                            cursor: savingClauseId === c.id ? "not-allowed" : "pointer",
+                            opacity: savingClauseId === c.id ? 0.6 : 1,
+                          }}
+                        >
+                          {NIVEAU_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                        </select>
+                      ) : (
+                        <span style={{ fontSize: 11, fontWeight: 700, borderRadius: 6, padding: "4px 8px", background: ns.bg, color: ns.color }}>
+                          {NIVEAU_OPTIONS.find((o) => o.value === c.niveau)?.label || c.niveau}
+                        </span>
+                      )}
+                      <span style={{ fontSize: 11, color: "#9ca3af", minWidth: 70, textAlign: "right" }}>score {Math.round(c.score)}</span>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

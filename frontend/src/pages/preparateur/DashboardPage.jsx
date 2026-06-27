@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, getCurrentUser } from "../../lib/api.js";
+import { chargerNonConformites } from "../../lib/nonConformites.js";
 
 const OBJECTIF_CONFORMITE = 85;
 const DEPT_COLORS = ["#2d9e5f","#1e40af","#92400e","#6b21a8","#0e7490","#991b1b"];
@@ -49,7 +50,7 @@ function Donut({ data }) {
 /* ── Line chart SVG ── */
 function LineChart({ values, target, labels }) {
   if (!values || values.length < 2) {
-    return <div style={{ color: "#9ca3af", fontSize: 11, textAlign: "center", padding: 20, width: "100%" }}>Pas assez de diagnostics pour afficher une tendance</div>;
+    return <div style={{ color: "#9ca3af", fontSize: 11, textAlign: "center", padding: 20, width: "100%" }}>Pas assez d'audits pour afficher une tendance</div>;
   }
   const W = 320, H = 100, pad = { t: 8, r: 8, b: 20, l: 24 };
   const iW = W - pad.l - pad.r, iH = H - pad.t - pad.b;
@@ -202,7 +203,7 @@ function TabGlobal({ navigate, kpi, deptData, conformite, objectif, months, rece
 
         <Card style={{ display: "flex", flexDirection: "column" }}>
           <CardHead title="Alertes actives" />
-          <div style={{ flex: 1, minHeight: 0, overflow: "hidden", padding: "8px 10px", display: "flex", flexDirection: "column", gap: 6 }}>
+          <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "8px 10px", display: "flex", flexDirection: "column", gap: 6 }}>
             {alerts.length === 0 ? (
               <div style={{ color: "#9ca3af", fontSize: 11, textAlign: "center", padding: "16px 0" }}>Aucune alerte</div>
             ) : alerts.map((a, i) => {
@@ -339,7 +340,7 @@ function TabAudits({ navigate, diagnostics }) {
     <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: 10 }}>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, flexShrink: 0 }}>
         {[
-          { label: "Diagnostics planifiés", value: planifies, color: "#1e40af", bg: "#dbeafe" },
+          { label: "Audits planifiés",      value: planifies, color: "#1e40af", bg: "#dbeafe" },
           { label: "En cours",              value: enCours,   color: "#92400e", bg: "#fef3c7" },
           { label: "Clôturés",              value: clotures,  color: "#2d9e5f", bg: "#dcfce7" },
           { label: "Non-conformités",       value: totalNC,   color: "#991b1b", bg: "#fee2e2" },
@@ -352,9 +353,9 @@ function TabAudits({ navigate, diagnostics }) {
       </div>
 
       <Card style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-        <CardHead title="Diagnostics récents" />
+        <CardHead title="Audits récents" />
         {recent.length === 0 ? (
-          <div style={{ padding: "32px", textAlign: "center", color: "#9ca3af", fontSize: 12 }}>Aucun diagnostic.</div>
+          <div style={{ padding: "32px", textAlign: "center", color: "#9ca3af", fontSize: 12 }}>Aucun audit.</div>
         ) : (
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -391,6 +392,7 @@ export default function DashboardPage() {
   const [processus, setProcessus]   = useState([]);
   const [risques, setRisques]       = useState([]);
   const [diagnostics, setDiagnostics] = useState([]);
+  const [ncs, setNcs] = useState([]);
 
   const user = getCurrentUser();
 
@@ -400,9 +402,11 @@ export default function DashboardPage() {
       api.get("/risques/").catch(() => []),
       api.get("/diagnostics/").catch(() => []),
     ]).then(([procs, rqs, diags]) => {
-      setProcessus(Array.isArray(procs) ? procs : []);
+      const procList = Array.isArray(procs) ? procs : [];
+      setProcessus(procList);
       setRisques(Array.isArray(rqs) ? rqs : []);
       setDiagnostics(Array.isArray(diags) ? diags : []);
+      chargerNonConformites(procList).then(setNcs).catch(() => {});
     });
   }, []);
 
@@ -411,13 +415,16 @@ export default function DashboardPage() {
   const scores     = diagnostics.filter(d => d.score_global > 0).map(d => d.score_global);
   const tauxConf   = scores.length ? Math.round(scores.reduce((s, v) => s + v, 0) / scores.length) : 0;
   const enCours    = diagnostics.filter(d => d.statut === "soumis").length;
-  const totalNC    = diagnostics.reduce((s, d) => s + (d.nb_ecarts_majeurs || 0) + (d.nb_ecarts_mineurs || 0), 0);
-  const ncMajeurs  = diagnostics.reduce((s, d) => s + (d.nb_ecarts_majeurs || 0), 0);
+  // Mêmes NC réelles (Action + Dysfonctionnement) que l'onglet "NC & Actions" des audits —
+  // on exclut les clôturées du total actif, comme là-bas.
+  const ncsActives = ncs.filter((n) => n.statut !== "clos");
+  const totalNC    = ncsActives.length;
+  const ncMajeurs  = ncsActives.filter((n) => n.gravite === "Majeure" || n.gravite === "Critique").length;
 
   const kpi = [
     { label: "Processus actifs",   value: String(processusActifs), unit: "",  trend: "",    up: null, color: "#2d9e5f", bg: "#dcfce7", sub: `sur ${processus.length} total` },
     { label: "Taux de conformité", value: String(tauxConf),        unit: "%", trend: tauxConf >= 85 ? "+OK" : "", up: tauxConf >= 85, color: "#1e40af", bg: "#dbeafe", sub: "objectif 85%" },
-    { label: "Audits en cours",    value: String(enCours),         unit: "",  trend: "",    up: null, color: "#92400e", bg: "#fef3c7", sub: `${diagnostics.length} diagnostics` },
+    { label: "Audits en cours",    value: String(enCours),         unit: "",  trend: "",    up: null, color: "#92400e", bg: "#fef3c7", sub: `${diagnostics.length} audits` },
     { label: "Non-conformités",    value: String(totalNC),         unit: "",  trend: "",    up: null, color: "#991b1b", bg: "#fee2e2", sub: `${ncMajeurs} majeures` },
   ];
 
@@ -426,12 +433,12 @@ export default function DashboardPage() {
   const deptData = Object.entries(typeGroups).map(([label, value], i) => ({ label, value, color: DEPT_COLORS[i % DEPT_COLORS.length] }));
 
   const historique = diagnostics
-    .filter(d => d.score_global > 0 && d.date_lancement)
-    .sort((a, b) => new Date(a.date_lancement) - new Date(b.date_lancement))
+    .filter(d => d.score_global > 0 && d.date_diagnostic)
+    .sort((a, b) => new Date(a.date_diagnostic) - new Date(b.date_diagnostic))
     .slice(-6);
   const conformite = historique.map(d => d.score_global);
   const months = historique.map(d =>
-    new Date(d.date_lancement).toLocaleDateString("fr-FR", { month: "short" })
+    new Date(d.date_diagnostic).toLocaleDateString("fr-FR", { month: "short" })
   );
   const objectif = conformite.map(() => OBJECTIF_CONFORMITE);
 

@@ -4,6 +4,21 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
    BpmnEditor — éditeur BPMN SVG (onglet "Déroulement")
 ═══════════════════════════════════════════════════════════════════ */
 
+/* Même palette que FicheProcessus.jsx — gardée identique pour la cohérence visuelle. */
+const C = {
+  dark: '#1e3d2f',
+  primary: '#2D604F',
+  accent: '#77D58F',
+  lightBg: '#eaf5eb',
+  softBg: '#F0FFEB',
+  white: '#FAFAFA',
+  border: '#d4e9d7',
+  text: '#1a2e22',
+  muted: '#6b8c75',
+  danger: '#e53935',
+  warn: '#f59e0b',
+};
+
 const NODE_COLORS = {
   task: { fill: "#B5D4F4", stroke: "#185FA5", text: "#0C447C" },
   start: { fill: "#C0DD97", stroke: "#3B6D11", text: "#27500A" },

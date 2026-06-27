@@ -39,6 +39,8 @@ def _generer_reference(db: Session, processus_code: str, annee: int) -> str:
     return f"DSMQ-{annee}-{processus_code}-{count + 1:03d}"
 
 
+
+
 def _get_processus_ou_404(db: Session, processus_id: int) -> Processus:
     processus = db.query(Processus).filter(Processus.id == processus_id).first()
     if not processus:
@@ -84,6 +86,12 @@ def lancer_diagnostic(
         Dysfonctionnement.processus_id == processus.id
     ).delete()
 
+    code_ref = processus.code or f"P{processus.id}"
+    # Compteur local (pas de requête répétée — autoflush désactivé sur la session)
+    ecart_seq = db.query(Dysfonctionnement).filter(
+        Dysfonctionnement.reference.like(f"ECT-{annee}-{code_ref}-%")
+    ).count()
+
     scores: list[float] = []
     sources: set[str] = set()
 
@@ -95,9 +103,11 @@ def lancer_diagnostic(
         if resultat.gravite == "conforme":
             continue  # pas de dysfonctionnement à enregistrer pour cette section
 
+        ecart_seq += 1
         dc = Dysfonctionnement(
             diagnostic_id=diagnostic.id,
             processus_id=processus.id,
+            reference=f"ECT-{annee}-{code_ref}-{ecart_seq:03d}",
             clause_iso_code=resultat.clause_iso_code,
             titre=resultat.titre,
             description=resultat.description,
@@ -139,3 +149,25 @@ def lister_dysfonctionnements(db: Session, processus_id: int) -> list[Dysfonctio
         .order_by(Dysfonctionnement.ordre)
         .all()
     )
+
+
+def modifier_dysfonctionnement(db: Session, dysf_id: int, payload) -> Dysfonctionnement:
+    """
+    Mise à jour partielle d'un dysfonctionnement (échéance, statut, responsable).
+    Ne touche pas au contenu généré par le Moteur Analytique (titre, causes...).
+    """
+    d = db.query(Dysfonctionnement).filter(Dysfonctionnement.id == dysf_id).first()
+    if not d:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Dysfonctionnement {dysf_id} introuvable.",
+        )
+
+    for champ in ("echeance", "statut", "responsable_id"):
+        valeur = getattr(payload, champ, None)
+        if valeur is not None:
+            setattr(d, champ, valeur)
+
+    db.commit()
+    db.refresh(d)
+    return d

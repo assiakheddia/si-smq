@@ -6,7 +6,9 @@ from app.models.utilisateur import Utilisateur
 from app.core.database import get_db
 from app.models.processus import Processus
 from app.schemas.processus import ProcessusCreate, ProcessusResponse, ProcessusUpdate
-from app.schemas.diagnostic_smq import DiagnosticSMQResponse, DysfonctionnementResponse
+from app.schemas.diagnostic_smq import (
+    DiagnosticSMQResponse, DysfonctionnementResponse, DysfonctionnementUpdate,
+)
 from app.schemas.processus_revision import ProcessusRevisionResponse
 from app.services import processus_service, diagnostic_smq_service
 
@@ -69,6 +71,17 @@ def lancer_diagnostic_smq(
 def get_dysfonctionnements(id: int, db: Session = Depends(get_db)):
     """Liste les dysfonctionnements du dernier diagnostic SMQ d'un processus."""
     return diagnostic_smq_service.lister_dysfonctionnements(db, id)
+
+
+@router.put("/dysfonctionnements/{dysf_id}", response_model=DysfonctionnementResponse)
+def update_dysfonctionnement(
+    dysf_id: int,
+    data: DysfonctionnementUpdate,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = None,
+):
+    """Met à jour l'échéance/statut/responsable d'un dysfonctionnement (IA ou local)."""
+    return diagnostic_smq_service.modifier_dysfonctionnement(db, dysf_id, data)
 
 
 @router.get("/{id}/revisions", response_model=List[ProcessusRevisionResponse])

@@ -164,9 +164,11 @@ def _generer_clauses_diagnostic(
             diagnostic_id=diagnostic.id,
             clause_id=clause.id,
             score=score,
+            niveau=_niveau_maturite(score),
             type_ecart=score_to_type_ecart(score),
             poids=1.0,
             est_applicable=True,
+            est_evalue=True,
         )
         db.add(dc)
         clauses_evaluees.append(dc)

@@ -22,7 +22,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.iso_engine import valider_processus_iso
-from app.models.processus import PartieInteressee, Processus
+from app.models.processus import PartieInteressee, Processus, StatutProcessus
 from app.models.processus_revision import ProcessusRevision, StatutRevision
 from app.models.utilisateur import Utilisateur
 from app.schemas.processus import (
@@ -72,14 +72,25 @@ def _resoudre_pilote_id(
     db: Session,
     pilote_id: int | None,
     pilote_nom: str | None,
+    pilote_email: str | None = None,
+    pilote_departement: str | None = None,
+    pilote_telephone: str | None = None,
 ) -> int | None:
     """
-    Résout l'ID du pilote à partir de pilote_id (priorité) ou, à défaut,
-    par correspondance sur le nom complet (pilote_nom, texte libre).
+    Résout l'ID du pilote à partir de pilote_id (priorité), ou par
+    correspondance/création à partir des champs texte libre du formulaire
+    (pilote_nom, pilote_email, pilote_departement, pilote_telephone).
 
-    Best-effort : si aucune correspondance exacte n'est trouvée, retourne
-    None sans bloquer la création/mise à jour du processus (le pilote
-    pourra être assigné plus tard via assigner_pilote()).
+    - pilote_id fourni            → l'utilisateur doit exister (404 sinon).
+    - pilote_email fourni         → recherche par email (clé unique) ; si
+                                     trouvé, le profil (nom/prénom/dépt/tél)
+                                     est mis à jour ; sinon un nouvel
+                                     utilisateur "preparateur" est créé.
+    - seulement pilote_nom fourni → correspondance best-effort sur le nom
+                                     complet parmi les utilisateurs actifs ;
+                                     aucune correspondance => ignoré (None),
+                                     le pilote pourra être assigné plus tard
+                                     via assigner_pilote().
     """
     if pilote_id:
         pilote = db.query(Utilisateur).filter(Utilisateur.id == pilote_id).first()
@@ -90,14 +101,49 @@ def _resoudre_pilote_id(
             )
         return pilote.id
 
-    if pilote_nom and pilote_nom.strip():
-        cible = pilote_nom.strip().lower()
+    nom_complet = (pilote_nom or "").strip()
+
+    if pilote_email and pilote_email.strip():
+        email = pilote_email.strip().lower()
+        pilote = db.query(Utilisateur).filter(Utilisateur.email == email).first()
+
+        if pilote:
+            if nom_complet:
+                prenom, _, nom = nom_complet.partition(" ")
+                pilote.prenom = prenom or pilote.prenom
+                pilote.nom = nom or pilote.nom
+            if pilote_departement is not None:
+                pilote.departement = pilote_departement or None
+            if pilote_telephone is not None:
+                pilote.telephone = pilote_telephone or None
+            db.flush()
+            return pilote.id
+
+        prenom, _, nom = nom_complet.partition(" ")
+        pilote = Utilisateur(
+            prenom=prenom or "Pilote",
+            nom=nom or nom_complet or "—",
+            email=email,
+            departement=pilote_departement or None,
+            telephone=pilote_telephone or None,
+        )
+        db.add(pilote)
+        db.flush()
+        logger.info("Pilote '%s' <%s> créé automatiquement depuis le formulaire processus.", nom_complet, email)
+        return pilote.id
+
+    if nom_complet:
+        cible = nom_complet.lower()
         candidats = db.query(Utilisateur).filter(Utilisateur.est_actif == True).all()  # noqa: E712
         for u in candidats:
-            nom_complet = f"{u.prenom} {u.nom}".strip().lower()
-            if nom_complet == cible:
+            if f"{u.prenom} {u.nom}".strip().lower() == cible:
+                if pilote_departement is not None:
+                    u.departement = pilote_departement or None
+                if pilote_telephone is not None:
+                    u.telephone = pilote_telephone or None
+                db.flush()
                 return u.id
-        logger.info("pilote_nom '%s' ne correspond à aucun utilisateur connu — ignoré.", pilote_nom)
+        logger.info("pilote_nom '%s' ne correspond à aucun utilisateur connu — ignoré (pas d'email fourni pour créer un nouveau pilote).", pilote_nom)
 
     return None
 
@@ -195,7 +241,10 @@ def creer_processus(
         _get_ou_404(db, payload.parent_id)  # vérifie existence parent
         _valider_profondeur_parent(db, payload.parent_id)
 
-    pilote_id = _resoudre_pilote_id(db, payload.pilote_id, payload.pilote_nom)
+    pilote_id = _resoudre_pilote_id(
+        db, payload.pilote_id, payload.pilote_nom,
+        payload.pilote_email, payload.pilote_departement, payload.pilote_telephone,
+    )
 
     processus = Processus(
         code=code,
@@ -340,8 +389,30 @@ def modifier_processus(
             setattr(processus, champ, valeur)
             champs_modifies.append(champ)
 
-    if payload.pilote_id is not None or payload.pilote_nom is not None:
-        pilote_id = _resoudre_pilote_id(db, payload.pilote_id, payload.pilote_nom)
+    # Le processus a désormais un contenu réel (diagramme BPMN renseigné) —
+    # il quitte "non_demarre" automatiquement, sauf si le pilote a explicitement
+    # fixé un autre statut dans ce même appel.
+    if (
+        "bpmn_data" in champs_modifies
+        and "statut" not in champs_modifies
+        and processus.statut == StatutProcessus.non_demarre
+        and processus.bpmn_data
+        and processus.bpmn_data.get("nodes")
+    ):
+        processus.statut = StatutProcessus.en_cours
+        champs_modifies.append("statut")
+
+    if any(
+        v is not None
+        for v in (
+            payload.pilote_id, payload.pilote_nom,
+            payload.pilote_email, payload.pilote_departement, payload.pilote_telephone,
+        )
+    ):
+        pilote_id = _resoudre_pilote_id(
+            db, payload.pilote_id, payload.pilote_nom,
+            payload.pilote_email, payload.pilote_departement, payload.pilote_telephone,
+        )
         if pilote_id is not None:
             processus.pilote_id = pilote_id
             champs_modifies.append("pilote")

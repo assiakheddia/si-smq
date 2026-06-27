@@ -185,7 +185,7 @@ export default function ParametresPage() {
               { key: "publication", label: "Publication de processus",  sub: "Notif quand un processus est publié" },
               { key: "diagnostic",  label: "Diagnostic SMQ",            sub: "Notif quand un diagnostic est terminé" },
               { key: "audit",       label: "Audits & évaluations",      sub: "Notif sur les audits planifiés et terminés" },
-              { key: "rappels",     label: "Rappels d'échéances",       sub: "Rappels sur les dysfonctionnements en retard" },
+              { key: "rappels",     label: "Rappels d'échéances",       sub: "Rappels sur les non-conformités en retard" },
               { key: "email",       label: "Notifications par email",   sub: "Recevoir les notifications sur votre email" },
               { key: "rapport",     label: "Rapports automatiques",     sub: "Recevoir les bilans mensuels automatiquement" },
             ].map(({ key, label, sub }) => (

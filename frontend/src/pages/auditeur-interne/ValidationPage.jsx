@@ -27,7 +27,7 @@ function ConfirmModal({ fiche, onConfirm, onClose, validating }) {
         </p>
         <div style={{ background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 10, padding: "12px 16px", marginBottom: 24 }}>
           <div style={{ fontSize: 12, color: "#166534" }}>
-            <strong>Score de conformité :</strong> {Math.round(fiche.score)}% · <strong>Clauses évaluées :</strong> {fiche.nb_clauses_evaluees} · <strong>Clauses conformes :</strong> {fiche.nb_clauses_conformes}/{fiche.nb_clauses_evaluees}
+            <strong>Score de maturité :</strong> {Math.round(fiche.score)}% · <strong>Clauses évaluées :</strong> {fiche.nb_clauses_evaluees} · <strong>Clauses conformes :</strong> {fiche.nb_clauses_conformes}/{fiche.nb_clauses_evaluees}
           </div>
         </div>
         <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
@@ -58,12 +58,21 @@ export default function ValidationPage() {
         name: d.processus?.nom || `Processus ${d.processus_id}`,
         owner: d.auditeur ? `${d.auditeur.prenom || ""} ${d.auditeur.nom || ""}`.trim() : "—",
         score: d.score_global || 0,
+        nb_clauses_total: d.nb_clauses_total || 0,
         nb_clauses_evaluees: d.nb_clauses_evaluees || 0,
         nb_clauses_conformes: d.nb_clauses_conformes || 0,
         nb_ecarts_majeurs: d.nb_ecarts_majeurs || 0,
         status,
       });
-      const readyList = soumis.map((d) => map(d, d.nb_ecarts_majeurs > 0 ? "pending-obs" : "ready"));
+      const statusFor = (d) => {
+        const total = d.nb_clauses_total || 0;
+        const evaluees = d.nb_clauses_evaluees || 0;
+        // Une évaluation incomplète ne peut pas être "prête" même si elle
+        // affiche 0 écart majeur — 0 ne veut rien dire si rien n'a été noté.
+        if (total === 0 || evaluees < total) return "incomplete";
+        return d.nb_ecarts_majeurs > 0 ? "pending-obs" : "ready";
+      };
+      const readyList = soumis.map((d) => map(d, statusFor(d)));
       const validatedList = valides.map((d) => map(d, "validated"));
       setFiches([...readyList, ...validatedList]);
     }).finally(() => setLoading(false));
@@ -87,6 +96,7 @@ export default function ValidationPage() {
   const validated = fiches.filter((f) => f.status === "validated");
   const ready = fiches.filter((f) => f.status === "ready");
   const pendingObs = fiches.filter((f) => f.status === "pending-obs");
+  const incomplete = fiches.filter((f) => f.status === "incomplete");
 
   if (loading) {
     return (
@@ -128,7 +138,7 @@ export default function ValidationPage() {
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
               <thead>
                 <tr style={{ borderBottom: "2px solid #f0f2f4" }}>
-                  {["Processus", "Auditeur", "Clauses évaluées", "Clauses conformes", "Score conformité", "Action"].map((h) => (
+                  {["Processus", "Auditeur", "Clauses évaluées", "Clauses conformes", "Score de maturité", "Action"].map((h) => (
                     <th key={h} style={{ textAlign: "left", padding: "8px 12px", fontSize: 11, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase" }}>{h}</th>
                   ))}
                 </tr>
@@ -156,6 +166,25 @@ export default function ValidationPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {incomplete.length > 0 && (
+          <div style={{ ...S.card, marginBottom: 20, border: "1px solid #e5e7eb" }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "#374151", marginBottom: 12 }}>
+              📋 Évaluation incomplète — pas encore prête pour validation
+            </div>
+            {incomplete.map((f) => (
+              <div key={f.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid #f3f4f6" }}>
+                <div>
+                  <div style={{ fontWeight: 700, color: "#1a2e22" }}>{f.name}</div>
+                  <div style={{ fontSize: 12, color: "#9ca3af" }}>{f.owner}</div>
+                </div>
+                <span style={{ fontSize: 12, fontWeight: 700, color: "#6b7280" }}>
+                  {f.nb_clauses_evaluees}/{f.nb_clauses_total} clauses évaluées
+                </span>
+              </div>
+            ))}
           </div>
         )}
 

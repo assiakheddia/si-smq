@@ -63,6 +63,8 @@ _minio_client: Minio | None = None
 
 def _get_minio() -> Minio:
     global _minio_client
+    # Construction du client : ne se connecte pas réellement au serveur,
+    # peut donc être mise en cache sans risque même si MinIO est indisponible.
     if _minio_client is None:
         _minio_client = Minio(
             endpoint=settings.MINIO_ENDPOINT,
@@ -70,10 +72,14 @@ def _get_minio() -> Minio:
             secret_key=settings.MINIO_SECRET_KEY,
             secure=settings.MINIO_USE_SSL,
         )
-        # Créer le bucket si inexistant
-        if not _minio_client.bucket_exists(settings.MINIO_BUCKET_DOCUMENTS):
-            _minio_client.make_bucket(settings.MINIO_BUCKET_DOCUMENTS)
-            logger.info("Bucket MinIO créé : %s", settings.MINIO_BUCKET_DOCUMENTS)
+
+    # Vérification du bucket à CHAQUE appel (requête HEAD légère) — pas mise
+    # en cache, pour ne jamais rester bloqué si ce contrôle a échoué une
+    # première fois (ex: MinIO pas encore démarré au premier appel).
+    if not _minio_client.bucket_exists(settings.MINIO_BUCKET_DOCUMENTS):
+        _minio_client.make_bucket(settings.MINIO_BUCKET_DOCUMENTS)
+        logger.info("Bucket MinIO créé : %s", settings.MINIO_BUCKET_DOCUMENTS)
+
     return _minio_client
 
 

@@ -78,7 +78,7 @@ export default function ImprovementRequests() {
   const [processusList, setProcessusList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ processus_id: "", type: "observations", titre: "", text: "" });
+  const [form, setForm] = useState({ processus_id: "", type: "observations", titre: "", text: "", priorite: "normale" });
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -102,14 +102,14 @@ export default function ImprovementRequests() {
         titre: form.titre,
         description: form.text,
         type: TAB_TO_TYPE[form.type],
-        priorite: "normale",
+        priorite: form.type === "corrections" ? form.priorite : "normale",
         processus_id: Number(form.processus_id),
         origine: "manuelle",
       });
       setActiveTab(form.type);
       setShowForm(false);
       setSaved(true);
-      setForm({ processus_id: "", type: "observations", titre: "", text: "" });
+      setForm({ processus_id: "", type: "observations", titre: "", text: "", priorite: "normale" });
       load();
       setTimeout(() => setSaved(false), 3000);
     } catch {
@@ -172,6 +172,20 @@ export default function ImprovementRequests() {
                 <input value={form.titre} onChange={(e) => setForm({ ...form, titre: e.target.value })} placeholder="Titre court..." style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #e8f0eb", fontSize: 13, outline: "none", fontFamily: "inherit", boxSizing: "border-box" }} />
               </div>
             </div>
+            {form.type === "corrections" && (
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ fontSize: 12, fontWeight: 700, color: "#4b6358", display: "block", marginBottom: 5 }}>Gravité de la non-conformité *</label>
+                <select
+                  value={form.priorite}
+                  onChange={(e) => setForm({ ...form, priorite: e.target.value })}
+                  style={{ width: 220, padding: "9px 12px", borderRadius: 8, border: "1px solid #e8f0eb", fontSize: 13, outline: "none", fontFamily: "inherit" }}
+                >
+                  <option value="normale">Mineure</option>
+                  <option value="haute">Majeure</option>
+                  <option value="critique">Critique</option>
+                </select>
+              </div>
+            )}
             <div style={{ marginBottom: 16 }}>
               <label style={{ fontSize: 12, fontWeight: 700, color: "#4b6358", display: "block", marginBottom: 5 }}>Description *</label>
               <textarea value={form.text} onChange={(e) => setForm({ ...form, text: e.target.value })} placeholder="Décrivez précisément votre observation, recommandation ou les corrections requises..." rows={4} style={{ width: "100%", padding: "10px 14px", borderRadius: 8, border: "1px solid #e8f0eb", fontSize: 13, fontFamily: "inherit", resize: "vertical", outline: "none", boxSizing: "border-box" }} />

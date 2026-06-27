@@ -171,6 +171,10 @@ class DiagnosticBase(_Base):
         max_length=50,
         description="ex: '2025-S1', '2025-Annuel'"
     )
+    date_planifiee:     datetime | None = Field(
+        default=None,
+        description="Date programmée pour l'audit/diagnostic (choisie dans le calendrier)"
+    )
     commentaire_global: str | None = None
 
     @field_validator("periode_couverte")
@@ -244,6 +248,7 @@ class DiagnosticUpdate(_Base):
     """
     statut:             StatutDiagnostic | None = None
     periode_couverte:   str | None = Field(default=None, max_length=50)
+    date_planifiee:     datetime | None = None
     commentaire_global: str | None = None
 
     @field_validator("periode_couverte")
@@ -277,11 +282,13 @@ class DiagnosticResponse(_Base):
     statut:            StatutDiagnostic
 
     date_diagnostic:   datetime
+    date_planifiee:    datetime | None = None
     date_validation:   datetime | None
     periode_couverte:  str | None
     commentaire_global: str | None
 
-    nb_clauses_evaluees:  int = Field(default=0)
+    nb_clauses_total:     int = Field(default=0, description="Clauses applicables rattachées (évaluées ou non)")
+    nb_clauses_evaluees:  int = Field(default=0, description="Clauses réellement évaluées (est_evalue=True)")
     nb_clauses_conformes: int = Field(default=0)
     nb_ecarts_majeurs:    int = Field(default=0)
     nb_ecarts_mineurs:    int = Field(default=0)

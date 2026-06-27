@@ -139,6 +139,10 @@ class ProcessusCreate(ProcessusBase):
                                         "n'est pas fourni directement (ex: formulaire frontend "
                                         "qui ne connaît que le nom, pas l'ID utilisateur)."
                                     ))
+    pilote_email:       str | None = Field(default=None, max_length=255,
+                                    description="Email du pilote — sert de clé de correspondance/création")
+    pilote_departement: str | None = Field(default=None, max_length=150)
+    pilote_telephone:   str | None = Field(default=None, max_length=30)
     parent_id:   int | None = Field(default=None,
                                     description="ID du processus parent (sous-processus)")
     parties_ids: list[int]  = Field(default_factory=list,
@@ -174,6 +178,9 @@ class ProcessusUpdate(_Base):
     pilote_id:       int | None = None
     pilote_nom:      str | None = Field(default=None, max_length=255,
                                         description="Cf. ProcessusCreate.pilote_nom")
+    pilote_email:       str | None = Field(default=None, max_length=255)
+    pilote_departement: str | None = Field(default=None, max_length=150)
+    pilote_telephone:   str | None = Field(default=None, max_length=30)
     parent_id:       int | None = None
     ordre:           int | None = Field(default=None, ge=0)
     est_actif:       bool | None = None

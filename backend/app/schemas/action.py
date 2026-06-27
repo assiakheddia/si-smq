@@ -84,6 +84,12 @@ class ActionBase(_Base):
         default=None,
         description="Analyse des causes racines (5 Pourquoi, Ishikawa...) — §10.2.1"
     )
+    clause_iso_code:  str | None = Field(
+        default=None,
+        max_length=20,
+        description="Clause ISO concernée en texte libre (ex: '5', '7.5.3') — "
+                     "renseignée quand l'action n'est pas issue d'un diagnostic existant"
+    )
     date_planifiee:   datetime | None = None
     date_echeance:    datetime | None = None
 
@@ -91,6 +97,15 @@ class ActionBase(_Base):
     @classmethod
     def titre_strip(cls, v: str) -> str:
         return v.strip()
+
+    @field_validator("clause_iso_code")
+    @classmethod
+    def clause_iso_code_normalise(cls, v: str | None) -> str | None:
+        """Retire un éventuel préfixe '§' saisi par l'utilisateur — stocké brut."""
+        if v is None:
+            return v
+        v = v.strip().lstrip("§").strip()
+        return v or None
 
     @model_validator(mode="after")
     def echeance_apres_planifiee(self) -> "ActionBase":
@@ -185,6 +200,7 @@ class ActionUpdate(_Base):
     type:             TypeAction | None = None
     priorite:         PrioriteAction | None = None
     cause_racine:     str | None = None
+    clause_iso_code:  str | None = Field(default=None, max_length=20)
     date_planifiee:   datetime | None = None
     date_echeance:    datetime | None = None
     responsable_id:   int | None = None
@@ -225,6 +241,8 @@ class ActionResponse(_Base):
 
     responsable:   ResponsableResume | None = None
     verificateur:  ResponsableResume | None = None
+
+    clause_iso_code: str | None = None
 
     # Dates clés
     date_creation:    datetime

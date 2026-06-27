@@ -157,6 +157,11 @@ class Action(Base):
     )
     # Écart source — renseigné si origine = "diagnostic"
 
+    clause_iso_code = Column(String(20), nullable=True)
+    # ex: "5" ou "7.5.3" — renseigné en texte libre quand l'action est créée
+    # manuellement (origine = "audit_interne") sans passer par un diagnostic
+    # existant. Informatif, pas de FK vers ClauseISO (cf. Dysfonctionnement).
+
     # -------------------------------------------------------------------------
     # Responsabilité
     # -------------------------------------------------------------------------

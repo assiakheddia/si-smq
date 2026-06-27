@@ -24,7 +24,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.iso_engine import calcul_evolution, evaluer_alerte_kpi
-from app.models.indicateur import FormulaKPI, Indicateur, MesureKPI, SourceKPI
+from app.models.indicateur import FormulaKPI, Indicateur, MesureKPI, SourceKPI, StatutAlerte
 from app.models.processus import Processus
 from app.models.utilisateur import Utilisateur
 from app.schemas.indicateur import (
@@ -54,6 +54,32 @@ def _get_processus_ou_none(db: Session, processus_code: str | None) -> Processus
     if not processus_code:
         return None
     return db.query(Processus).filter(Processus.code == processus_code).first()
+
+
+def _denormaliser_indicateur(db: Session, ind: Indicateur) -> Indicateur:
+    """
+    Renseigne les champs dénormalisés de IndicateurResponse (processus_nom,
+    statut_alerte_actuel, progression_cible_pct, derniere_mesure_date,
+    nb_mesures) — calculés ici plutôt que stockés, jamais désynchronisés.
+    """
+    ind.processus_nom = ind.processus.nom if ind.processus else None
+
+    derniere = (
+        db.query(MesureKPI)
+        .filter(MesureKPI.indicateur_id == ind.id)
+        .order_by(MesureKPI.date_mesure.desc())
+        .first()
+    )
+    ind.statut_alerte_actuel = derniere.statut_alerte if derniere else StatutAlerte.normal
+    ind.derniere_mesure_date = derniere.date_mesure if derniere else None
+    ind.nb_mesures = db.query(MesureKPI).filter(MesureKPI.indicateur_id == ind.id).count()
+
+    ind.progression_cible_pct = (
+        round(ind.valeur_actuelle / ind.valeur_cible * 100, 1)
+        if ind.valeur_cible
+        else None
+    )
+    return ind
 
 
 # ---------------------------------------------------------------------------
@@ -116,7 +142,7 @@ def creer_indicateur(
         "Indicateur créé : '%s' (source=%s) par %s",
         indicateur.nom, indicateur.source.value, createur.email,
     )
-    return indicateur
+    return _denormaliser_indicateur(db, indicateur)
 
 
 def lister_indicateurs(
@@ -142,6 +168,8 @@ def lister_indicateurs(
 
     total = q.count()
     items = q.offset((page - 1) * taille_page).limit(taille_page).all()
+    for item in items:
+        _denormaliser_indicateur(db, item)
 
     return {
         "items": items,
@@ -153,7 +181,8 @@ def lister_indicateurs(
 
 
 def get_indicateur(db: Session, indicateur_id: int) -> Indicateur:
-    return _get_indicateur_ou_404(db, indicateur_id)
+    ind = _get_indicateur_ou_404(db, indicateur_id)
+    return _denormaliser_indicateur(db, ind)
 
 
 def modifier_indicateur(
@@ -177,7 +206,7 @@ def modifier_indicateur(
     db.commit()
     db.refresh(indicateur)
     logger.info("Indicateur modifié : '%s' par %s", indicateur.nom, modificateur.email)
-    return indicateur
+    return _denormaliser_indicateur(db, indicateur)
 
 
 # ---------------------------------------------------------------------------
@@ -225,17 +254,17 @@ def enregistrer_mesure(
         .first()
     )
 
-    evolution = None
-    if mesure_precedente and mesure_precedente.valeur is not None:
-        evolution = calcul_evolution(mesure_precedente.valeur, payload.valeur)
+    evol = calcul_evolution(
+        payload.valeur,
+        mesure_precedente.valeur if mesure_precedente else None,
+    )
 
-    # Évaluation des alertes
-    alerte = evaluer_alerte_kpi(
+    # Évaluation de l'alerte selon les seuils de l'indicateur
+    statut_alerte = evaluer_alerte_kpi(
         valeur=payload.valeur,
-        cible=indicateur.cible,
-        seuil_bas=indicateur.seuil_alerte_bas,
-        seuil_haut=indicateur.seuil_alerte_haut,
-        valeur_precedente=mesure_precedente.valeur if mesure_precedente else None,
+        seuil_attention=indicateur.seuil_attention,
+        seuil_alerte=indicateur.seuil_alerte,
+        sens=indicateur.sens.value,
     )
 
     mesure = MesureKPI(
@@ -244,19 +273,25 @@ def enregistrer_mesure(
         date_mesure=payload.date_mesure or datetime.now(tz=timezone.utc),
         periode=payload.periode,
         commentaire=payload.commentaire,
-        saisie_par_id=saisisseur.id,
-        evolution=evolution,
-        alerte=alerte.get("alerte"),
-        type_alerte=alerte.get("type"),
+        source_detail=payload.source_detail,
+        saisi_par_id=saisisseur.id,
+        valeur_precedente=evol["valeur_precedente"],
+        evolution=evol["evolution"],
+        evolution_pct=evol["evolution_pct"],
+        statut_alerte=statut_alerte,
     )
     db.add(mesure)
+
+    # La dernière mesure devient la valeur courante de l'indicateur.
+    indicateur.valeur_actuelle = payload.valeur
+
     db.commit()
     db.refresh(mesure)
 
-    if alerte.get("alerte"):
+    if statut_alerte != "normal":
         logger.warning(
-            "Alerte KPI '%s' : valeur=%.2f type=%s",
-            indicateur.nom, payload.valeur, alerte.get("type"),
+            "Alerte KPI '%s' : valeur=%.2f statut=%s",
+            indicateur.nom, payload.valeur, statut_alerte,
         )
     else:
         logger.debug(
@@ -285,12 +320,35 @@ def lister_mesures(
     total = q.count()
     items = q.offset((page - 1) * taille_page).limit(taille_page).all()
 
+    toutes_valeurs = [
+        m.valeur for m in
+        db.query(MesureKPI.valeur).filter(MesureKPI.indicateur_id == indicateur_id).all()
+    ]
+    valeur_min = min(toutes_valeurs) if toutes_valeurs else None
+    valeur_max = max(toutes_valeurs) if toutes_valeurs else None
+    valeur_moyenne = round(sum(toutes_valeurs) / len(toutes_valeurs), 2) if toutes_valeurs else None
+
+    tendance = None
+    if len(toutes_valeurs) >= 2:
+        # items est trié desc (plus récent en premier) ; on compare aux 2 plus récentes
+        recentes = [m.valeur for m in items[:2]]
+        if len(recentes) == 2:
+            if recentes[0] > recentes[1]:
+                tendance = "hausse"
+            elif recentes[0] < recentes[1]:
+                tendance = "baisse"
+            else:
+                tendance = "stable"
+
     return {
         "items": items,
         "total": total,
         "page": page,
-        "taille_page": taille_page,
-        "pages_total": max(1, -(-total // taille_page)),
+        "per_page": taille_page,
+        "valeur_min": valeur_min,
+        "valeur_max": valeur_max,
+        "valeur_moyenne": valeur_moyenne,
+        "tendance": tendance,
     }
 
 
@@ -323,10 +381,10 @@ def calculer_valeur_auto(db: Session, indicateur_id: int) -> MesureKPI:
             detail="Cet indicateur est en saisie manuelle uniquement.",
         )
 
-    if not indicateur.formula_kpi:
+    if not indicateur.formule:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Aucune formula_kpi définie pour cet indicateur.",
+            detail="Aucune formule définie pour cet indicateur.",
         )
 
     valeur = _executer_formule(db, indicateur)
@@ -335,7 +393,7 @@ def calculer_valeur_auto(db: Session, indicateur_id: int) -> MesureKPI:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
-                f"Impossible de calculer '{indicateur.formula_kpi.value}' : "
+                f"Impossible de calculer '{indicateur.formule.value}' : "
                 "données insuffisantes."
             ),
         )
@@ -346,7 +404,7 @@ def calculer_valeur_auto(db: Session, indicateur_id: int) -> MesureKPI:
         valeur=valeur,
         date_mesure=datetime.now(tz=timezone.utc),
         periode=_periode_courante(),
-        commentaire=f"Calcul automatique ({indicateur.formula_kpi.value})",
+        commentaire=f"Calcul automatique ({indicateur.formule.value})",
     )
 
     # Bypass vérification source pour les calculs auto
@@ -386,7 +444,7 @@ def _executer_formule(db: Session, indicateur: Indicateur) -> float | None:
     Dispatche vers la bonne fonction de calcul selon formula_kpi.
     Retourne None si les données sont insuffisantes.
     """
-    formule = indicateur.formula_kpi
+    formule = indicateur.formule
     processus_id = indicateur.processus_id
 
     if formule == FormulaKPI.score_maturite_processus:
@@ -421,7 +479,7 @@ def _calc_score_maturite_processus(db: Session, processus_id: int | None) -> flo
     )
     if processus_id:
         q = q.filter(DiagnosticISO.processus_id == processus_id)
-    diag = q.order_by(DiagnosticISO.date_creation.desc()).first()
+    diag = q.order_by(DiagnosticISO.date_diagnostic.desc()).first()
     return float(diag.score_global) if diag else None
 
 
@@ -444,7 +502,7 @@ def _calc_taux_conformite_clauses(db: Session, processus_id: int | None) -> floa
     )
     if processus_id:
         q = q.filter(DiagnosticISO.processus_id == processus_id)
-    diag = q.order_by(DiagnosticISO.date_creation.desc()).first()
+    diag = q.order_by(DiagnosticISO.date_diagnostic.desc()).first()
     if not diag:
         return None
     clauses = (
@@ -523,16 +581,17 @@ def get_tableau_de_bord(
             .order_by(MesureKPI.date_mesure.desc())
             .first()
         )
+        statut_alerte = derniere_mesure.statut_alerte if derniere_mesure else None
         items.append({
             "indicateur_id": ind.id,
             "nom": ind.nom,
             "unite": ind.unite,
-            "cible": ind.cible,
-            "derniere_valeur": derniere_mesure.valeur if derniere_mesure else None,
+            "cible": ind.valeur_cible,
+            "derniere_valeur": derniere_mesure.valeur if derniere_mesure else ind.valeur_actuelle,
             "date_derniere_mesure": derniere_mesure.date_mesure if derniere_mesure else None,
             "evolution": derniere_mesure.evolution if derniere_mesure else None,
-            "alerte": derniere_mesure.alerte if derniere_mesure else False,
-            "type_alerte": derniere_mesure.type_alerte if derniere_mesure else None,
+            "alerte": statut_alerte is not None and statut_alerte.value != "normal",
+            "type_alerte": statut_alerte.value if statut_alerte else None,
         })
 
     nb_alertes = sum(1 for i in items if i["alerte"])
@@ -564,7 +623,7 @@ def declencher_calculs_auto(db: Session) -> dict:
         .filter(
             Indicateur.est_actif == True,  # noqa: E712
             Indicateur.source.in_([SourceKPI.auto, SourceKPI.mixte]),
-            Indicateur.formula_kpi.isnot(None),
+            Indicateur.formule.isnot(None),
         )
         .all()
     )
@@ -578,7 +637,7 @@ def declencher_calculs_auto(db: Session) -> dict:
             resultats["details"].append({
                 "indicateur": ind.nom,
                 "valeur": mesure.valeur,
-                "alerte": mesure.alerte,
+                "alerte": mesure.statut_alerte.value if mesure.statut_alerte else None,
                 "statut": "ok",
             })
         except Exception as exc:

@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import NotificationsPanel, {
   getUnreadCount,
 } from "../../components/NotificationsPanel.jsx";
 import { api, getCurrentUser } from "../../lib/api.js";
+import { chargerNonConformites } from "../../lib/nonConformites.js";
 
 /* ── statuts ──────────────────────────────────────────────────────────── */
 const STATUTS = {
@@ -12,6 +13,7 @@ const STATUTS = {
   en_cours: { label: "En cours", bg: "#fef3c7", color: "#92400e" },
   termine: { label: "Terminé", bg: "#dcfce7", color: "#166534" },
   valide: { label: "Validé", bg: "#d1fae5", color: "#065f46" },
+  audit_externe: { label: "Audit externe en cours", bg: "#fef3c7", color: "#92400e" },
   clos: { label: "Clos", bg: "#f3f4f6", color: "#374151" },
   retard: { label: "Retard", bg: "#fee2e2", color: "#991b1b" },
 };
@@ -32,6 +34,7 @@ function mapStatut(s) {
   if (s === "brouillon") return "planifie";
   if (s === "soumis") return "en_cours";
   if (s === "valide") return "valide";
+  if (s === "audit_externe") return "audit_externe";
   if (s === "archive") return "clos";
   return "planifie";
 }
@@ -45,12 +48,16 @@ function mapDiagToAudit(d) {
   return {
     id: d.id,
     ref: d.reference || `DIAG-${String(d.id).padStart(3, "0")}`,
-    titre: `Diagnostic ISO — ${d.processus?.nom || "Processus " + d.processus_id}`,
+    titre: `Audit interne — ${d.processus?.nom || "Processus " + d.processus_id}`,
     processus: d.processus?.nom || `P-${d.processus_id}`,
     processus_id: d.processus_id,
     type: "Interne",
     auditeur: audNom,
-    datePlan: d.date_diagnostic ? d.date_diagnostic.split("T")[0] : null,
+    datePlan: d.date_planifiee
+      ? d.date_planifiee.split("T")[0]
+      : d.date_diagnostic
+      ? d.date_diagnostic.split("T")[0]
+      : null,
     dateFin: d.date_validation ? d.date_validation.split("T")[0] : null,
     statut: mapStatut(d.statut),
     score: d.score_global > 0 ? d.score_global : null,
@@ -64,6 +71,7 @@ function getInitials(name) {
   if (!name) return "??";
   return name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
 }
+
 
 const CLAUSES_ISO = [
   "4.1 Contexte",
@@ -1466,38 +1474,45 @@ function TabAudits({ audits, ncs, onAuditClick, onStatusChange, onNew }) {
 }
 
 /* ── Tab: NC & Actions ────────────────────────────────────────────────── */
-function TabNC({ audits, ncs, setNcs }) {
+function TabNC({ ncs, onChanged }) {
   const [filterStatut, setFilterStatut] = useState("Tous");
   const [filterGrav, setFilterGrav] = useState("Tous");
   const [filterProcessus, setFilterProcessus] = useState("Tous");
+  const [advancing, setAdvancing] = useState(null);
 
-  const processusList = ["Tous", ...new Set(audits.map(a => a.processus).filter(Boolean))];
-
-  const getProcessusForNC = (auditId) => {
-    const audit = audits.find(a => a.id === auditId);
-    return audit?.processus || "—";
-  };
+  const processusList = ["Tous", ...new Set(ncs.map((n) => n.processus).filter(Boolean))];
 
   const filtered = ncs.filter((n) => {
     const matchS = filterStatut === "Tous" || n.statut === filterStatut;
     const matchG = filterGrav === "Tous" || n.gravite === filterGrav;
-    const matchP = filterProcessus === "Tous" || getProcessusForNC(n.auditId) === filterProcessus;
+    const matchP = filterProcessus === "Tous" || n.processus === filterProcessus;
     return matchS && matchG && matchP;
   });
 
-  const advance = (id) => {
-    const workflow = {
-      ouvert: "en_cours",
-      en_cours: "verification",
-      verification: "clos",
-    };
-    setNcs((prev) =>
-      prev.map((n) =>
-        n.id === id && workflow[n.statut]
-          ? { ...n, statut: workflow[n.statut] }
-          : n,
-      ),
-    );
+  // Workflows réels — Action (planifiee→en_cours→en_verification→close) et
+  // Dysfonctionnement (ouvert→en_cours→resolu, pas d'étape de vérification).
+  const ACTION_NEXT = { ouvert: "en_cours", en_cours: "en_verification", verification: "close" };
+  const DSF_NEXT = { ouvert: "en_cours", en_cours: "resolu" };
+
+  const advance = async (nc) => {
+    setAdvancing(nc.id);
+    try {
+      if (nc.id.startsWith("act-")) {
+        const nouveau_statut = ACTION_NEXT[nc.statut];
+        if (!nouveau_statut) return;
+        await api.post(`/actions/${nc.id.replace("act-", "")}/statut`, { nouveau_statut });
+      } else if (nc.id.startsWith("dsf-")) {
+        const statut = DSF_NEXT[nc.statut];
+        if (!statut) return;
+        await api.put(`/processus/dysfonctionnements/${nc.id.replace("dsf-", "")}`, { statut });
+      }
+      // La clôture d'une NC change le taux d'actions closes — on recalcule
+      // les KPI auto pour que le tableau de bord reste cohérent avec ce changement.
+      await api.post("/indicateurs/calculer-tout", {}).catch(() => {});
+      onChanged?.();
+    } finally {
+      setAdvancing(null);
+    }
   };
   const advLabel = {
     ouvert: "Prendre en charge",
@@ -1505,11 +1520,13 @@ function TabNC({ audits, ncs, setNcs }) {
     verification: "Clôturer",
   };
 
+  const totalActif = ncs.filter((n) => n.statut !== "clos").length;
+
   return (
     <div style={{ padding: "16px 22px 40px", display: "flex", flexDirection: "column", gap: 14 }}>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
         {[
-          { label: "Total NC", value: ncs.length, color: "#374151", bg: "#f3f4f6" },
+          { label: "Total NC", value: totalActif, color: "#374151", bg: "#f3f4f6" },
           { label: "Ouvertes", value: ncs.filter((n) => n.statut === "ouvert").length, color: "#991b1b", bg: "#fee2e2" },
           { label: "En cours", value: ncs.filter((n) => n.statut === "en_cours").length, color: "#92400e", bg: "#fef3c7" },
           { label: "Clôturées", value: ncs.filter((n) => n.statut === "clos").length, color: "#065f46", bg: "#d1fae5" },
@@ -1660,7 +1677,10 @@ function TabNC({ audits, ncs, setNcs }) {
                   const gs = NC_GRAVITE[nc.gravite] || {};
                   const ss = NC_STATUTS[nc.statut] || {};
                   const canAdvance = nc.statut !== "clos";
-                  const processusName = getProcessusForNC(nc.auditId);
+                  const processusName = nc.processus;
+                  const label = nc.id.startsWith("dsf-") && nc.statut === "en_cours"
+                    ? "Clôturer"
+                    : advLabel[nc.statut];
                   return (
                     <tr key={nc.id} style={{ borderBottom: "1px solid #f8f9fa" }}>
                       <td style={{ padding: "10px 14px", fontSize: 11, color: "#9ca3af", fontWeight: 600 }}>{nc.ref}</td>
@@ -1702,7 +1722,8 @@ function TabNC({ audits, ncs, setNcs }) {
                       <td style={{ padding: "10px 14px" }}>
                         {canAdvance && (
                           <button
-                            onClick={() => advance(nc.id)}
+                            onClick={() => advance(nc)}
+                            disabled={advancing === nc.id}
                             style={{
                               padding: "4px 10px",
                               borderRadius: 7,
@@ -1711,12 +1732,13 @@ function TabNC({ audits, ncs, setNcs }) {
                               color: "white",
                               fontSize: 10,
                               fontWeight: 700,
-                              cursor: "pointer",
+                              cursor: advancing === nc.id ? "not-allowed" : "pointer",
+                              opacity: advancing === nc.id ? 0.6 : 1,
                               whiteSpace: "nowrap",
                               fontFamily: "'Plus Jakarta Sans',sans-serif",
                             }}
                           >
-                            {advLabel[nc.statut]}
+                            {advancing === nc.id ? "…" : label}
                           </button>
                         )}
                       </td>
@@ -1773,6 +1795,7 @@ function NewAuditWizard({ onClose, onSave, processusList, usersList }) {
         processus_id: parseInt(form.processus_id),
         auditeur_id: form.auditeur_id ? parseInt(form.auditeur_id) : null,
         periode_couverte: form.datePlan ? form.datePlan.slice(0, 7) : null,
+        date_planifiee: form.datePlan || null,
         commentaire_global: form.commentaire || null,
         initialiser_toutes_clauses: true,
       };
@@ -1942,7 +1965,7 @@ function NewAuditWizard({ onClose, onSave, processusList, usersList }) {
                   value={form.commentaire}
                   onChange={(e) => set("commentaire", e.target.value)}
                   rows={3}
-                  placeholder="Objectif de ce diagnostic…"
+                  placeholder="Objectif de cet audit…"
                   style={{ ...inputStyle(false), resize: "vertical", lineHeight: 1.5 }}
                 />
               </div>
@@ -2088,7 +2111,7 @@ function NewAuditWizard({ onClose, onSave, processusList, usersList }) {
                 opacity: saving ? 0.7 : 1,
               }}
             >
-              {saving ? "Création…" : "Créer le diagnostic"}
+              {saving ? "Création…" : "Créer l'audit"}
             </button>
           )}
         </div>
@@ -2114,6 +2137,10 @@ export default function AuditsPage() {
   const user = getCurrentUser();
   const initials = getInitials(user?.nom_complet);
 
+  const refetchNcs = useCallback((procs) => {
+    chargerNonConformites(procs || processusList).then(setNcs).catch(() => {});
+  }, [processusList]);
+
   useEffect(() => {
     setUnread(getUnreadCount());
     Promise.all([
@@ -2124,17 +2151,10 @@ export default function AuditsPage() {
       .then(([diags, procs, users]) => {
         const mappedAudits = (Array.isArray(diags) ? diags : []).map(mapDiagToAudit);
         setAudits(mappedAudits);
-        const allNcs = mappedAudits.flatMap((a) => {
-          const list = [];
-          for (let i = 0; i < a.ncMajeurs; i++)
-            list.push({ id: `${a.id}_maj_${i}`, auditId: a.id, ref: `EC-MAJ-${i + 1}`, titre: `Écart majeur #${i + 1}`, clause: "—", gravite: "Majeure", statut: "ouvert", responsable: a.auditeur, dateLimit: null, action: "" });
-          for (let i = 0; i < a.ncMineurs; i++)
-            list.push({ id: `${a.id}_min_${i}`, auditId: a.id, ref: `EC-MIN-${i + 1}`, titre: `Écart mineur #${i + 1}`, clause: "—", gravite: "Mineure", statut: "ouvert", responsable: a.auditeur, dateLimit: null, action: "" });
-          return list;
-        });
-        setNcs(allNcs);
-        setProcessusList(Array.isArray(procs) ? procs : []);
+        const procList = Array.isArray(procs) ? procs : [];
+        setProcessusList(procList);
         setUsersList(Array.isArray(users) ? users : []);
+        chargerNonConformites(procList).then(setNcs).catch(() => {});
       })
       .finally(() => setLoading(false));
   }, []);
@@ -2359,7 +2379,7 @@ export default function AuditsPage() {
           onNew={() => setShowWizard(true)}
         />
       )}
-      {!loading && tab === 3 && <TabNC audits={audits} ncs={ncs} setNcs={setNcs} />}
+      {!loading && tab === 3 && <TabNC ncs={ncs} onChanged={refetchNcs} />}
     </div>
   );
 }

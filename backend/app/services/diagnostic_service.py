@@ -32,7 +32,7 @@ from app.models.diagnostic import (
     NiveauMaturite,
     StatutDiagnostic,
 )
-from app.models.processus import Processus
+from app.models.processus import Processus, StatutProcessus
 from app.models.utilisateur import RoleEnum, Utilisateur
 from app.schemas.diagnostic import (
     DiagnosticCreate,
@@ -59,13 +59,17 @@ def _get_ou_404(db: Session, diagnostic_id: int) -> DiagnosticISO:
 
 
 def _generer_reference(db: Session, processus_code: str, annee: int) -> str:
-    """Génère la prochaine référence : DIAG-2025-PROC-LABO-001."""
+    """
+    Génère la prochaine référence : AU-2026-PROC-002-001.
+    Préfixe "AU" (Audit interne) — distinct de "DSMQ" (lancer diagnostic /
+    Moteur Analytique) pour éviter toute confusion entre les deux mécanismes.
+    """
     count = (
         db.query(DiagnosticISO)
-        .filter(DiagnosticISO.reference.like(f"DIAG-{annee}-{processus_code}-%"))
+        .filter(DiagnosticISO.reference.like(f"AU-{annee}-{processus_code}-%"))
         .count()
     )
-    return f"DIAG-{annee}-{processus_code}-{count + 1:03d}"
+    return f"AU-{annee}-{processus_code}-{count + 1:03d}"
 
 
 def _verifier_statut_modifiable(diagnostic: DiagnosticISO) -> None:
@@ -116,12 +120,19 @@ def creer_diagnostic(
         processus_id=processus.id,
         auditeur_id=payload.auditeur_id or auditeur.id,
         periode_couverte=payload.periode_couverte,
+        date_planifiee=payload.date_planifiee,
         commentaire_global=payload.commentaire_global,
         statut=StatutDiagnostic.brouillon,
         score_global=0.0,
         niveau_global=NiveauMaturite.non_conforme,
     )
     db.add(diagnostic)
+
+    # Le processus a désormais une activité réelle — il quitte "non_demarre".
+    # Reste sans effet si le pilote l'a déjà fait avancer manuellement ou suspendu.
+    if processus.statut == StatutProcessus.non_demarre:
+        processus.statut = StatutProcessus.en_cours
+
     db.flush()  # obtenir l'ID avant de créer les clauses
 
     # Créer les DiagnosticClause vides pour toutes les clauses applicables
@@ -248,6 +259,7 @@ def evaluer_clause(
         dc.score = payload.score
         dc.niveau = niveau
         dc.type_ecart = type_ecart
+        dc.est_evalue = True
         dc.description_ecart = payload.description_ecart
         dc.preuves_existantes = payload.preuves_existantes
         dc.recommandation_manuelle = payload.recommandation_manuelle
@@ -262,6 +274,7 @@ def evaluer_clause(
             score=payload.score,
             niveau=niveau,
             type_ecart=type_ecart,
+            est_evalue=True,
             description_ecart=payload.description_ecart,
             preuves_existantes=payload.preuves_existantes,
             recommandation_manuelle=payload.recommandation_manuelle,
@@ -332,6 +345,7 @@ def evaluer_toutes_clauses(
         dc.score = score
         dc.niveau = score_to_niveau(score)
         dc.type_ecart = score_to_type_ecart(score)
+        dc.est_evalue = True
 
     db.flush()
     _recalculer_score_global(db, diagnostic)
@@ -379,6 +393,7 @@ def modifier_clause(
         dc.score = payload.score
         dc.niveau = score_to_niveau(payload.score)
         dc.type_ecart = score_to_type_ecart(payload.score)
+        dc.est_evalue = True
 
     for champ in ["poids", "est_applicable", "type_ecart", "description_ecart",
                   "preuves_existantes", "recommandation_manuelle"]:
@@ -485,7 +500,7 @@ def changer_statut(
             db.query(DiagnosticClause)
             .filter(
                 DiagnosticClause.diagnostic_id == diagnostic_id,
-                DiagnosticClause.score.is_(None),
+                DiagnosticClause.est_evalue == False,  # noqa: E712
             )
             .count()
         )
@@ -510,6 +525,20 @@ def changer_statut(
     # Génération auto risques/actions à la validation
     if nouveau_statut == StatutDiagnostic.valide:
         _generer_entites_depuis_ecarts(db, diagnostic, demandeur)
+
+        # Le diagnostic validé devient la référence de maturité du processus.
+        # Le pilote reste libre de surcharger statut manuellement par la suite
+        # (ProcessusUpdate.statut) — on ne touche pas à "suspendu".
+        processus = diagnostic.processus
+        if processus and processus.statut != StatutProcessus.suspendu:
+            processus.score_maturite = diagnostic.score_global
+            processus.statut = (
+                StatutProcessus.conforme
+                if score_to_niveau(diagnostic.score_global) == NiveauMaturite.conforme
+                else StatutProcessus.non_conforme
+            )
+            db.commit()
+            db.refresh(processus)
 
     return diagnostic
 

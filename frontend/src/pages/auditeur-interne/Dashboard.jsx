@@ -47,6 +47,11 @@ export default function AIDashboard() {
   const [actions, setActions] = useState([]);
   const [sections, setSections] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [verifyingId, setVerifyingId] = useState(null);
+
+  const refetchActions = () => {
+    api.get("/actions/").then((acts) => setActions(Array.isArray(acts) ? acts : [])).catch(() => {});
+  };
 
   useEffect(() => {
     Promise.all([
@@ -64,9 +69,22 @@ export default function AIDashboard() {
       .finally(() => setLoading(false));
   }, []);
 
+  const traiterVerification = async (actionId, nouveau_statut) => {
+    setVerifyingId(actionId);
+    try {
+      await api.post(`/actions/${actionId}/statut`, { nouveau_statut });
+      refetchActions();
+    } catch {
+      // le bouton reste disponible pour réessayer
+    } finally {
+      setVerifyingId(null);
+    }
+  };
+
   const soumis = diagnostics.filter((d) => d.statut === "soumis");
   const valides = diagnostics.filter((d) => d.statut === "valide");
   const correctionsDemandees = actions.filter((a) => a.type === "corrective" && a.statut !== "close" && a.statut !== "annulee");
+  const actionsAVerifier = actions.filter((a) => a.statut === "en_verification");
 
   const scores = diagnostics.filter((d) => d.score_global > 0).map((d) => d.score_global);
   const tauxConformite = scores.length ? Math.round(scores.reduce((s, v) => s + v, 0) / scores.length) : 0;
@@ -188,6 +206,77 @@ export default function AIDashboard() {
             )}
           </div>
         </div>
+
+        {actionsAVerifier.length > 0 && (
+          <div style={{ ...S.card, marginBottom: 20 }}>
+            <div style={S.sectionTitle}>
+              Actions en attente de vérification ({actionsAVerifier.length})
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {actionsAVerifier.map((a) => (
+                <div
+                  key={a.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 14,
+                    padding: "12px 14px",
+                    background: "#f8fffe",
+                    borderRadius: 10,
+                    border: "1px solid #e8f5e1",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <div style={{ flex: 1, minWidth: 200 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#1a2e22" }}>{a.titre}</div>
+                    <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2 }}>
+                      {a.reference || `#${a.id}`} · {a.processus_nom || "—"}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      type="button"
+                      disabled={verifyingId === a.id}
+                      onClick={() => traiterVerification(a.id, "close")}
+                      style={{
+                        background: "#166534",
+                        color: "#fff",
+                        border: "none",
+                        borderRadius: 8,
+                        padding: "6px 14px",
+                        fontSize: 11,
+                        fontWeight: 700,
+                        cursor: verifyingId === a.id ? "not-allowed" : "pointer",
+                        opacity: verifyingId === a.id ? 0.6 : 1,
+                      }}
+                    >
+                      Valider
+                    </button>
+                    <button
+                      type="button"
+                      disabled={verifyingId === a.id}
+                      onClick={() => traiterVerification(a.id, "en_cours")}
+                      style={{
+                        background: "#fff",
+                        color: "#92400e",
+                        border: "1px solid #fde68a",
+                        borderRadius: 8,
+                        padding: "6px 14px",
+                        fontSize: 11,
+                        fontWeight: 700,
+                        cursor: verifyingId === a.id ? "not-allowed" : "pointer",
+                        opacity: verifyingId === a.id ? 0.6 : 1,
+                      }}
+                    >
+                      Renvoyer en cours
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div style={S.card}>
           <div style={S.sectionTitle}>Conformité par groupe de clauses ISO 9001</div>

@@ -330,7 +330,7 @@ const TABS = [
   { id: 1, label: 'Éléments Clés' },
   { id: 2, label: 'Contexte' },
   { id: 3, label: 'Documentation' },
-  { id: 4, label: 'Dysfonctionnements' },
+  { id: 4, label: 'Non-conformités détectées' },
   { id: 5, label: 'Déroulement' },
   { id: 6, label: 'Non-conformité et action' },
 ];
@@ -753,7 +753,38 @@ const Tab1 = ({ processus, revisions }) => {
 };
 
 /* ── TAB 2 — Éléments Clés ── */
-const Tab2 = ({ processus, kpis }) => (
+const Tab2 = ({ processus, kpis, onKpiUpdated }) => {
+  const [drafts, setDrafts] = useState({});
+  const [saving, setSaving] = useState(null);
+
+  const saisirMesure = async (kpiId) => {
+    const valeur = parseFloat(drafts[kpiId]);
+    if (Number.isNaN(valeur)) return;
+    setSaving(kpiId);
+    try {
+      await api.post(`/indicateurs/${kpiId}/mesures`, { valeur });
+      setDrafts((d) => ({ ...d, [kpiId]: '' }));
+      onKpiUpdated?.();
+    } catch {
+      // le champ reste rempli pour réessayer
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const calculerAuto = async (kpiId) => {
+    setSaving(kpiId);
+    try {
+      await api.post(`/indicateurs/${kpiId}/calculer`, {});
+      onKpiUpdated?.();
+    } catch {
+      // ignore — bouton reste disponible pour réessayer
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  return (
   <div>
     <SectionHeader
       num="2"
@@ -933,6 +964,47 @@ const Tab2 = ({ processus, kpis }) => (
       sub="Valeurs cibles, seuils d'alerte et responsables de suivi"
     />
 
+    {(kpis || []).length > 0 && (() => {
+      const nbAlerte = kpis.filter((k) => k.statut_alerte_actuel === 'alerte').length;
+      const nbAttention = kpis.filter((k) => k.statut_alerte_actuel === 'attention').length;
+      const nbNormal = kpis.length - nbAlerte - nbAttention;
+      const progressions = kpis.map((k) => k.progression_cible_pct).filter((v) => v != null);
+      const progressionMoy = progressions.length
+        ? Math.round(progressions.reduce((s, v) => s + v, 0) / progressions.length)
+        : null;
+      const stats = [
+        { label: 'Indicateurs suivis', value: kpis.length, color: '#1a4a6b', bg: '#d4e8f5' },
+        { label: 'Dans la cible', value: nbNormal, color: '#1a6b35', bg: '#d4f5dc' },
+        { label: 'En attention', value: nbAttention, color: '#7a5800', bg: '#fff3d4' },
+        { label: 'En alerte', value: nbAlerte, color: '#991b1b', bg: '#fee2e2' },
+        ...(progressionMoy != null
+          ? [{ label: 'Progression moy. vers cible', value: `${progressionMoy}%`, color: '#1a4a6b', bg: '#d4e8f5' }]
+          : []),
+      ];
+      return (
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${stats.length}, 1fr)`, gap: 10, marginBottom: 16 }}>
+          {stats.map((s, i) => (
+            <div
+              key={i}
+              style={{
+                background: s.bg,
+                borderRadius: 12,
+                padding: '12px 14px',
+                border: `1px solid ${s.color}22`,
+              }}
+            >
+              <div style={{ fontSize: 10, fontWeight: 700, color: s.color, opacity: 0.75, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 4 }}>
+                {s.label}
+              </div>
+              <div style={{ fontFamily: "'Outfit',sans-serif", fontWeight: 900, fontSize: 22, color: s.color, lineHeight: 1 }}>
+                {s.value}
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+    })()}
+
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {(kpis || []).length === 0 && (
         <div style={{ fontSize: 13, color: C.muted, padding: '8px 0' }}>
@@ -1037,12 +1109,87 @@ const Tab2 = ({ processus, kpis }) => (
                 </div>
               ))}
             </div>
+
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                padding: '12px 18px',
+                borderTop: `1px solid ${palette.text}18`,
+                flexWrap: 'wrap',
+              }}
+            >
+              <div style={{ fontSize: 11, fontWeight: 700, color: palette.text }}>
+                Valeur actuelle :{' '}
+                <span style={{ fontFamily: "'Outfit',sans-serif", fontWeight: 900, fontSize: 16 }}>
+                  {kpi.valeur_actuelle ?? 0}
+                </span>
+              </div>
+              {kpi.source === 'manuel' || kpi.source === 'mixte' ? (
+                <>
+                  <input
+                    type="number"
+                    placeholder="Nouvelle mesure…"
+                    value={drafts[kpi.id] ?? ''}
+                    onChange={(e) => setDrafts((d) => ({ ...d, [kpi.id]: e.target.value }))}
+                    style={{
+                      width: 130,
+                      padding: '6px 10px',
+                      borderRadius: 8,
+                      border: `1.5px solid ${palette.text}33`,
+                      fontSize: 12,
+                      outline: 'none',
+                    }}
+                  />
+                  <button
+                    type="button"
+                    disabled={saving === kpi.id || !drafts[kpi.id]}
+                    onClick={() => saisirMesure(kpi.id)}
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: 8,
+                      border: 'none',
+                      background: palette.text,
+                      color: '#fff',
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      opacity: saving === kpi.id ? 0.6 : 1,
+                    }}
+                  >
+                    Enregistrer
+                  </button>
+                </>
+              ) : null}
+              {kpi.source === 'auto' || kpi.source === 'mixte' ? (
+                <button
+                  type="button"
+                  disabled={saving === kpi.id}
+                  onClick={() => calculerAuto(kpi.id)}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: 8,
+                    border: `1.5px solid ${palette.text}55`,
+                    background: 'transparent',
+                    color: palette.text,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    opacity: saving === kpi.id ? 0.6 : 1,
+                  }}
+                >
+                  Calculer
+                </button>
+              ) : null}
+            </div>
           </div>
         );
       })}
     </div>
   </div>
-);
+  );
+};
 
 /* ── TAB 3 — Contexte ── */
 const Tab3 = ({ processus, risques }) => (
@@ -1149,17 +1296,13 @@ const Tab3 = ({ processus, risques }) => (
 /* ── TAB 4 — Documentation ── */
 const Tab4 = ({ processus, documents }) => {
   const docs = documents || [];
-  const handleFileDownload = (titre, format = 'pdf') => {
-    const content = `Document: ${titre}\n\nThis is a sample document for ${titre}.\n\nIn a real implementation, this would be an actual file from your server.\n\nDate: ${new Date().toLocaleDateString('fr-FR')}\nProcessus: ${processus.designation}`;
-    const blob = new Blob([content], { type: 'application/pdf' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${titre.toLowerCase().replace(/\s+/g, '_')}.${format}`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+  const handleFileDownload = async (docId) => {
+    try {
+      const { url } = await api.get(`/documents/${docId}/download`);
+      window.open(url, '_blank');
+    } catch (err) {
+      window.alert(err?.message || "Aucun fichier n'a été uploadé pour ce document.");
+    }
   };
 
   return (
@@ -1249,7 +1392,7 @@ const Tab4 = ({ processus, documents }) => {
                       fontWeight: 500,
                       transition: 'color 0.2s',
                     }}
-                    onClick={() => handleFileDownload(doc.titre, 'pdf')}
+                    onClick={() => handleFileDownload(doc.id)}
                     onMouseEnter={(e) => {
                       e.currentTarget.style.color = C.accent;
                     }}
@@ -1295,7 +1438,7 @@ const Tab5 = ({ processus, dysfonctionnements, onLancerDiagnostic, diagLoading, 
       <div style={S.sectionHeader}>
         <div style={S.sectionNum}>1</div>
         <div>
-          <div style={S.sectionTitle}>Dysfonctionnements Majeurs Connus</div>
+          <div style={S.sectionTitle}>Non-conformités ISO Majeures Connues</div>
           <div style={S.sectionSub}>
             Recenser les problèmes récurrents et proposer des améliorations
           </div>
@@ -1316,7 +1459,7 @@ const Tab5 = ({ processus, dysfonctionnements, onLancerDiagnostic, diagLoading, 
       >
         {processus.dysfonctionnementsDescription || (
           <span style={{ color: C.muted, fontStyle: 'italic' }}>
-            Aucun dysfonctionnement renseigné pour ce processus.
+            Aucune non-conformité renseignée pour ce processus.
           </span>
         )}
       </div>
@@ -1383,7 +1526,7 @@ const Tab5 = ({ processus, dysfonctionnements, onLancerDiagnostic, diagLoading, 
               color: C.primary,
             }}
           >
-            Dysfonctionnement #{dysfIndex + 1}: {currentDysf?.titre || ''}
+            Non-conformité #{dysfIndex + 1}: {currentDysf?.titre || ''}
           </div>
 
           <div style={{ display: 'flex', gap: 8 }}>
@@ -1682,12 +1825,17 @@ const Tab7 = ({ processus, processusId, nonConformites, onActionAdded }) => {
   const [echeanceSaving, setEcheanceSaving] = useState(false);
 
   const saveEcheance = async (ncId) => {
-    const actionId = ncId.replace('act-', '');
     setEcheanceSaving(true);
     try {
-      await api.put(`/actions/${actionId}`, {
-        date_echeance: echeanceDraft ? `${echeanceDraft}T00:00:00` : null,
-      });
+      if (ncId.startsWith('act-')) {
+        await api.put(`/actions/${ncId.replace('act-', '')}`, {
+          date_echeance: echeanceDraft ? `${echeanceDraft}T00:00:00` : null,
+        });
+      } else if (ncId.startsWith('dsf-')) {
+        await api.put(`/processus/dysfonctionnements/${ncId.replace('dsf-', '')}`, {
+          echeance: echeanceDraft || null,
+        });
+      }
       setEditingEcheance(null);
       onActionAdded?.();
     } catch {
@@ -1706,12 +1854,13 @@ const Tab7 = ({ processus, processusId, nonConformites, onActionAdded }) => {
     setNcError('');
     try {
       await api.post('/actions/', {
-        titre: ncForm.clause ? `${ncForm.clause} — ${ncForm.titre}` : ncForm.titre,
+        titre: ncForm.titre,
         description: `${ncForm.description ? ncForm.description + '\n\n' : ''}Action recommandée : ${ncForm.action}`,
         type: 'corrective',
         priorite: ncForm.gravite,
         processus_id: parseInt(processusId),
         origine: 'audit_interne',
+        clause_iso_code: ncForm.clause ? ncForm.clause.trim() : null,
       });
       setNcForm({ clause: '', titre: '', description: '', gravite: 'haute', action: '' });
       onActionAdded?.();
@@ -2138,11 +2287,10 @@ const Tab7 = ({ processus, processusId, nonConformites, onActionAdded }) => {
                         <span
                           style={{
                             fontSize: 12,
-                            cursor: nc.id.startsWith('act-') ? 'pointer' : 'default',
+                            cursor: 'pointer',
                           }}
-                          title={nc.id.startsWith('act-') ? "Cliquer pour modifier l'échéance" : undefined}
+                          title="Cliquer pour modifier l'échéance"
                           onClick={() => {
-                            if (!nc.id.startsWith('act-')) return;
                             setEditingEcheance(nc.id);
                             setEcheanceDraft(nc.dateLimit ? nc.dateLimit.slice(0, 10) : '');
                           }}
@@ -2150,7 +2298,7 @@ const Tab7 = ({ processus, processusId, nonConformites, onActionAdded }) => {
                           {nc.dateLimit
                             ? new Date(nc.dateLimit).toLocaleDateString('fr-FR')
                             : '—'}
-                          {nc.id.startsWith('act-') && <span style={{ marginLeft: 4, color: C.muted }}>✎</span>}
+                          <span style={{ marginLeft: 4, color: C.muted }}>✎</span>
                         </span>
                       )}
                     </td>
@@ -3196,6 +3344,11 @@ export default function FicheProcessus() {
     api.get(`/actions/?processus_id=${id}`).then(setActions).catch(() => {});
   }, [id]);
 
+  const refetchKpis = useCallback(() => {
+    if (!processus?.identifiant) return;
+    api.get(`/indicateurs/?processus_code=${encodeURIComponent(processus.identifiant)}`).then(setKpis).catch(() => {});
+  }, [processus?.identifiant]);
+
   useEffect(() => {
     api
       .get(`/processus/${id}`)
@@ -3226,7 +3379,7 @@ export default function FicheProcessus() {
       id: `act-${a.id}`,
       ref: a.reference || `ACT-${a.id}`,
       titre: a.titre,
-      clause: a.diagnostic_clause?.clause_code ? `§${a.diagnostic_clause.clause_code}` : '—',
+      clause: a.clause_iso_code ? `§${a.clause_iso_code}` : '—',
       gravite: { faible: 'Mineure', normale: 'Mineure', haute: 'Majeure', critique: 'Critique' }[a.priorite] || 'Mineure',
       statut: { planifiee: 'ouvert', en_cours: 'en_cours', en_verification: 'en_cours', close: 'clos', annulee: 'clos' }[a.statut] || 'ouvert',
       responsable: a.responsable ? `${a.responsable.prenom} ${a.responsable.nom}` : '—',
@@ -3235,7 +3388,7 @@ export default function FicheProcessus() {
     }));
     const fromDysf = dysfonctionnements.map((d) => ({
       id: `dsf-${d.id}`,
-      ref: d.clause_iso_code ? `§${d.clause_iso_code}` : `DSF-${d.id}`,
+      ref: d.reference || (d.clause_iso_code ? `§${d.clause_iso_code}` : `DSF-${d.id}`),
       titre: d.titre,
       clause: d.clause_iso_code ? `§${d.clause_iso_code}` : '—',
       gravite: { mineur: 'Mineure', moyen: 'Majeure', majeur: 'Majeure', critique: 'Critique' }[d.gravite] || 'Mineure',
@@ -3286,7 +3439,7 @@ export default function FicheProcessus() {
 
   const tabContents = [
     <Tab1 key="tab1" processus={processus} revisions={revisions} />,
-    <Tab2 key="tab2" processus={processus} kpis={kpis} />,
+    <Tab2 key="tab2" processus={processus} kpis={kpis} onKpiUpdated={refetchKpis} />,
     <Tab3 key="tab3" processus={processus} risques={risques} />,
     <Tab4 key="tab4" processus={processus} documents={documents} />,
     <Tab5
@@ -3371,7 +3524,7 @@ export default function FicheProcessus() {
                     { num: kpis.length, lbl: 'KPIs' },
                     {
                       num: dysfonctionnements.length,
-                      lbl: 'Dysfonctionnements',
+                      lbl: 'Non-conformités',
                     },
                     { num: risques.length, lbl: 'Risques' },
                     {
