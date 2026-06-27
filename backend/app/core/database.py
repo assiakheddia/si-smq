@@ -43,19 +43,10 @@ settings = get_settings()
 # ---------------------------------------------------------------------------
 # §1 — Moteur SQLAlchemy
 # ---------------------------------------------------------------------------
-# ---------------------------------------------------------------------------
-# §1 — Moteur SQLAlchemy
-# ---------------------------------------------------------------------------
 
-# On s'assure que l'URL utilise bien le nouveau driver "psycopg" (v3)
-# ---------------------------------------------------------------------------
-# ---------------------------------------------------------------------------
-# §1 — Moteur SQLAlchemy
-# ---------------------------------------------------------------------------
-
-# FORCE L'UTILISATION DE OPENPG DIRECTEMENT POUR CONTOURNER LE BUG DE .ENV
-# Remplace 'newpassword123' par ton VRAI mot de passe pgAdmin si différent
-url_str = "postgresql+psycopg://openpg:newpassword123@localhost:5432/si_smq"
+# URL construite depuis la configuration (.env / variables d'environnement),
+# avec le driver "psycopg" (v3).
+url_str = settings.DATABASE_URL.replace("postgresql+psycopg2://", "postgresql+psycopg://")
 
 engine = create_engine(
     url_str,

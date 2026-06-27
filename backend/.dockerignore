@@ -1,0 +1,6 @@
+venv/
+__pycache__/
+*.pyc
+.env
+si_smq.db
+tests/
